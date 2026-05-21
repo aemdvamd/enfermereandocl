@@ -1,0 +1,13 @@
+{
+    "crons": [
+      {
+        "path": "/api/cron-reminders",
+        "schedule": "0 21 * * *"
+      },
+      {
+        "path": "/api/cron-daily-summary",
+        "schedule": "0 11 * * *"
+      }
+    ]
+  }
+  // 4ecf8e96-89a2-45ed-a223-7814ad57e208 CRON_SECRET

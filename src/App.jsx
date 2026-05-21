@@ -50,28 +50,58 @@ const DEFAULT_SERVICES = [
   { id: 'cur-adv', iconId: 'activity', title: 'Curación avanzada', desc: 'Pie diabético, úlceras y LPP con apósitos avanzados.', price: 40000, allowDoses: true, active: true }
 ];
 
-const COMUNAS = ['Las Condes','Vitacura','Lo Barnechea','Providencia','Ñuñoa','La Reina','Macul','Peñalolén','Santiago','Independencia','Recoleta','San Miguel','La Florida','Maipú','Estación Central','Quilicura','Huechuraba','Colina','Puente Alto'];
+const COMUNAS = ['Buin','Cerrillos','Cerro Navia','Colina','Conchalí','Curacaví','El Bosque','Estación Central','Huechuraba','Independencia','La Cisterna','La Florida','La Granja','La Pintana','La Reina','Las Condes','Lo Barnechea','Lo Espejo','Lo Prado','Macul','Maipú','Melipilla','Ñuñoa','Padre Hurtado','Paine','Pedro Aguirre Cerda','Peñaflor','Peñalolén','Pirque','Providencia','Pudahuel','Puente Alto','Quilicura','Quinta Normal','Recoleta','Renca','San Bernardo','San Joaquín','San Miguel','San Pedro','San Ramón','Santiago','Talagante','Vitacura',
+];
 
-const COMUNA_COORDS = {
-  'Las Condes': { lat: -33.4172, lng: -70.5476 },
-  'Vitacura': { lat: -33.3823, lng: -70.5731 },
-  'Lo Barnechea': { lat: -33.3477, lng: -70.5198 },
-  'Providencia': { lat: -33.4244, lng: -70.6107 },
-  'Ñuñoa': { lat: -33.4569, lng: -70.5970 },
-  'La Reina': { lat: -33.4434, lng: -70.5378 },
-  'Macul': { lat: -33.4892, lng: -70.5996 },
-  'Peñalolén': { lat: -33.4827, lng: -70.5375 },
-  'Santiago': { lat: -33.4489, lng: -70.6693 },
-  'Independencia': { lat: -33.4144, lng: -70.6692 },
-  'Recoleta': { lat: -33.4039, lng: -70.6386 },
-  'San Miguel': { lat: -33.4945, lng: -70.6516 },
-  'La Florida': { lat: -33.5223, lng: -70.5982 },
-  'Maipú': { lat: -33.5169, lng: -70.7589 },
-  'Estación Central': { lat: -33.4566, lng: -70.6841 },
-  'Quilicura': { lat: -33.3667, lng: -70.7333 },
-  'Huechuraba': { lat: -33.3667, lng: -70.6500 },
+// ==============================
+// COORDENADAS COMUNAS RM
+// ==============================
+
+export const COMUNA_COORDS = {
+  'Buin': { lat: -33.7333, lng: -70.7500 },
+  'Cerrillos': { lat: -33.5000, lng: -70.7167 },
+  'Cerro Navia': { lat: -33.4167, lng: -70.7333 },
   'Colina': { lat: -33.2000, lng: -70.6833 },
-  'Puente Alto': { lat: -33.6111, lng: -70.5754 }
+  'Conchalí': { lat: -33.3833, lng: -70.6833 },
+  'Curacaví': { lat: -33.4167, lng: -71.1667 },
+  'El Bosque': { lat: -33.5667, lng: -70.6667 },
+  'Estación Central': { lat: -33.4566, lng: -70.6841 },
+  'Huechuraba': { lat: -33.3667, lng: -70.6500 },
+  'Independencia': { lat: -33.4144, lng: -70.6692 },
+  'La Cisterna': { lat: -33.5375, lng: -70.6639 },
+  'La Florida': { lat: -33.5223, lng: -70.5982 },
+  'La Granja': { lat: -33.5378, lng: -70.6187 },
+  'La Pintana': { lat: -33.5833, lng: -70.6333 },
+  'La Reina': { lat: -33.4434, lng: -70.5378 },
+  'Las Condes': { lat: -33.4172, lng: -70.5476 },
+  'Lo Barnechea': { lat: -33.3477, lng: -70.5198 },
+  'Lo Espejo': { lat: -33.5167, lng: -70.7167 },
+  'Lo Prado': { lat: -33.4447, lng: -70.7253 },
+  'Macul': { lat: -33.4892, lng: -70.5996 },
+  'Maipú': { lat: -33.5169, lng: -70.7589 },
+  'Melipilla': { lat: -33.6833, lng: -71.2167 },
+  'Ñuñoa': { lat: -33.4569, lng: -70.5970 },
+  'Padre Hurtado': { lat: -33.5667, lng: -70.8333 },
+  'Paine': { lat: -33.8167, lng: -70.7500 },
+  'Pedro Aguirre Cerda': { lat: -33.5000, lng: -70.6667 },
+  'Peñaflor': { lat: -33.6167, lng: -70.8667 },
+  'Peñalolén': { lat: -33.4827, lng: -70.5375 },
+  'Pirque': { lat: -33.7167, lng: -70.5667 },
+  'Providencia': { lat: -33.4244, lng: -70.6107 },
+  'Pudahuel': { lat: -33.4333, lng: -70.7500 },
+  'Puente Alto': { lat: -33.6111, lng: -70.5754 },
+  'Quilicura': { lat: -33.3667, lng: -70.7333 },
+  'Quinta Normal': { lat: -33.4400, lng: -70.7000 },
+  'Recoleta': { lat: -33.4039, lng: -70.6386 },
+  'Renca': { lat: -33.4000, lng: -70.7167 },
+  'San Bernardo': { lat: -33.6000, lng: -70.7000 },
+  'San Joaquín': { lat: -33.5000, lng: -70.6167 },
+  'San Miguel': { lat: -33.4945, lng: -70.6516 },
+  'San Pedro': { lat: -33.9000, lng: -71.4667 },
+  'San Ramón': { lat: -33.5500, lng: -70.6500 },
+  'Santiago': { lat: -33.4489, lng: -70.6693 },
+  'Talagante': { lat: -33.6667, lng: -70.9333 },
+  'Vitacura': { lat: -33.3823, lng: -70.5731 },
 };
 
 const RELATIONSHIPS = ['Titular','Cónyuge','Hijo/a','Padre','Madre','Abuelo/a','Hermano/a','Otro familiar','Otro'];
@@ -395,7 +425,7 @@ export default function App() {
     if (data.role === 'patient') {
       if (data.action === 'register') {
         if (patients.some(p => p.username.toLowerCase() === data.username.toLowerCase())) return { ok: false, error: 'Este nombre de usuario ya existe' };
-        const pat = { id: uid(), username: data.username, password: data.password, name: data.name, phone: data.phone, comuna: data.comuna, createdAt: Date.now() };
+        const pat = { id: uid(), username: data.username, password: data.password, name: data.name, phone: data.phone, comuna: data.comuna,email: data.email || '', createdAt: Date.now() };
         await savePatients(patients.concat([pat]));
         const safe = { ...pat };
         delete safe.password;
@@ -610,7 +640,7 @@ function LoginView({ onLogin, onBack }) {
       if (tab === 'patient' && !phone.trim()) return setErr('Completa el teléfono');
       setLoading(true);
       const action = tab === 'patient' ? 'register' : 'register-pro';
-      const payload = tab === 'patient' ? { role: 'patient', action: action, username: username.trim(), password: password, name: name.trim(), phone: phone.trim(), comuna: comuna } : { role: 'pro', action: action, username: username.trim(), password: password, name: name.trim(), email: email.trim() };
+      const payload = tab === 'patient' ? { role: 'patient', action: action, username: username.trim(), password: password, name: name.trim(), phone: phone.trim(), comuna: comuna,email: email.trim() } : { role: 'pro', action: action, username: username.trim(), password: password, name: name.trim(), email: email.trim() };
       const r = await onLogin(payload);
       setLoading(false);
       if (!r.ok) return setErr(r.error);
@@ -658,6 +688,7 @@ function LoginView({ onLogin, onBack }) {
             {tab === 'patient' ? (
               <>
                 <div><label className="text-xs font-semibold text-slate-600 block mb-1">Teléfono *</label><input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+56 9 1234 5678" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-teal-500 focus:outline-none" /></div>
+                <div><label className="text-xs font-semibold text-slate-600 block mb-1">Email (opcional)</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@correo.cl" className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-teal-500 focus:outline-none" /></div>
                 <div><label className="text-xs font-semibold text-slate-600 block mb-1">Comuna</label><select value={comuna} onChange={e => setComuna(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-teal-500 focus:outline-none"><option value="">Selecciona tu comuna</option>{COMUNAS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
               </>
             ) : (
@@ -721,6 +752,33 @@ function PatientPortal({ user, services, appointments, notifications, saveAppoin
   const myApps = appointments.filter(a => a.patientId === user.id).sort((a, b) => new Date(b.date + 'T' + b.time) - new Date(a.date + 'T' + a.time));
   const upcoming = myApps.filter(a => a.status !== 'cancelada' && a.status !== 'completada' && (a.status === 'en_tratamiento' || new Date(a.date) >= new Date(todayISO()))).reverse();
 
+  const cancelByPatient = async (app) => {
+    const reason = prompt('¿Por qué cancelas la reserva? (opcional)') || '';
+    if (reason === null) return;
+  
+    const updated = appointments.map(a => a.id === app.id ? { ...a, status: 'cancelada', cancelReason: reason, cancelledAt: Date.now() } : a);
+    await saveAppointments(updated);
+  
+    // Notificar al admin
+    try {
+      fetch('/api/notify-cancellation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patientName: user.name,
+          patientPhone: user.phone,
+          date: new Date(app.date + 'T00:00').toLocaleDateString('es-CL'),
+          time: app.time,
+          address: app.address,
+          reason: reason,
+        }),
+      }).catch(e => console.log('Notify cancel:', e));
+    } catch (e) {
+      console.error(e);
+    }
+    alert('Reserva cancelada. El profesional ha sido notificado.');
+  };
+
   return (
     <div className="min-h-screen">
       <header className="bg-white border-b border-slate-200">
@@ -751,7 +809,7 @@ function PatientPortal({ user, services, appointments, notifications, saveAppoin
               {upcoming.length === 0 ? (
                 <div className="bg-white rounded-2xl p-8 text-center border border-slate-200"><Calendar className="w-12 h-12 mx-auto text-slate-300 mb-3" /><p className="text-slate-500 mb-4">No tienes atenciones agendadas</p><button onClick={() => setTab('solicitar')} className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-semibold">Solicitar atención</button></div>
               ) : (
-                <div className="space-y-3">{upcoming.map(a => <AppointmentCard key={a.id} a={a} services={services} appointments={appointments} />)}</div>
+                <div className="space-y-3">{upcoming.map(a => <AppointmentCard key={a.id} a={a} services={services} appointments={appointments} onCancel={cancelByPatient} />)}</div>
               )}
             </div>
           </div>
@@ -760,7 +818,7 @@ function PatientPortal({ user, services, appointments, notifications, saveAppoin
         {tab === 'historial' && (
           <div>
             <h3 className="font-bold text-slate-900 mb-3">Historial completo ({myApps.length})</h3>
-            {myApps.length === 0 ? <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 text-slate-500">Aún no tienes atenciones registradas</div> : <div className="space-y-3">{myApps.map(a => <AppointmentCard key={a.id} a={a} services={services} appointments={appointments} showEvolutions />)}</div>}
+            {myApps.length === 0 ? <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 text-slate-500">Aún no tienes atenciones registradas</div> : <div className="space-y-3">{myApps.map(a => <AppointmentCard key={a.id} a={a} services={services} appointments={appointments} showEvolutions onCancel={cancelByPatient} />)}</div>}
           </div>
         )}
       </div>
@@ -812,6 +870,13 @@ function AppointmentCard({ a, services, appointments, showEvolutions, profession
         ) : (<div className="flex justify-end"><div className="text-base font-bold text-teal-700">{fmtCLP(net)}</div></div>)}
       </div>
       {a.notes && <div className="text-xs text-slate-500 mt-2 p-2 bg-slate-50 rounded-lg"><strong>Notas:</strong> {a.notes}</div>}
+      {onCancel && (a.status === 'pendiente' || a.status === 'asignada' || a.status === 'confirmada') && (
+  <div className="pt-3 mt-2 border-t border-slate-100">
+    <button onClick={() => onCancel(a)} className="text-xs text-red-600 hover:text-red-700 font-semibold flex items-center gap-1">
+      <X className="w-3 h-3" /> Cancelar reserva
+    </button>
+  </div>
+)}
     </div>
   );
 }
@@ -877,13 +942,39 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
     if (!canSubmit) return;
     const cleanedBenefs = beneficiaries.map(b => ({ ...b, name: b.name.trim() }));
     const newApp = {
-      id: uid(), patientId: user.id, patientName: user.name, patientPhone: user.phone, patientComuna: user.comuna,
+      id: uid(), patientId: user.id, patientName: user.name, patientPhone: user.phone, patientComuna: user.comuna,patientEmail: user.email || '',
       beneficiaries: cleanedBenefs,
       date: date, time: time, address: address.trim(), notes: notes.trim(),
       status: 'pendiente', evolutions: {}, createdAt: Date.now(), assignedTo: null,
       parentId: null, doseNumber: null, totalDosesInSeries: null
     };
     await saveAppointments(appointments.concat([newApp]));
+    // Notificar al admin por WhatsApp
+try {
+  const adminPhone = import.meta.env.VITE_ADMIN_WHATSAPP;
+  const apiKey = import.meta.env.VITE_CALLMEBOT_APIKEY;
+  if (adminPhone && apiKey) {
+    const totalServices = cleanedBenefs.reduce((sum, b) => sum + b.services.length, 0);
+    const message = encodeURIComponent(
+      '🔔 *Nueva reserva en Enfermereando*\n\n' +
+      '👤 Paciente: ' + user.name + '\n' +
+      '📞 Teléfono: ' + user.phone + '\n' +
+      '📅 Fecha: ' + new Date(date + 'T00:00').toLocaleDateString('es-CL') + '\n' +
+      '🕐 Hora: ' + fmtTime(time) + '\n' +
+      '📍 Dirección: ' + address + '\n' +
+      '👥 Personas: ' + cleanedBenefs.length + '\n' +
+      '💉 Servicios: ' + totalServices + '\n\n' +
+      '💰 Total: ' + fmtCLP(net) + '\n\n' +
+      'Ingresa al panel para confirmar.'
+    );
+    fetch('https://api.callmebot.com/whatsapp.php?phone=' + adminPhone + '&text=' + message + '&apikey=' + apiKey, {
+      method: 'GET',
+      mode: 'no-cors'
+    }).catch(e => console.log('CallMeBot:', e));
+  }
+} catch (e) {
+  console.error('Error notificando admin:', e);
+}
     setSuccess(true);
     setTimeout(() => onDone(), 2000);
   };
@@ -1043,6 +1134,25 @@ function AdminPanel({ user, setUser, services, saveServices, appointments, patie
     }
     await saveAppointments(appointments.map(a => a.id === appId ? { ...a, status: 'asignada', assignedTo: user.id, assignedToName: user.name, suggestedTime: null } : a));
     await addNotification({ userId: app.patientId, title: 'Atención confirmada', body: user.name + ' confirmó tu atención del ' + new Date(app.date + 'T00:00').toLocaleDateString('es-CL') + ' a las ' + fmtTime(app.time), appointmentId: appId, type: 'confirmed' });
+    
+    // Notificar al paciente por email
+try {
+  fetch('/api/notify-patient', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: 'confirmed',
+      patientEmail: app.patientEmail || '',
+      patientName: app.patientName,
+      patientPhone: app.patientPhone,
+      date: new Date(app.date + 'T00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }),
+      time: app.time,
+      address: app.address,
+      professionalName: user.name,
+    }),
+  }).catch(e => console.log('Notify patient:', e));
+} catch (e) { console.error(e); }
+
     return { ok: true };
   };
 
