@@ -975,6 +975,27 @@ try {
 } catch (e) {
   console.error('Error notificando admin:', e);
 }
+
+// Notificar al admin por Email
+try {
+  const totalServices = cleanedBenefs.reduce((sum, b) => sum + b.services.length, 0);
+  fetch('/api/notify-admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      patientName: user.name,
+      patientPhone: user.phone,
+      date: new Date(date + 'T00:00').toLocaleDateString('es-CL'),
+      time: fmtTime(time),
+      address: address,
+      beneficiaries: cleanedBenefs.length,
+      total: fmtCLP(net),
+    }),
+  }).catch(e => console.log('Email notify:', e));
+} catch (e) {
+  console.error('Error notificando email:', e);
+}
+
     setSuccess(true);
     setTimeout(() => onDone(), 2000);
   };
