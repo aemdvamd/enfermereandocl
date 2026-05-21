@@ -1,3 +1,5 @@
+import { supabase } from './supabase'
+
 import { useState, useEffect } from 'react';
 import {
   Pill, Activity, Syringe, Home as HomeIcon, Cross, Heart, BookOpen,
@@ -113,8 +115,6 @@ const FAQ_ITEMS = [
   { q: '¿Cómo se realiza el pago?', a: 'Aceptamos transferencia bancaria, efectivo y tarjetas.' },
   { q: '¿Atienden urgencias?', a: 'Sí, atendemos urgencias con disponibilidad inmediata sujeta a agenda.' }
 ];
-
-import { supabase } from './supabase'
 
 const sget = async (k, def) => {
   try {
