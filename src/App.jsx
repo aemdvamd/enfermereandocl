@@ -51,6 +51,15 @@ const DEFAULT_SERVICES = [
 
 const COMUNAS = ['Buin','Cerrillos','Cerro Navia','Colina','Conchalí','Curacaví','El Bosque','Estación Central','Huechuraba','Independencia','La Cisterna','La Florida','La Granja','La Pintana','La Reina','Las Condes','Lo Barnechea','Lo Espejo','Lo Prado','Macul','Maipú','Melipilla','Ñuñoa','Padre Hurtado','Paine','Pedro Aguirre Cerda','Peñaflor','Peñalolén','Pirque','Providencia','Pudahuel','Puente Alto','Quilicura','Quinta Normal','Recoleta','Renca','San Bernardo','San Joaquín','San Miguel','San Pedro','San Ramón','Santiago','Talagante','Vitacura'];
 
+const FREQUENCIES = [
+  { id: 'once', label: 'Una sola vez', days: 0 },
+  { id: 'daily', label: 'Diaria', days: 1 },
+  { id: 'every3days', label: 'Cada 3 días', days: 3 },
+  { id: 'weekly', label: 'Semanal', days: 7 },
+  { id: 'biweekly', label: 'Cada 15 días', days: 15 },
+  { id: 'monthly', label: 'Mensual', days: 30 }
+];
+
 const TEMPLATES = {
   'inj-anti': 'Medicamento administrado:\nDosis:\nVía / Sitio de punción:\nReacción adversa: No / Sí\nFecha próxima dosis:',
   'inj-im': 'Medicamento administrado:\nDosis:\nSitio de punción:\nReacción adversa: No / Sí\nTolerancia:',
@@ -79,8 +88,58 @@ const FAQ_ITEMS = [
 
 const RELATIONSHIPS = ['Titular','Cónyuge','Hijo/a','Padre','Madre','Abuelo/a','Hermano/a','Otro familiar','Otro'];
 
+// ==================== HELPERS PARA SERIES ====================
+const getFrequencyLabel = (freqId) => FREQUENCIES.find(f => f.id === freqId)?.label || 'Una sola vez';
+
+const addDays = (dateStr, days) => {
+  if (!dateStr || days <= 0) return dateStr;
+  const date = new Date(dateStr);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().split('T')[0];
+};
+
+const generateAppointmentSeries = (baseApp, services) => {
+  const seriesId = baseApp.seriesId || uid();
+  const generated = [];
+
+  baseApp.beneficiaries.forEach(ben => {
+    ben.services.forEach(item => {
+      const svc = services.find(s => s.id === item.serviceId);
+      if (!svc) return;
+
+      const doses = Math.max(1, item.doses || 1);
+      const freq = FREQUENCIES.find(f => f.id === (item.frequency || 'once')) || FREQUENCIES[0];
+      let currentDate = baseApp.date;
+
+      for (let i = 0; i < doses; i++) {
+        const appointment = {
+          ...baseApp,
+          id: i === 0 ? baseApp.id : uid(),
+          seriesId,
+          doseNumber: i + 1,
+          date: currentDate,
+          time: baseApp.time,
+          beneficiaries: [{
+            ...ben,
+            services: [{ ...item, completedDoses: 0 }]
+          }],
+          status: 'pendiente',
+          createdAt: Date.now()
+        };
+        generated.push(appointment);
+
+        if (freq.days > 0 && i < doses - 1) {
+          currentDate = addDays(currentDate, freq.days);
+        }
+      }
+    });
+  });
+
+  return generated;
+};
+
 // ==================== WHATSAPP ====================
-const sendWhatsAppToAdmin = async (data, type = 'new_appointment', services = []) => {
+const sendWhatsAppToAdmin = async (data, type = 'new_appointment', services = [], isSeriesCancel = false) => {
   try {
     const adminPhone = (import.meta.env.VITE_ADMIN_WHATSAPP || WHATSAPP).replace(/\D/g, '');
     const apiKey = import.meta.env.VITE_CALLMEBOT_APIKEY;
@@ -99,7 +158,8 @@ const sendWhatsAppToAdmin = async (data, type = 'new_appointment', services = []
         message = `*🏥 VISITA COMPLETADA*\n👤 ${data.patientName}`;
         break;
       case 'cancelled':
-        message = `*❌ CITA CANCELADA*\n👤 ${data.patientName}`;
+        const seriesInfo = isSeriesCancel ? ' (TODA LA SERIE)' : '';
+        message = `*❌ CITA CANCELADA${seriesInfo}*\n👤 ${data.patientName}\n📅 ${new Date(data.date).toLocaleDateString('es-CL')}`;
         break;
     }
 
@@ -113,6 +173,56 @@ const sendWhatsAppToAdmin = async (data, type = 'new_appointment', services = []
 };
 
 // ==================== UTILIDADES ====================
+// ==================== HELPERS PARA SERIES DE CITAS ====================
+const getFrequencyLabel = (freqId) => FREQUENCIES.find(f => f.id === freqId)?.label || 'Una sola vez';
+
+const addDays = (dateStr, days) => {
+  if (!dateStr || days <= 0) return dateStr;
+  const date = new Date(dateStr);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().split('T')[0];
+};
+
+const generateAppointmentSeries = (baseApp, services) => {
+  const seriesId = baseApp.seriesId || uid();
+  const generated = [];
+
+  baseApp.beneficiaries.forEach(ben => {
+    ben.services.forEach(item => {
+      const svc = services.find(s => s.id === item.serviceId);
+      if (!svc) return;
+
+      const doses = Math.max(1, item.doses || 1);
+      const freq = FREQUENCIES.find(f => f.id === (item.frequency || 'once')) || FREQUENCIES[0];
+      let currentDate = baseApp.date;
+
+      for (let i = 0; i < doses; i++) {
+        const appointment = {
+          ...baseApp,
+          id: i === 0 ? baseApp.id : uid(),
+          seriesId,
+          doseNumber: i + 1,
+          date: currentDate,
+          time: baseApp.time,
+          beneficiaries: [{
+            ...ben,
+            services: [{ ...item, completedDoses: 0 }]
+          }],
+          status: 'pendiente',
+          createdAt: Date.now()
+        };
+        generated.push(appointment);
+
+        if (freq.days > 0 && i < doses - 1) {
+          currentDate = addDays(currentDate, freq.days);
+        }
+      }
+    });
+  });
+
+  return generated;
+};
+
 const fmtCLP = (n) => '$' + Math.round(n).toLocaleString('es-CL');
 const fmtTime = (t) => {
   if (!t) return '';
@@ -124,6 +234,15 @@ const fmtTime = (t) => {
 const uid = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 const todayISO = () => new Date().toISOString().split('T')[0];
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+const appNetPrice = (a, services) => {
+  const gross = a.beneficiaries.reduce((sum, b) => sum + b.services.reduce((s, item) => {
+    const svc = services.find(s => s.id === item.serviceId);
+    return s + (svc ? svc.price * (item.doses || 1) : 0);
+  }, 0), 0);
+  const discount = a.beneficiaries.length >= 4 ? 0.15 : a.beneficiaries.length === 3 ? 0.10 : a.beneficiaries.length === 2 ? 0.05 : 0;
+  return Math.round(gross * (1 - discount));
+};
 
 // Nueva utilidad para validación de integridad en creación de usuarios
 const validateUserIntegrity = (username, patients, professionals, role) => {
@@ -153,30 +272,19 @@ const appNetPrice = (a, services) => {
   return Math.round(gross * (1 - discount));
 };
 
-// ==================== NOTIFICACIONES PUSH (BROWSER) ====================
+// ==================== NOTIFICACIONES PUSH ====================
 let pushSubscription = null;
 
 const requestPushPermission = async () => {
-  if (!('Notification' in window) || !('PushManager' in window)) {
-    console.warn('Push notifications no soportadas en este navegador');
-    return false;
-  }
-
+  if (!('Notification' in window) || !('PushManager' in window)) return false;
   if (Notification.permission === 'granted') return true;
-  
   const permission = await Notification.requestPermission();
   return permission === 'granted';
 };
 
 const sendPushNotification = (title, body, icon = '/icon-192.png') => {
   if (Notification.permission !== 'granted') return;
-  
-  new Notification(title, {
-    body: body,
-    icon: icon,
-    tag: 'enfermereando-notification',
-    requireInteraction: false
-  });
+  new Notification(title, { body, icon, tag: 'enfermereando-notification', requireInteraction: false });
 };
 
 function NotificationBell({ userId, notifications, markNotifRead, markAllNotifsRead }) {
@@ -186,40 +294,24 @@ function NotificationBell({ userId, notifications, markNotifRead, markAllNotifsR
 
   return (
     <div className="relative">
-      <button 
-        onClick={() => setOpen(!open)} 
-        className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors"
-      >
+      <button onClick={() => setOpen(!open)} className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors">
         <Bell className="w-5 h-5 text-slate-600" />
-        {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">
-            {unreadCount}
-          </span>
-        )}
+        {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">{unreadCount}</span>}
       </button>
-
       {open && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-12 z-40 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
             <div className="px-4 py-3 border-b flex justify-between items-center">
               <div className="font-semibold">Notificaciones</div>
-              {unreadCount > 0 && (
-                <button onClick={() => markAllNotifsRead(userId)} className="text-xs text-teal-600 font-medium">
-                  Marcar todo como leído
-                </button>
-              )}
+              {unreadCount > 0 && <button onClick={() => markAllNotifsRead(userId)} className="text-xs text-teal-600 font-medium">Marcar todo como leído</button>}
             </div>
             <div className="max-h-80 overflow-y-auto">
               {myNotifs.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 text-sm">No hay notificaciones</div>
               ) : (
                 myNotifs.map(notif => (
-                  <div 
-                    key={notif.id} 
-                    onClick={() => markNotifRead(notif.id)}
-                    className={`px-4 py-3 border-b hover:bg-slate-50 cursor-pointer ${!notif.read ? 'bg-teal-50' : ''}`}
-                  >
+                  <div key={notif.id} onClick={() => markNotifRead(notif.id)} className={`px-4 py-3 border-b hover:bg-slate-50 cursor-pointer ${!notif.read ? 'bg-teal-50' : ''}`}>
                     <div className="font-medium text-sm">{notif.title}</div>
                     <div className="text-xs text-slate-600 mt-1 line-clamp-2">{notif.body}</div>
                     <div className="text-[10px] text-slate-400 mt-2">{new Date(notif.createdAt).toLocaleString('es-CL')}</div>
@@ -951,16 +1043,45 @@ function LoginView({ onLogin, onBack, patients, professionals }) {
 }
 
 // ==================== PATIENT PORTAL + REQUEST FORM + APPOINTMENT CARD ====================
+// ==================== PATIENT PORTAL + CANCELACIÓN EN SERIE ====================
 function PatientPortal({ user, services, appointments, notifications, saveAppointments, addNotification, onLogout }) {
   const [tab, setTab] = useState('inicio');
-  const myApps = appointments.filter(a => a.patientId === user.id).sort((a, b) => new Date(b.date) - new Date(a.date));
-  const upcoming = myApps.filter(a => ['pendiente','asignada','confirmada'].includes(a.status));
+  const myApps = appointments
+    .filter(a => a.patientId === user.id)
+    .sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
 
+  const upcoming = myApps.filter(a => ['pendiente','asignada','confirmada'].includes(a.status));
+  const recent = myApps.slice(0, 6);
+
+  // NUEVA FUNCIÓN: Cancelación individual o en serie
   const cancelByPatient = async (app) => {
-    if (!confirm('¿Cancelar esta atención?')) return;
-    const updated = appointments.map(a => a.id === app.id ? { ...a, status: 'cancelada' } : a);
+    if (!confirm(`¿Cancelar la atención del ${new Date(app.date).toLocaleDateString('es-CL')}?`)) return;
+
+    const isSeriesApp = !!app.seriesId;
+    let appointmentsToCancel = [app.id];
+
+    if (isSeriesApp) {
+      const seriesAppointments = appointments.filter(a => a.seriesId === app.seriesId);
+      const cancelAll = confirm(`Esta cita pertenece a una SERIE de ${seriesAppointments.length} dosis.\n\n¿Cancelar SOLO esta cita o TODA LA SERIE?`);
+      
+      if (cancelAll) {
+        appointmentsToCancel = seriesAppointments.map(a => a.id);
+      }
+    }
+
+    const updated = appointments.map(a => 
+      appointmentsToCancel.includes(a.id) ? { ...a, status: 'cancelada' } : a
+    );
+
     await saveAppointments(updated);
-    await sendWhatsAppToAdmin(app, 'cancelled', services);
+    
+    // Notificar a admin (solo la primera de la serie para no spam)
+    const representativeApp = appointments.find(a => a.id === appointmentsToCancel[0]);
+    await sendWhatsAppToAdmin(representativeApp, 'cancelled', services, appointmentsToCancel.length > 1);
+
+    alert(appointmentsToCancel.length > 1 
+      ? `✅ Toda la serie (${appointmentsToCancel.length} citas) ha sido cancelada.` 
+      : '✅ Cita cancelada correctamente.');
   };
 
   return (
@@ -982,6 +1103,46 @@ function PatientPortal({ user, services, appointments, notifications, saveAppoin
           <button onClick={() => setTab('historial')} className={`px-6 py-2 font-semibold rounded-2xl ${tab === 'historial' ? 'bg-teal-600 text-white' : 'bg-white'}`}>Historial</button>
         </div>
 
+        {tab === 'inicio' && (
+          <div>
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-slate-900 mb-1">Últimas atenciones solicitadas</h2>
+              <p className="text-slate-600">Próximas y recientes reservas</p>
+            </div>
+            {recent.length === 0 ? (
+              <EmptyState icon={Calendar} text="Aún no tienes solicitudes. ¡Agenda tu primera atención!" />
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {recent.map(a => {
+                  const net = a.beneficiaries ? appNetPrice(a, services) : 0;
+                  return (
+                    <div key={a.id} className="bg-white rounded-3xl p-6 border border-slate-200 hover:shadow-md transition-all">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <div className="font-semibold">{new Date(a.date).toLocaleDateString('es-CL', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                          <div className="text-teal-600 text-sm">{fmtTime(a.time)}</div>
+                        </div>
+                        <span className={`text-xs px-3 py-1 rounded-2xl font-medium ${a.status === 'pendiente' ? 'bg-amber-100 text-amber-700' : a.status === 'confirmada' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'}`}>
+                          {a.status}
+                        </span>
+                      </div>
+                      <div className="text-sm text-slate-600 mb-3">
+                        {a.beneficiaries?.map(b => b.name).join(', ')}
+                      </div>
+                      <div className="text-teal-600 font-semibold text-lg">{fmtCLP(net)}</div>
+                      {a.seriesId && (
+                        <div className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-3xl mt-3">
+                          <Package className="w-3 h-3" /> Serie
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {tab === 'solicitar' && <RequestForm user={user} services={services} appointments={appointments} saveAppointments={saveAppointments} addNotification={addNotification} onDone={() => setTab('inicio')} />}
         {tab === 'historial' && <div className="space-y-4">{myApps.map(a => <AppointmentCard key={a.id} a={a} services={services} onCancel={cancelByPatient} />)}</div>}
       </div>
@@ -997,114 +1158,272 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
   const [beneficiaries, setBeneficiaries] = useState([{ id: uid(), name: user.name, relationship: 'Titular', services: [] }]);
 
   const addBen = () => setBeneficiaries([...beneficiaries, { id: uid(), name: '', relationship: 'Otro familiar', services: [] }]);
-  const removeBen = (id) => setBeneficiaries(beneficiaries.filter(b => b.id !== id));
+  const removeBen = (id) => { if (beneficiaries.length > 1) setBeneficiaries(beneficiaries.filter(b => b.id !== id)); };
   const updateBen = (id, updates) => setBeneficiaries(beneficiaries.map(b => b.id === id ? { ...b, ...updates } : b));
 
+  // Toggle servicio + configuración de dosis/frecuencia
   const toggleService = (benId, serviceId) => {
     const ben = beneficiaries.find(b => b.id === benId);
-    const exists = ben.services.some(s => s.serviceId === serviceId);
-    if (exists) {
-      updateBen(benId, { services: ben.services.filter(s => s.serviceId !== serviceId) });
+    const exists = ben.services.findIndex(s => s.serviceId === serviceId);
+    
+    if (exists >= 0) {
+      // eliminar
+      updateBen(benId, {
+        services: ben.services.filter((_, i) => i !== exists)
+      });
     } else {
-      updateBen(benId, { services: [...ben.services, { serviceId, doses: 1, frequency: 'once', completedDoses: 0 }] });
+      const svc = services.find(s => s.id === serviceId);
+      const defaultItem = {
+        serviceId,
+        doses: svc?.allowDoses ? 1 : 1,
+        frequency: 'once',
+        completedDoses: 0
+      };
+      updateBen(benId, {
+        services: [...ben.services, defaultItem]
+      });
     }
   };
 
+  const updateServiceConfig = (benId, serviceId, field, value) => {
+    const ben = beneficiaries.find(b => b.id === benId);
+    const newServices = ben.services.map(s => 
+      s.serviceId === serviceId ? { ...s, [field]: value } : s
+    );
+    updateBen(benId, { services: newServices });
+  };
+
+  // Cálculo de precio total
   const gross = beneficiaries.reduce((s, b) => s + b.services.reduce((acc, item) => {
     const svc = services.find(s => s.id === item.serviceId);
     return acc + (svc ? svc.price * (item.doses || 1) : 0);
   }, 0), 0);
-  const net = Math.round(gross * (1 - (beneficiaries.length >= 4 ? 0.15 : beneficiaries.length === 3 ? 0.10 : beneficiaries.length === 2 ? 0.05 : 0)));
-
+  const discount = beneficiaries.length >= 4 ? 0.15 : beneficiaries.length === 3 ? 0.10 : beneficiaries.length === 2 ? 0.05 : 0;
+  const net = Math.round(gross * (1 - discount));
+  
   const submit = async () => {
-    const newApp = {
-      id: uid(),
-      patientId: user.id,
-      patientName: user.name,
-      patientPhone: user.phone,
-      patientComuna: user.comuna,
-      beneficiaries,
-      date,
-      time,
-      address,
-      notes,
-      status: 'pendiente',
-      createdAt: Date.now()
-    };
-    await saveAppointments([...appointments, newApp]);
-    await sendWhatsAppToAdmin(newApp, 'new_appointment', services);
-    alert('¡Solicitud enviada! Te contactaremos pronto.');
+    if (!date || !time || !address) return alert('Completa fecha, hora y dirección');
+  
+  const baseApp = { id: uid(), patientId: user.id, patientName: user.name, patientPhone: user.phone, patientComuna: user.comuna, beneficiaries, date, time, address, notes, status: 'pendiente', createdAt: Date.now() };
+
+    // Generación automática de series según dosis y frecuencia
+    const seriesAppointments = generateAppointmentSeries(baseApp, services);
+
+    await saveAppointments([...appointments, ...seriesAppointments]);
+    await sendWhatsAppToAdmin(baseApp, 'new_appointment', services);
+    alert(`¡Solicitud enviada! Se han creado ${seriesAppointments.length} cita(s) en serie.`);
     onDone();
   };
 
   return (
-    <div className="bg-white rounded-3xl p-8 border border-slate-200">
-      <h3 className="text-2xl font-bold mb-6">Nueva solicitud de atención</h3>
-      <div className="grid grid-cols-2 gap-6">
-        <div>
-          <label className="block text-sm font-medium mb-1">Fecha</label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-4 py-3 rounded-2xl border" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Hora</label>
-          <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full px-4 py-3 rounded-2xl border" />
-        </div>
-      </div>
-      <div className="mt-6">
-        <label className="block text-sm font-medium mb-1">Dirección completa</label>
-        <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="Calle, número, comuna" className="w-full px-4 py-3 rounded-2xl border" />
-      </div>
+    <div className="bg-white rounded-3xl p-8 border border-slate-200 max-w-4xl mx-auto">
+      <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
+        <Calendar className="w-7 h-7 text-teal-600" />
+        Nueva solicitud de atención
+      </h3>
 
-      <div className="mt-8">
-        <h4 className="font-semibold mb-4">Personas a atender</h4>
-        {beneficiaries.map((b, idx) => (
-          <div key={b.id} className="bg-slate-50 p-4 rounded-2xl mb-4">
-            <input type="text" value={b.name} onChange={e => updateBen(b.id, { name: e.target.value })} placeholder="Nombre" className="w-full px-4 py-2 rounded-xl border mb-2" />
-            <select value={b.relationship} onChange={e => updateBen(b.id, { relationship: e.target.value })} className="w-full px-4 py-2 rounded-xl border">
-              {RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-            <div className="flex flex-wrap gap-2 mt-4">
-              {services.map(s => {
-                const selected = b.services.some(item => item.serviceId === s.id);
+      {/* Beneficiarios */}
+      <div className="mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <h4 className="font-semibold text-lg">Personas a atender</h4>
+          <button onClick={addBen} className="flex items-center gap-2 text-teal-600 font-medium text-sm">
+            <UserPlus className="w-4 h-4" /> Agregar persona
+          </button>
+        </div>
+
+        {beneficiaries.map((ben, idx) => (
+          <div key={ben.id} className="bg-slate-50 border border-slate-200 rounded-3xl p-6 mb-6">
+            <div className="flex justify-between mb-4">
+              <div className="flex-1">
+                <input
+                  type="text"
+                  value={ben.name}
+                  onChange={e => updateBen(ben.id, { name: e.target.value })}
+                  placeholder="Nombre completo"
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 text-sm"
+                />
+              </div>
+              <div className="ml-4">
+                <select
+                  value={ben.relationship}
+                  onChange={e => updateBen(ben.id, { relationship: e.target.value })}
+                  className="px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 text-sm"
+                >
+                  {RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              {beneficiaries.length > 1 && (
+                <button
+                  onClick={() => removeBen(ben.id)}
+                  className="ml-4 text-red-500 hover:text-red-600 p-2"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+
+            {/* Servicios para este beneficiario */}
+            <div className="mt-6">
+              <p className="text-sm font-medium text-slate-500 mb-3">Servicios</p>
+              <div className="flex flex-wrap gap-2 mb-6">
+                {services.filter(s => s.active).map(svc => {
+                  const selected = ben.services.some(item => item.serviceId === svc.id);
+                  return (
+                    <button
+                      key={svc.id}
+                      onClick={() => toggleService(ben.id, svc.id)}
+                      className={`px-5 py-2.5 text-sm font-medium rounded-3xl border transition-all flex items-center gap-2 ${selected ? 'bg-teal-600 text-white border-teal-600' : 'bg-white border-slate-300 hover:border-teal-300'}`}
+                    >
+                      {getIconComponent(svc.iconId)({ className: 'w-4 h-4' })}
+                      {svc.title}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Configuración detallada de cada servicio seleccionado */}
+              {ben.services.map(item => {
+                const svc = services.find(s => s.id === item.serviceId);
+                if (!svc) return null;
                 return (
-                  <button key={s.id} onClick={() => toggleService(b.id, s.id)} className={`px-4 py-2 text-sm rounded-2xl border ${selected ? 'bg-teal-600 text-white' : 'bg-white'}`}>
-                    {s.title}
-                  </button>
+                  <div key={item.serviceId} className="bg-white border border-slate-200 rounded-2xl p-4 mb-4 flex flex-wrap items-center gap-4">
+                    <div className="flex-1">
+                      <div className="font-medium">{svc.title}</div>
+                      <div className="text-xs text-slate-500">{svc.desc}</div>
+                    </div>
+                    
+                    <div className="flex items-center gap-6">
+                      {/* Dosis */}
+                      {svc.allowDoses && (
+                        <div>
+                          <label className="block text-[10px] font-medium text-slate-500 mb-1">DOSIS</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="12"
+                            value={item.doses || 1}
+                            onChange={e => updateServiceConfig(ben.id, item.serviceId, 'doses', parseInt(e.target.value))}
+                            className="w-20 px-3 py-2 border border-slate-300 rounded-2xl text-center focus:border-teal-500"
+                          />
+                        </div>
+                      )}
+
+                      {/* Frecuencia */}
+                      {svc.allowDoses && (
+                        <div>
+                          <label className="block text-[10px] font-medium text-slate-500 mb-1">FRECUENCIA</label>
+                          <select
+                            value={item.frequency || 'once'}
+                            onChange={e => updateServiceConfig(ben.id, item.serviceId, 'frequency', e.target.value)}
+                            className="px-4 py-2 border border-slate-300 rounded-2xl text-sm focus:border-teal-500"
+                          >
+                            {FREQUENCIES.map(f => (
+                              <option key={f.id} value={f.id}>{f.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Precio unitario */}
+                      <div className="text-right">
+                        <div className="text-xs text-slate-500">Precio</div>
+                        <div className="font-semibold text-teal-600">{fmtCLP(svc.price * (item.doses || 1))}</div>
+                      </div>
+                    </div>
+                  </div>
                 );
               })}
             </div>
           </div>
         ))}
-        <button onClick={addBen} className="text-teal-600 text-sm font-medium flex items-center gap-1">
-          <UserPlus className="w-4 h-4" /> Agregar otra persona
-        </button>
       </div>
 
-      <div className="mt-8 bg-teal-50 p-6 rounded-3xl">
-        <div className="flex justify-between text-lg font-semibold">
-          <span>Total estimado</span>
-          <span>{fmtCLP(net)}</span>
+      {/* Fecha, hora y dirección */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div>
+          <label className="block text-sm font-medium mb-2">Fecha de la primera cita</label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-4 py-4 rounded-3xl border border-slate-300" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-2">Hora</label>
+          <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full px-4 py-4 rounded-3xl border border-slate-300" />
         </div>
       </div>
 
-      <button onClick={submit} className="w-full mt-8 py-4 bg-gradient-to-r from-teal-600 to-blue-600 text-white rounded-3xl font-semibold text-lg">
-        Enviar solicitud
+      <div className="mb-8">
+        <label className="block text-sm font-medium mb-2">Dirección completa</label>
+        <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="Calle, número, departamento, comuna" className="w-full px-4 py-4 rounded-3xl border border-slate-300" />
+      </div>
+
+      <div className="mb-8">
+        <label className="block text-sm font-medium mb-2">Notas adicionales (opcional)</label>
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="w-full px-4 py-4 rounded-3xl border border-slate-300" />
+      </div>
+
+      {/* Resumen de precio */}
+      <div className="bg-teal-50 rounded-3xl p-6 flex justify-between items-center mb-8">
+        <div>
+          <div className="text-sm font-medium text-teal-700">Total estimado (con descuento familiar)</div>
+          <div className="text-4xl font-bold text-teal-800">{fmtCLP(net)}</div>
+        </div>
+        {discount > 0 && (
+          <div className="text-right text-sm">
+            <div className="text-teal-600 font-medium">Descuento familiar aplicado</div>
+            <div className="text-teal-500">-{Math.round(discount * 100)}%</div>
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={submit}
+        className="w-full py-5 bg-gradient-to-r from-teal-600 to-blue-600 text-white rounded-3xl font-semibold text-xl flex items-center justify-center gap-3 hover:from-teal-700 hover:to-blue-700 transition-all"
+      >
+        <Calendar className="w-6 h-6" />
+        Enviar solicitud y generar serie de citas
       </button>
     </div>
   );
 }
 
+// ==================== APPOINTMENTCARD CON INDICADOR DE SERIE ====================
 function AppointmentCard({ a, services, onCancel }) {
+  const net = a.beneficiaries ? appNetPrice(a, services) : 0;
+  const isSeries = !!a.seriesId;
+
   return (
-    <div className="bg-white rounded-3xl p-6 border border-slate-200">
-      <div className="flex justify-between">
-        <div>
-          <div className="font-semibold">{new Date(a.date).toLocaleDateString('es-CL')}</div>
-          <div className="text-teal-600">{fmtTime(a.time)} · {a.address}</div>
+    <div className="bg-white rounded-3xl p-6 border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex-1">
+        <div className="flex justify-between items-start">
+          <div>
+            <div className="font-semibold text-lg">{new Date(a.date).toLocaleDateString('es-CL')}</div>
+            <div className="text-teal-600">{fmtTime(a.time)} · {a.address}</div>
+          </div>
+          <span className={`text-xs px-4 py-1 rounded-3xl font-medium ${a.status === 'pendiente' ? 'bg-amber-100 text-amber-700' : a.status === 'confirmada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+            {a.status}
+          </span>
         </div>
-        <span className="text-xs px-3 py-1 bg-amber-100 text-amber-700 rounded-2xl font-medium">{a.status}</span>
+        {a.beneficiaries && <div className="text-sm text-slate-600 mt-2">{a.beneficiaries.map(b => b.name).join(', ')}</div>}
+        
+        {isSeries && (
+          <div className="flex items-center gap-2 mt-4">
+            <div className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-3xl">
+              <Package className="w-3 h-3" />
+              Serie • Dosis {a.doseNumber || 1}
+            </div>
+          </div>
+        )}
       </div>
-      {onCancel && <button onClick={() => onCancel(a)} className="text-red-500 text-sm mt-4">Cancelar</button>}
+      <div className="text-right">
+        <div className="font-bold text-xl text-teal-700">{fmtCLP(net)}</div>
+        {onCancel && (
+          <button 
+            onClick={() => onCancel(a)} 
+            className="mt-4 text-red-500 hover:text-red-600 text-sm font-medium flex items-center gap-1"
+          >
+            <Trash2 className="w-4 h-4" /> Cancelar
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -1456,6 +1775,7 @@ function DuplicateMerger({ patients, professionals, appointments, savePatients, 
 }
 
 // ==================== EXPORT APP (con login actualizado) ====================
+// ==================== APP PRINCIPAL ====================
 export default function App() {
   const [view, setView] = useState('landing');
   const [user, setUser] = useState(null);
@@ -1486,19 +1806,6 @@ export default function App() {
       setLoading(false);
     })();
   }, []);
-
-  const sget = async (k, def) => {
-    try {
-      const { data } = await supabase.from('app_storage').select('value').eq('key', k).single();
-      return data ? data.value : def;
-    } catch {
-      return def;
-    }
-  };
-
-  const sset = async (k, v) => {
-    await supabase.from('app_storage').upsert({ key: k, value: v });
-  };
 
   const saveAppointmentsLocal = async (list) => {
     setAppointments(list);
@@ -1623,14 +1930,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50">
       {view === 'landing' && <Landing services={services.filter(s => s.active)} onLogin={() => setView('login')} />}
-      {view === 'login' && (
-        <LoginView 
-          onLogin={login} 
-          onBack={() => setView('landing')} 
-          patients={patients} 
-          professionals={professionals} 
-        />
-      )}
+      {view === 'login' && <LoginView onLogin={login} onBack={() => setView('landing')} patients={patients} professionals={professionals} />}
       {view === 'patient' && user && user.role === 'patient' && (
         <PatientPortal 
           user={user} 
@@ -1643,20 +1943,7 @@ export default function App() {
         />
       )}
       {view === 'admin' && user && user.role !== 'patient' && (
-        <AdminPanel 
-          user={user} 
-          setUser={setUser} 
-          services={services} 
-          appointments={appointments} 
-          patients={patients} 
-          professionals={professionals} 
-          notifications={notifications} 
-          saveAppointments={saveAppointmentsLocal} 
-          savePatients={() => {}} 
-          saveProfessionals={() => {}} 
-          addNotification={() => {}} 
-          onLogout={logout} 
-        />
+        <AdminPanel user={user} setUser={setUser} services={services} appointments={appointments} patients={patients} professionals={professionals} notifications={notifications} saveAppointments={saveAppointmentsLocal} savePatients={() => {}} saveProfessionals={() => {}} addNotification={() => {}} onLogout={logout} />
       )}
     </div>
   );
