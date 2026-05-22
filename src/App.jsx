@@ -1189,64 +1189,118 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
   const [time, setTime] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
-  const [beneficiaries, setBeneficiaries] = useState([{ id: uid(), name: user.name, relationship: 'Titular', services: [] }]);
+  
+  // Estado inicial seguro
+  const [beneficiaries, setBeneficiaries] = useState(() => [{
+    id: uid(),
+    name: user?.name || '',
+    relationship: 'Titular',
+    services: []
+  }]);
 
-  const addBen = () => setBeneficiaries([...beneficiaries, { id: uid(), name: '', relationship: 'Otro familiar', services: [] }]);
-  const removeBen = (id) => { if (beneficiaries.length > 1) setBeneficiaries(beneficiaries.filter(b => b.id !== id)); };
-  const updateBen = (id, updates) => setBeneficiaries(beneficiaries.map(b => b.id === id ? { ...b, ...updates } : b));
+  const addBen = () => {
+    setBeneficiaries(prev => [...prev, {
+      id: uid(),
+      name: '',
+      relationship: 'Otro familiar',
+      services: []
+    }]);
+  };
 
-  // Toggle servicio + configuración de dosis/frecuencia
+  const removeBen = (id) => {
+    if (beneficiaries.length <= 1) return;
+    setBeneficiaries(prev => prev.filter(b => b.id !== id));
+  };
+
+  const updateBen = (id, updates) => {
+    setBeneficiaries(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
+  };
+
   const toggleService = (benId, serviceId) => {
-    const ben = beneficiaries.find(b => b.id === benId);
-    const exists = ben.services.findIndex(s => s.serviceId === serviceId);
-    
-    if (exists >= 0) {
-      // eliminar
-      updateBen(benId, {
-        services: ben.services.filter((_, i) => i !== exists)
-      });
-    } else {
-      const svc = services.find(s => s.id === serviceId);
-      const defaultItem = {
-        serviceId,
-        doses: svc?.allowDoses ? 1 : 1,
-        frequency: 'once',
-        completedDoses: 0
-      };
-      updateBen(benId, {
-        services: [...ben.services, defaultItem]
-      });
-    }
+    setBeneficiaries(prev => prev.map(ben => {
+      if (ben.id !== benId) return ben;
+      
+      const existsIndex = ben.services.findIndex(s => s.serviceId === serviceId);
+      
+      if (existsIndex >= 0) {
+        // Eliminar servicio
+        return {
+          ...ben,
+          services: ben.services.filter((_, i) => i !== existsIndex)
+        };
+      } else {
+        // Agregar servicio
+        const svc = services.find(s => s.id === serviceId);
+        const defaultItem = {
+          serviceId,
+          doses: svc?.allowDoses ? 1 : 1,
+          frequency: 'once',
+          completedDoses: 0
+        };
+        return {
+          ...ben,
+          services: [...ben.services, defaultItem]
+        };
+      }
+    }));
   };
 
   const updateServiceConfig = (benId, serviceId, field, value) => {
-    const ben = beneficiaries.find(b => b.id === benId);
-    const newServices = ben.services.map(s => 
-      s.serviceId === serviceId ? { ...s, [field]: value } : s
-    );
-    updateBen(benId, { services: newServices });
+    setBeneficiaries(prev => prev.map(ben => {
+      if (ben.id !== benId) return ben;
+      return {
+        ...ben,
+        services: ben.services.map(item =>
+          item.serviceId === serviceId ? { ...item, [field]: value } : item
+        )
+      };
+    }));
   };
 
-  // Cálculo de precio total
-  const gross = beneficiaries.reduce((s, b) => s + b.services.reduce((acc, item) => {
-    const svc = services.find(s => s.id === item.serviceId);
-    return acc + (svc ? svc.price * (item.doses || 1) : 0);
-  }, 0), 0);
+  // Cálculo de precio
+  const gross = beneficiaries.reduce((sum, ben) => {
+    return sum + ben.services.reduce((acc, item) => {
+      const svc = services.find(s => s.id === item.serviceId);
+      return acc + (svc ? svc.price * (item.doses || 1) : 0);
+    }, 0);
+  }, 0);
+
   const discount = beneficiaries.length >= 4 ? 0.15 : beneficiaries.length === 3 ? 0.10 : beneficiaries.length === 2 ? 0.05 : 0;
   const net = Math.round(gross * (1 - discount));
-  
-  const submit = async () => {
-    if (!date || !time || !address) return alert('Completa fecha, hora y dirección');
-  
-  const baseApp = { id: uid(), patientId: user.id, patientName: user.name, patientPhone: user.phone, patientComuna: user.comuna, beneficiaries, date, time, address, notes, status: 'pendiente', createdAt: Date.now() };
 
-    // Generación automática de series según dosis y frecuencia
+  const submit = async () => {
+    if (!date || !time || !address.trim()) {
+      alert('❌ Por favor completa fecha, hora y dirección');
+      return;
+    }
+
+    const baseApp = {
+      id: uid(),
+      patientId: user.id,
+      patientName: user.name,
+      patientPhone: user.phone,
+      patientComuna: user.comuna,
+      beneficiaries,
+      date,
+      time,
+      address: address.trim(),
+      notes: notes.trim(),
+      status: 'pendiente',
+      createdAt: Date.now()
+    };
+
     const seriesAppointments = generateAppointmentSeries(baseApp, services);
 
-    await saveAppointments([...appointments, ...seriesAppointments]);
-    await sendWhatsAppToAdmin(baseApp, 'new_appointment', services);
-    alert(`¡Solicitud enviada! Se han creado ${seriesAppointments.length} cita(s) en serie.`);
-    onDone();
+    try {
+      await saveAppointments([...appointments, ...seriesAppointments]);
+      await sendWhatsAppToAdmin(baseApp, 'new_appointment', services);
+      
+      alert(`✅ Solicitud enviada correctamente.\nSe generaron ${seriesAppointments.length} cita(s) en serie.`);
+      onDone();
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al guardar la solicitud. Inténtalo de nuevo.');
+    }
   };
 
   return (
@@ -1260,53 +1314,53 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
       <div className="mb-8">
         <div className="flex justify-between items-center mb-4">
           <h4 className="font-semibold text-lg">Personas a atender</h4>
-          <button onClick={addBen} className="flex items-center gap-2 text-teal-600 font-medium text-sm">
+          <button
+            onClick={addBen}
+            className="flex items-center gap-2 text-teal-600 font-medium text-sm hover:text-teal-700"
+          >
             <UserPlus className="w-4 h-4" /> Agregar persona
           </button>
         </div>
 
-        {beneficiaries.map((ben, idx) => (
+        {beneficiaries.map((ben) => (
           <div key={ben.id} className="bg-slate-50 border border-slate-200 rounded-3xl p-6 mb-6">
-            <div className="flex justify-between mb-4">
-              <div className="flex-1">
-                <input
-                  type="text"
-                  value={ben.name}
-                  onChange={e => updateBen(ben.id, { name: e.target.value })}
-                  placeholder="Nombre completo"
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 text-sm"
-                />
-              </div>
-              <div className="ml-4">
-                <select
-                  value={ben.relationship}
-                  onChange={e => updateBen(ben.id, { relationship: e.target.value })}
-                  className="px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 text-sm"
-                >
-                  {RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
+            <div className="flex gap-4 mb-4">
+              <input
+                type="text"
+                value={ben.name}
+                onChange={e => updateBen(ben.id, { name: e.target.value })}
+                placeholder="Nombre completo"
+                className="flex-1 px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+              />
+              <select
+                value={ben.relationship}
+                onChange={e => updateBen(ben.id, { relationship: e.target.value })}
+                className="px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+              >
+                {RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
               {beneficiaries.length > 1 && (
-                <button
-                  onClick={() => removeBen(ben.id)}
-                  className="ml-4 text-red-500 hover:text-red-600 p-2"
-                >
+                <button onClick={() => removeBen(ben.id)} className="text-red-500 hover:text-red-600">
                   <Trash2 className="w-5 h-5" />
                 </button>
               )}
             </div>
 
-            {/* Servicios para este beneficiario */}
-            <div className="mt-6">
+            {/* Servicios */}
+            <div className="mt-4">
               <p className="text-sm font-medium text-slate-500 mb-3">Servicios</p>
               <div className="flex flex-wrap gap-2 mb-6">
-                {services.filter(s => s.active).map(svc => {
+                {services.map(svc => {
                   const selected = ben.services.some(item => item.serviceId === svc.id);
                   return (
                     <button
                       key={svc.id}
                       onClick={() => toggleService(ben.id, svc.id)}
-                      className={`px-5 py-2.5 text-sm font-medium rounded-3xl border transition-all flex items-center gap-2 ${selected ? 'bg-teal-600 text-white border-teal-600' : 'bg-white border-slate-300 hover:border-teal-300'}`}
+                      className={`px-5 py-2.5 text-sm font-medium rounded-3xl border transition-all flex items-center gap-2 ${
+                        selected
+                          ? 'bg-teal-600 text-white border-teal-600'
+                          : 'bg-white border-slate-300 hover:border-teal-300'
+                      }`}
                     >
                       {getIconComponent(svc.iconId)({ className: 'w-4 h-4' })}
                       {svc.title}
@@ -1315,52 +1369,44 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
                 })}
               </div>
 
-              {/* Configuración detallada de cada servicio seleccionado */}
+              {/* Configuración de servicios seleccionados */}
               {ben.services.map(item => {
                 const svc = services.find(s => s.id === item.serviceId);
                 if (!svc) return null;
                 return (
-                  <div key={item.serviceId} className="bg-white border border-slate-200 rounded-2xl p-4 mb-4 flex flex-wrap items-center gap-4">
-                    <div className="flex-1">
-                      <div className="font-medium">{svc.title}</div>
-                      <div className="text-xs text-slate-500">{svc.desc}</div>
+                  <div key={item.serviceId} className="bg-white border border-slate-200 rounded-2xl p-4 mb-4 flex flex-wrap items-center gap-6">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{svc.title}</div>
                     </div>
-                    
+
                     <div className="flex items-center gap-6">
-                      {/* Dosis */}
                       {svc.allowDoses && (
-                        <div>
-                          <label className="block text-[10px] font-medium text-slate-500 mb-1">DOSIS</label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="12"
-                            value={item.doses || 1}
-                            onChange={e => updateServiceConfig(ben.id, item.serviceId, 'doses', parseInt(e.target.value))}
-                            className="w-20 px-3 py-2 border border-slate-300 rounded-2xl text-center focus:border-teal-500"
-                          />
-                        </div>
+                        <>
+                          <div>
+                            <label className="block text-[10px] font-medium text-slate-500 mb-1">DOSIS</label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="12"
+                              value={item.doses || 1}
+                              onChange={e => updateServiceConfig(ben.id, item.serviceId, 'doses', parseInt(e.target.value) || 1)}
+                              className="w-20 px-3 py-2 border border-slate-300 rounded-2xl text-center"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-medium text-slate-500 mb-1">FRECUENCIA</label>
+                            <select
+                              value={item.frequency || 'once'}
+                              onChange={e => updateServiceConfig(ben.id, item.serviceId, 'frequency', e.target.value)}
+                              className="px-4 py-2 border border-slate-300 rounded-2xl text-sm"
+                            >
+                              {FREQUENCIES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                            </select>
+                          </div>
+                        </>
                       )}
-
-                      {/* Frecuencia */}
-                      {svc.allowDoses && (
-                        <div>
-                          <label className="block text-[10px] font-medium text-slate-500 mb-1">FRECUENCIA</label>
-                          <select
-                            value={item.frequency || 'once'}
-                            onChange={e => updateServiceConfig(ben.id, item.serviceId, 'frequency', e.target.value)}
-                            className="px-4 py-2 border border-slate-300 rounded-2xl text-sm focus:border-teal-500"
-                          >
-                            {FREQUENCIES.map(f => (
-                              <option key={f.id} value={f.id}>{f.label}</option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-
-                      {/* Precio unitario */}
                       <div className="text-right">
-                        <div className="text-xs text-slate-500">Precio</div>
+                        <div className="text-xs text-slate-500">Subtotal</div>
                         <div className="font-semibold text-teal-600">{fmtCLP(svc.price * (item.doses || 1))}</div>
                       </div>
                     </div>
@@ -1373,37 +1419,57 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
       </div>
 
       {/* Fecha, hora y dirección */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-2 gap-6 mb-8">
         <div>
           <label className="block text-sm font-medium mb-2">Fecha de la primera cita</label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-4 py-4 rounded-3xl border border-slate-300" />
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500"
+          />
         </div>
         <div>
           <label className="block text-sm font-medium mb-2">Hora</label>
-          <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full px-4 py-4 rounded-3xl border border-slate-300" />
+          <input
+            type="time"
+            value={time}
+            onChange={e => setTime(e.target.value)}
+            className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500"
+          />
         </div>
       </div>
 
       <div className="mb-8">
         <label className="block text-sm font-medium mb-2">Dirección completa</label>
-        <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="Calle, número, departamento, comuna" className="w-full px-4 py-4 rounded-3xl border border-slate-300" />
+        <input
+          type="text"
+          value={address}
+          onChange={e => setAddress(e.target.value)}
+          placeholder="Calle, número, departamento, comuna"
+          className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500"
+        />
       </div>
 
       <div className="mb-8">
         <label className="block text-sm font-medium mb-2">Notas adicionales (opcional)</label>
-        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="w-full px-4 py-4 rounded-3xl border border-slate-300" />
+        <textarea
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          rows={3}
+          className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500"
+        />
       </div>
 
-      {/* Resumen de precio */}
+      {/* Resumen */}
       <div className="bg-teal-50 rounded-3xl p-6 flex justify-between items-center mb-8">
         <div>
-          <div className="text-sm font-medium text-teal-700">Total estimado (con descuento familiar)</div>
+          <div className="text-sm font-medium text-teal-700">Total estimado</div>
           <div className="text-4xl font-bold text-teal-800">{fmtCLP(net)}</div>
         </div>
         {discount > 0 && (
-          <div className="text-right text-sm">
-            <div className="text-teal-600 font-medium">Descuento familiar aplicado</div>
-            <div className="text-teal-500">-{Math.round(discount * 100)}%</div>
+          <div className="text-teal-600 text-sm font-medium">
+            Descuento familiar: -{Math.round(discount * 100)}%
           </div>
         )}
       </div>
@@ -1413,7 +1479,7 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
         className="w-full py-5 bg-gradient-to-r from-teal-600 to-blue-600 text-white rounded-3xl font-semibold text-xl flex items-center justify-center gap-3 hover:from-teal-700 hover:to-blue-700 transition-all"
       >
         <Calendar className="w-6 h-6" />
-        Enviar solicitud y generar serie de citas
+        Enviar solicitud y generar serie
       </button>
     </div>
   );
