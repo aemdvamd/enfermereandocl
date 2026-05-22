@@ -841,9 +841,9 @@ function AdminPanel({
           <EditAppointmentModal 
             app={editingApp} 
             services={services} 
-            onSave={(updates) => {
+            onSave={async (updates) => {                    // ← AQUÍ SE AGREGÓ "async"
               const newList = appointments.map(a => a.id === updates.id ? { ...a, ...updates } : a);
-              await handleSaveAppointments(newList);   // ← validación automática
+              await handleSaveAppointments(newList);
               setEditingApp(null);
             }} 
             onClose={() => setEditingApp(null)} 
