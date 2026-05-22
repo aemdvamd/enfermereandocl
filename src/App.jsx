@@ -63,49 +63,40 @@ const FREQUENCIES = [
 // ==================== CHECKLISTS POR SERVICIO ====================
 const SERVICE_CHECKLISTS = {
   'inj-anti': [
-    { id: 'informed', label: 'Paciente informado de efectos secundarios' },
-    { id: 'consent', label: 'Consentimiento informado firmado' },
-    { id: 'sterile', label: 'Técnica estéril aplicada' },
-    { id: 'site', label: 'Sitio de punción correcto' },
-    { id: 'reaction', label: 'Reacción inmediata observada' }
+    { id: 'consent', label: 'Consentimiento informado obtenido' },
+    { id: 'sterile', label: 'Técnica aséptica correcta' },
+    { id: 'injection', label: 'Inyección aplicada correctamente' },
+    { id: 'observation', label: 'Observación post-aplicación (15 min)' },
+    { id: 'instructions', label: 'Indicaciones entregadas al paciente' }
   ],
   'inj-im': [
-    { id: 'site', label: 'Sitio de punción correcto' },
+    { id: 'site', label: 'Sitio de punción seleccionado' },
     { id: 'sterile', label: 'Técnica estéril' },
-    { id: 'aspiration', label: 'Aspiración negativa realizada' },
+    { id: 'aspiration', label: 'Aspiración negativa' },
+    { id: 'injection', label: 'Medicamento administrado' },
     { id: 'tolerance', label: 'Tolerancia del paciente' }
   ],
   'inj-ev': [
-    { id: 'vein', label: 'Vía venosa permeable' },
+    { id: 'vein', label: 'Acceso venoso permeable' },
     { id: 'sterile', label: 'Técnica estéril' },
-    { id: 'speed', label: 'Velocidad de infusión correcta' },
-    { id: 'reaction', label: 'Reacción inmediata observada' }
+    { id: 'infusion', label: 'Infusión iniciada a velocidad correcta' },
+    { id: 'monitoring', label: 'Monitoreo durante infusión' }
   ],
   'cur-simple': [
     { id: 'cleaning', label: 'Limpieza de herida' },
     { id: 'dressing', label: 'Aplicación de apósito' },
-    { id: 'instructions', label: 'Indicaciones entregadas' }
+    { id: 'instructions', label: 'Indicaciones de cuidados en casa' }
   ],
   'cur-adv': [
+    { id: 'assessment', label: 'Evaluación de la herida' },
     { id: 'debridement', label: 'Desbridamiento realizado' },
-    { id: 'exudate', label: 'Evaluación de exudado' },
     { id: 'dressing', label: 'Apósito avanzado aplicado' },
-    { id: 'instructions', label: 'Indicaciones de cuidados' }
+    { id: 'instructions', label: 'Plan de cuidados entregado' }
   ],
   'exam': [
-    { id: 'reviewed', label: 'Exámenes revisados completamente' },
-    { id: 'findings', label: 'Hallazgos relevantes anotados' },
-    { id: 'referral', label: 'Derivación sugerida (si corresponde)' }
-  ],
-  'counsel': [
-    { id: 'topics', label: 'Temas abordados' },
-    { id: 'adherence', label: 'Nivel de adherencia evaluado' },
-    { id: 'doubts', label: 'Dudas resueltas' }
-  ],
-  'online': [
-    { id: 'connection', label: 'Videollamada estable' },
-    { id: 'topics', label: 'Temas tratados' },
-    { id: 'next', label: 'Próximo control agendado' }
+    { id: 'reviewed', label: 'Exámenes revisados' },
+    { id: 'findings', label: 'Hallazgos relevantes documentados' },
+    { id: 'plan', label: 'Plan de acción definido' }
   ]
 };
 
@@ -1687,7 +1678,7 @@ function AdminPanel({
   );
 }
 
-// ==================== MONITORING PANEL (VERSIÓN SIMPLE Y ESTABLE) ====================
+// ==================== MONITORING PANEL - FLUJO SIMPLIFICADO ====================
 function MonitoringPanel({ 
   appointments, 
   patients, 
@@ -1708,13 +1699,15 @@ function MonitoringPanel({
     ? myAppointments 
     : myAppointments.filter(a => a.status === filterStatus);
 
-  const takeTask = async (appId) => {
+  // ==================== ACCIONES ====================
+  const takeTask = async (appId) => {   // Pendiente → Asignada
     const updated = appointments.map(app =>
       app.id === appId ? { 
         ...app, 
-        status: 'en_tratamiento', 
-        takenAt: Date.now(), 
-        takenBy: currentUser.id 
+        status: 'asignada', 
+        assignedTo: currentUser.id,
+        assignedToName: currentUser.name,
+        takenAt: Date.now() 
       } : app
     );
     await saveAppointments(updated);
@@ -1741,11 +1734,15 @@ function MonitoringPanel({
       };
     });
 
-    // Auto completar si todo está marcado
+    // Validación automática de completitud
     const app = updated.find(a => a.id === appId);
     if (app && isTaskComplete(app)) {
       updated = updated.map(a => 
         a.id === appId ? { ...a, status: 'completada', completedAt: Date.now() } : a
+      );
+    } else if (app && app.status === 'asignada') {
+      updated = updated.map(a => 
+        a.id === appId ? { ...a, status: 'en_tratamiento' } : a
       );
     }
 
@@ -1757,7 +1754,7 @@ function MonitoringPanel({
     return app.beneficiaries.every(ben =>
       ben.services.every(service => {
         const checklist = service.checklist || SERVICE_CHECKLISTS[service.serviceId] || [];
-        return checklist.every(item => item.completed === true);
+        return checklist.length === 0 || checklist.every(item => item.completed === true);
       })
     );
   };
@@ -1767,15 +1764,13 @@ function MonitoringPanel({
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">Monitoreo de Atenciones</h2>
         
-        <div className="flex gap-2">
-          {['all', 'pendiente', 'asignada', 'confirmada', 'en_tratamiento', 'completada'].map(status => (
+        <div className="flex gap-2 flex-wrap">
+          {['all', 'pendiente', 'asignada', 'en_tratamiento', 'completada'].map(status => (
             <button
               key={status}
               onClick={() => setFilterStatus(status)}
               className={`px-4 py-2 text-sm rounded-2xl transition-all ${
-                filterStatus === status 
-                  ? 'bg-teal-600 text-white' 
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                filterStatus === status ? 'bg-teal-600 text-white' : 'bg-slate-100 hover:bg-slate-200'
               }`}
             >
               {status === 'all' ? 'Todas' : status.charAt(0).toUpperCase() + status.slice(1)}
@@ -1786,18 +1781,15 @@ function MonitoringPanel({
 
       <div className="space-y-4">
         {filteredApps.length === 0 ? (
-          <div className="text-center py-12 text-slate-400">
-            No hay atenciones en este filtro
-          </div>
+          <div className="text-center py-12 text-slate-400">No hay atenciones en este filtro</div>
         ) : (
           filteredApps.map(app => {
             const net = app.beneficiaries ? appNetPrice(app, services) : 0;
             const isAssignedToMe = app.assignedTo === currentUser.id;
-            const isTaken = !!app.takenAt;
 
             return (
-              <div key={app.id} className="border border-slate-200 rounded-3xl p-5 hover:shadow-md transition-all">
-                <div className="flex justify-between items-start">
+              <div key={app.id} className="border border-slate-200 rounded-3xl p-6 hover:shadow-md transition-all">
+                <div className="flex justify-between items-start mb-4">
                   <div>
                     <div className="font-semibold text-lg">{app.patientName}</div>
                     <div className="text-sm text-slate-500">
@@ -1806,46 +1798,59 @@ function MonitoringPanel({
                   </div>
                   <button 
                     onClick={() => onEdit(app)}
-                    className="text-teal-600 hover:text-teal-700 font-medium text-sm"
+                    className="text-teal-600 hover:text-teal-700 font-medium"
                   >
-                    Editar →
+                    Ver detalle →
                   </button>
                 </div>
 
-                {/* Tomar tarea */}
-                {isAssignedToMe && !isTaken && ['asignada', 'confirmada'].includes(app.status) && (
+                {/* BOTÓN TOMAR TAREA */}
+                {app.status === 'pendiente' && isAssignedToMe && (
                   <button
                     onClick={() => takeTask(app.id)}
-                    className="mt-4 w-full py-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl"
+                    className="w-full py-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl mb-6 text-lg"
                   >
                     Tomar esta tarea
                   </button>
                 )}
 
-                {/* Checklist */}
-                {isTaken && isAssignedToMe && app.beneficiaries && (
-                  <div className="mt-6">
+                {/* CHECKLIST - Solo visible cuando está Asignada o En tratamiento */}
+                {['asignada', 'en_tratamiento'].includes(app.status) && isAssignedToMe && app.beneficiaries && (
+                  <div className="mt-2">
+                    <h4 className="font-semibold mb-4 text-slate-900">Seguimiento clínico</h4>
                     {app.beneficiaries.map((ben, idx) => (
-                      <div key={idx} className="mb-6">
-                        <div className="font-medium mb-3">{ben.name}</div>
+                      <div key={idx} className="mb-6 bg-slate-50 rounded-2xl p-5">
+                        <div className="font-medium mb-4 text-slate-800 border-b pb-2">{ben.name}</div>
                         {ben.services.map(service => {
                           const svc = services.find(s => s.id === service.serviceId);
                           const checklist = service.checklist || SERVICE_CHECKLISTS[service.serviceId] || [];
                           return (
-                            <div key={service.serviceId} className="mb-4 bg-slate-50 rounded-2xl p-4">
-                              <div className="font-medium mb-2">{svc?.title}</div>
+                            <div key={service.serviceId} className="mb-5 last:mb-0">
+                              <div className="font-medium text-teal-700 mb-3">{svc?.title}</div>
                               {checklist.map(item => (
                                 <button
                                   key={item.id}
                                   onClick={() => toggleChecklistItem(app.id, service.serviceId, item.id)}
-                                  className="flex w-full items-center gap-3 py-3 px-4 hover:bg-white rounded-xl text-left border border-transparent hover:border-slate-100"
+                                  className="flex w-full items-center gap-4 py-4 px-5 hover:bg-white rounded-2xl text-left mb-2 border border-transparent hover:border-slate-100 transition-all"
                                 >
-                                  <div className={`w-6 h-6 rounded-xl border flex items-center justify-center text-sm ${
-                                    item.completed ? 'bg-teal-500 text-white border-teal-500' : 'border-slate-300'
+                                  <div className={`w-8 h-8 flex items-center justify-center rounded-2xl border-2 text-xl font-medium flex-shrink-0 transition-all ${
+                                    item.completed 
+                                      ? 'bg-teal-500 text-white border-teal-500' 
+                                      : 'border-slate-300'
                                   }`}>
                                     {item.completed ? '✓' : ''}
                                   </div>
-                                  <span>{item.label}</span>
+                                  <div className="flex-1">
+                                    <div className="text-sm">{item.label}</div>
+                                    {item.completedAt && (
+                                      <div className="text-xs text-slate-400 mt-1">
+                                        {new Date(item.completedAt).toLocaleString('es-CL', { 
+                                          dateStyle: 'short', 
+                                          timeStyle: 'short' 
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
                                 </button>
                               ))}
                             </div>
@@ -1856,7 +1861,7 @@ function MonitoringPanel({
                   </div>
                 )}
 
-                <div className="mt-4 text-xs text-slate-500">
+                <div className="text-xs text-slate-500 mt-4 pt-4 border-t">
                   Estado: <span className="font-medium capitalize">{app.status || 'pendiente'}</span>
                 </div>
               </div>
