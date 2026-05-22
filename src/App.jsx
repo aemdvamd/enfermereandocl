@@ -407,8 +407,7 @@ function CalendarView({ appointments, onEdit }) {
 }
 
 /* =============================================
-   LOGIN VIEW - VERSIÓN COMPLETA
-   (Login + Registro + Recuperación de contraseña)
+   LOGIN VIEW - VERSIÓN MEJORADA CON EMAIL Y VERIFICACIÓN
    ============================================= */
    function LoginView({ onLogin, onBack, patients, professionals }) {
     const [tab, setTab] = useState('login'); // login | register | recovery
@@ -423,6 +422,11 @@ function CalendarView({ appointments, onEdit }) {
     const [recoveryEmail, setRecoveryEmail] = useState('');
     const [loading, setLoading] = useState(false);
   
+    // ==================== VALIDACIÓN SIMPLE DE EMAIL ====================
+    const isValidEmail = (em) => {
+      return em.includes('@') && em.includes('.');
+    };
+  
     // ==================== LOGIN ====================
     const handleLogin = async () => {
       setLoading(true);
@@ -436,20 +440,25 @@ function CalendarView({ appointments, onEdit }) {
   
       if (foundUser) {
         if (role === 'professional' && foundUser.status === 'pending') {
-          alert('⏳ Tu cuenta de profesional está pendiente de aprobación.');
+          alert('⏳ Tu cuenta de profesional está pendiente de aprobación por el administrador.');
         } else {
           onLogin({ ...foundUser, role });
         }
       } else {
-        alert('❌ Credenciales incorrectas');
+        alert('❌ Credenciales incorrectas. Verifica tu correo y contraseña.');
       }
       setLoading(false);
     };
   
-    // ==================== REGISTRO ====================
+    // ==================== REGISTRO CON EMAIL Y VERIFICACIÓN ====================
     const handleRegister = async () => {
       if (!name || !email || !password || !phone) {
-        alert('❌ Completa todos los campos');
+        alert('❌ Todos los campos son obligatorios');
+        return;
+      }
+  
+      if (!isValidEmail(email)) {
+        alert('❌ Ingresa un correo electrónico válido (debe contener @ y .)');
         return;
       }
   
@@ -457,62 +466,71 @@ function CalendarView({ appointments, onEdit }) {
   
       const newUser = {
         id: uid(),
-        name,
-        email,
-        password, // En producción esto debe estar hasheado
-        phone,
-        comuna,
-        role,
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password: password,           // En producción debes hashear esto
+        phone: phone.trim(),
+        comuna: comuna || 'No especificada',
+        role: role,
         status: role === 'professional' ? 'pending' : 'active',
         createdAt: new Date().toISOString()
       };
   
+      let updatedList = [];
+  
       if (role === 'patient') {
-        await sset('patients', [...patients, newUser]);
+        updatedList = [...patients, newUser];
+        await sset('enf:patients', updatedList);
       } else {
-        await sset('professionals', [...professionals, newUser]);
+        updatedList = [...professionals, newUser];
+        await sset('enf:professionals', updatedList);
       }
   
-      alert(role === 'professional' 
-        ? '✅ Registro exitoso. Tu cuenta está pendiente de aprobación.' 
-        : '✅ Registro exitoso. Ya puedes iniciar sesión.');
-      
+      // ==================== VERIFICACIÓN DE CREACIÓN ====================
+      console.log('✅ Usuario creado correctamente:', newUser);
+      alert(`✅ ¡Usuario creado exitosamente!\n\n` +
+            `Nombre: ${newUser.name}\n` +
+            `Correo: ${newUser.email}\n` +
+            `Rol: ${role === 'patient' ? 'Paciente' : 'Profesional'}\n\n` +
+            (role === 'professional' 
+              ? 'Tu cuenta está pendiente de aprobación por el administrador.' 
+              : 'Ya puedes iniciar sesión.'));
+  
+      // Limpiar formulario y volver a login
+      setName('');
+      setEmail('');
+      setPassword('');
+      setPhone('');
+      setComuna('');
       setTab('login');
       setLoading(false);
     };
   
-    // ==================== RECUPERACIÓN DE CONTRASEÑA ====================
+    // ==================== RECUPERACIÓN ====================
     const handleRecovery = async () => {
-      if (!recoveryEmail) {
-        alert('❌ Ingresa tu correo');
+      if (!recoveryEmail || !isValidEmail(recoveryEmail)) {
+        alert('❌ Ingresa un correo electrónico válido');
         return;
       }
   
       setLoading(true);
-  
-      // Buscar en pacientes y profesionales
       const allUsers = [...patients, ...professionals];
-      const user = allUsers.find(u => u.email === recoveryEmail);
+      const user = allUsers.find(u => u.email === recoveryEmail.toLowerCase());
   
       if (user) {
-        const tempPassword = 'Temp' + Math.floor(1000 + Math.random() * 9000);
-        // En un entorno real se enviaría por email. Aquí simulamos:
-        alert(`🔑 Contraseña temporal generada para ${recoveryEmail}:\n\n${tempPassword}\n\n(En producción se enviaría por correo)`);
-        
-        // Actualizar contraseña (simulación)
+        const tempPassword = 'Temp' + Math.floor(100000 + Math.random() * 900000);
+        alert(`🔑 Contraseña temporal generada para ${recoveryEmail}:\n\n${tempPassword}\n\nGuárdala. En producción se enviaría por correo.`);
+  
+        // Actualizar contraseña
         if (patients.some(p => p.id === user.id)) {
-          const updatedPatients = patients.map(p => 
-            p.id === user.id ? { ...p, password: tempPassword } : p
-          );
-          await sset('patients', updatedPatients);
+          const updated = patients.map(p => p.id === user.id ? { ...p, password: tempPassword } : p);
+          await sset('enf:patients', updated);
         } else {
-          const updatedPros = professionals.map(p => 
-            p.id === user.id ? { ...p, password: tempPassword } : p
-          );
-          await sset('professionals', updatedPros);
+          const updated = professionals.map(p => p.id === user.id ? { ...p, password: tempPassword } : p);
+          await sset('enf:professionals', updated);
         }
       } else {
-        alert('❌ No encontramos una cuenta con ese correo.');
+        alert('❌ No encontramos ninguna cuenta con ese correo electrónico.');
       }
   
       setLoading(false);
@@ -522,90 +540,44 @@ function CalendarView({ appointments, onEdit }) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-teal-50 to-white flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
-          
           {/* Header */}
           <div className="px-8 pt-8 pb-6 border-b flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Stethoscope className="w-9 h-9 text-teal-600" />
               <div className="font-bold text-3xl">Enfermereando</div>
             </div>
-            <button onClick={onBack} className="text-slate-400 hover:text-slate-600">
-              ← Volver
-            </button>
+            <button onClick={onBack} className="text-slate-400 hover:text-slate-600 text-xl">←</button>
           </div>
   
-          {/* Tabs principales */}
-          <div className="flex border-b">
-            <button
-              onClick={() => setTab('login')}
-              className={`flex-1 py-5 font-medium ${tab === 'login' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}
-            >
-              Iniciar Sesión
-            </button>
-            <button
-              onClick={() => setTab('register')}
-              className={`flex-1 py-5 font-medium ${tab === 'register' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}
-            >
-              Registrarse
-            </button>
-            <button
-              onClick={() => setTab('recovery')}
-              className={`flex-1 py-5 font-medium ${tab === 'recovery' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}
-            >
-              Recuperar Contraseña
-            </button>
+          {/* Tabs */}
+          <div className="flex border-b text-sm">
+            <button onClick={() => setTab('login')} className={`flex-1 py-5 font-medium ${tab === 'login' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Iniciar Sesión</button>
+            <button onClick={() => setTab('register')} className={`flex-1 py-5 font-medium ${tab === 'register' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Registrarse</button>
+            <button onClick={() => setTab('recovery')} className={`flex-1 py-5 font-medium ${tab === 'recovery' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Recuperar</button>
           </div>
   
-          <div className="p-8">
-            {/* LOGIN */}
+          <div className="p-8 space-y-6">
             {tab === 'login' && (
               <>
-                <div className="flex gap-2 mb-6 bg-slate-100 rounded-2xl p-1">
-                  <button
-                    onClick={() => setRole('patient')}
-                    className={`flex-1 py-3 rounded-xl font-medium ${role === 'patient' ? 'bg-white shadow-sm' : ''}`}
-                  >
-                    Paciente
-                  </button>
-                  <button
-                    onClick={() => setRole('professional')}
-                    className={`flex-1 py-3 rounded-xl font-medium ${role === 'professional' ? 'bg-white shadow-sm' : ''}`}
-                  >
-                    Profesional
-                  </button>
+                <div className="flex gap-2 bg-slate-100 rounded-2xl p-1">
+                  <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}>Paciente</button>
+                  <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}>Profesional</button>
                 </div>
   
-                <input
-                  type="email"
-                  placeholder="Correo electrónico"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500 mb-4"
-                />
-                <input
-                  type="password"
-                  placeholder="Contraseña"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500 mb-6"
-                />
+                <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+                <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
   
-                <button
-                  onClick={handleLogin}
-                  disabled={loading}
-                  className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg disabled:opacity-70"
-                >
+                <button onClick={handleLogin} disabled={loading} className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg disabled:opacity-70">
                   {loading ? 'Ingresando...' : 'Iniciar Sesión'}
                 </button>
               </>
             )}
   
-            {/* REGISTRO */}
             {tab === 'register' && (
-              <div className="space-y-4">
-                <div className="flex gap-2 mb-6 bg-slate-100 rounded-2xl p-1">
-                  <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl font-medium ${role === 'patient' ? 'bg-white shadow-sm' : ''}`}>Paciente</button>
-                  <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl font-medium ${role === 'professional' ? 'bg-white shadow-sm' : ''}`}>Profesional</button>
+              <div className="space-y-5">
+                <div className="flex gap-2 bg-slate-100 rounded-2xl p-1">
+                  <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}>Paciente</button>
+                  <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}>Profesional</button>
                 </div>
   
                 <input type="text" placeholder="Nombre completo" value={name} onChange={e => setName(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
@@ -618,27 +590,16 @@ function CalendarView({ appointments, onEdit }) {
                 <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
   
                 <button onClick={handleRegister} disabled={loading} className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg">
-                  {loading ? 'Registrando...' : role === 'professional' ? 'Registrarse como Profesional' : 'Registrarse como Paciente'}
+                  {loading ? 'Creando cuenta...' : 'Crear Cuenta'}
                 </button>
               </div>
             )}
   
-            {/* RECUPERACIÓN DE CONTRASEÑA */}
             {tab === 'recovery' && (
               <div className="space-y-6">
-                <p className="text-slate-600">Ingresa tu correo y te enviaremos una contraseña temporal.</p>
-                <input
-                  type="email"
-                  placeholder="Correo electrónico"
-                  value={recoveryEmail}
-                  onChange={e => setRecoveryEmail(e.target.value)}
-                  className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500"
-                />
-                <button
-                  onClick={handleRecovery}
-                  disabled={loading}
-                  className="w-full py-5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-3xl text-lg"
-                >
+                <p className="text-slate-600">Ingresa tu correo electrónico para recuperar la contraseña.</p>
+                <input type="email" placeholder="Correo electrónico" value={recoveryEmail} onChange={e => setRecoveryEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+                <button onClick={handleRecovery} disabled={loading} className="w-full py-5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-3xl text-lg">
                   {loading ? 'Enviando...' : 'Recuperar Contraseña'}
                 </button>
               </div>
