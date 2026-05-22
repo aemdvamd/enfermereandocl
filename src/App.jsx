@@ -8,7 +8,7 @@ import {
   ChevronDown, Tag, UserCog, Clock, Package, Bell, Route
 } from 'lucide-react';
 
-const WHATSAPP = '56920489639';
+const WHATSAPP = '56920489639';           // Número de Mariela
 const PHONE = '+56 9 2048 9639';
 const PROFESSIONAL_NAME = 'Mariela Droguett';
 
@@ -103,37 +103,40 @@ const appNetPrice = (a, services) => {
   return Math.round(gross * (1 - discount));
 };
 
-// ==================== WHATSAPP ====================
-const sendWhatsAppToAdmin = async (data, type = 'new_appointment', services = [], isSeriesCancel = false) => {
+/* === INTEGRACIÓN CALLMEBOT WHATSAPP === */
+const sendWhatsAppToAdmin = async (app, action = 'new', services = [], isSeriesCancel = false) => {
   try {
-    const adminPhone = (import.meta.env.VITE_ADMIN_WHATSAPP || WHATSAPP).replace(/\D/g, '');
-    const apiKey = import.meta.env.VITE_CALLMEBOT_APIKEY;
-    if (!adminPhone || !apiKey) return false;
+    let msg = `🔔 *Enfermereando - ${PROFESSIONAL_NAME}*\n\n`;
 
-    let message = '';
-    switch (type) {
-      case 'new_appointment':
-        const net = data.beneficiaries ? appNetPrice(data, services) : 0;
-        message = `*🔔 NUEVA RESERVA - Enfermereando*\n\n👤 ${data.patientName}\n📞 ${data.patientPhone}\n📅 ${new Date(data.date).toLocaleDateString('es-CL')}\n🕒 ${fmtTime(data.time)}\n📍 ${data.address}\n💰 Total: ${fmtCLP(net)}`;
-        break;
-      case 'confirmed':
-        message = `*✅ CITA CONFIRMADA*\n👤 ${data.patientName}\n📅 ${new Date(data.date).toLocaleDateString('es-CL')}\n🕒 ${fmtTime(data.time)}`;
-        break;
-      case 'completed':
-        message = `*🏥 VISITA COMPLETADA*\n👤 ${data.patientName}`;
-        break;
-      case 'cancelled':
-        const seriesInfo = isSeriesCancel ? ' (TODA LA SERIE)' : '';
-        message = `*❌ CITA CANCELADA${seriesInfo}*\n👤 ${data.patientName}\n📅 ${new Date(data.date).toLocaleDateString('es-CL')}`;
-        break;
+    if (action === 'new') {
+      msg += `📌 *NUEVA SOLICITUD DE ATENCIÓN*\n`;
+    } else if (action === 'cancelled') {
+      msg += isSeriesCancel 
+        ? `❌ *SERIE COMPLETA CANCELADA*\n` 
+        : `❌ *ATENCIÓN CANCELADA*\n`;
+    } else if (action === 'status_change') {
+      msg += `🔄 *Cambio de estado*\n`;
     }
 
-    const encoded = encodeURIComponent(message);
-    await fetch(`https://api.callmebot.com/whatsapp.php?phone=${adminPhone}&text=${encoded}&apikey=${apiKey}`, { method: 'GET', mode: 'no-cors' });
-    return true;
-  } catch (e) {
-    console.error(e);
-    return false;
+    msg += `Paciente: ${app.patientName}\n`;
+    msg += `Fecha: ${new Date(app.date).toLocaleDateString('es-CL')}\n`;
+    msg += `Hora: ${fmtTime(app.time)}\n`;
+    msg += `Comuna: ${app.comuna || 'No especificada'}\n`;
+
+    if (app.beneficiaries && app.beneficiaries.length > 0) {
+      msg += `Beneficiarios: ${app.beneficiaries.length}\n`;
+    }
+
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${WHATSAPP}&text=${encodeURIComponent(msg)}`;
+    const res = await fetch(url, { method: 'GET' });
+    
+    if (res.ok) {
+      console.log('✅ WhatsApp enviado vía CallMeBot');
+    } else {
+      console.warn('⚠️ CallMeBot respondió con error');
+    }
+  } catch (error) {
+    console.error('❌ Error enviando WhatsApp:', error);
   }
 };
 
@@ -332,178 +335,6 @@ function TabButton({ active, onClick, children, icon: Icon }) {
   );
 }
 
-function NotificationBell({ userId, notifications }) {
-  const [open, setOpen] = useState(false);
-  const myNotifs = notifications.filter(n => n.userId === userId).slice(0, 20);
-  const unreadCount = myNotifs.filter(n => !n.read).length;
-
-  return (
-    <div className="relative">
-      <button onClick={() => setOpen(!open)} className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors">
-        <Bell className="w-5 h-5 text-slate-600" />
-        {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">{unreadCount}</span>}
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-12 z-40 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-            <div className="px-4 py-3 border-b flex justify-between items-center">
-              <div className="font-semibold">Notificaciones</div>
-            </div>
-            <div className="max-h-80 overflow-y-auto">
-              {myNotifs.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-sm">No hay notificaciones</div>
-              ) : (
-                myNotifs.map(notif => (
-                  <div key={notif.id} className="px-4 py-3 border-b hover:bg-slate-50">
-                    <div className="font-medium text-sm">{notif.title}</div>
-                    <div className="text-xs text-slate-600 mt-1">{notif.body}</div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-
-// LANDING PAGE COMPLETO //
-function Landing({ services, onLogin }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [openFaq, setOpenFaq] = useState(null);
-  const scrollTo = (id) => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }); setMenuOpen(false); };
-
-  return (
-    <>
-      <nav className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-teal-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center"><Stethoscope className="w-6 h-6 text-white" /></div>
-            <div><div className="font-bold text-teal-900">Enfermereando</div><div className="text-xs text-teal-600 hidden sm:block">Salud en tu hogar</div></div>
-          </div>
-          <div className="hidden md:flex items-center gap-6">
-            <button onClick={() => scrollTo('servicios')} className="text-sm font-medium text-slate-700 hover:text-teal-600">Servicios</button>
-            <button onClick={() => scrollTo('como-funciona')} className="text-sm font-medium text-slate-700 hover:text-teal-600">Cómo funciona</button>
-            <button onClick={() => scrollTo('cobertura')} className="text-sm font-medium text-slate-700 hover:text-teal-600">Cobertura</button>
-            <button onClick={() => scrollTo('faq')} className="text-sm font-medium text-slate-700 hover:text-teal-600">FAQ</button>
-            <button onClick={onLogin} className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition">Acceder</button>
-          </div>
-          <button className="md:hidden text-slate-700" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</button>
-        </div>
-        {menuOpen && (
-          <div className="md:hidden border-t border-teal-100 bg-white px-4 py-3 flex flex-col gap-3">
-            <button onClick={() => scrollTo('servicios')} className="text-left text-slate-700">Servicios</button>
-            <button onClick={() => scrollTo('como-funciona')} className="text-left text-slate-700">Cómo funciona</button>
-            <button onClick={() => scrollTo('cobertura')} className="text-left text-slate-700">Cobertura</button>
-            <button onClick={() => scrollTo('faq')} className="text-left text-slate-700">FAQ</button>
-            <button onClick={onLogin} className="px-4 py-2 rounded-lg bg-teal-600 text-white font-semibold">Acceder</button>
-          </div>
-        )}
-      </nav>
-
-      <section className="relative overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 py-12 md:py-20 grid md:grid-cols-2 gap-10 items-center">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-100 text-teal-700 text-xs font-semibold mb-4"><Shield className="w-4 h-4" /> Enfermera registrada en Superintendencia de Salud</div>
-            <h1 className="text-4xl md:text-5xl font-bold text-slate-900 leading-tight mb-4">Cuidado profesional <span className="text-teal-600">en la comodidad de tu hogar</span></h1>
-            <p className="text-lg text-slate-600 mb-3">Atención de enfermería a domicilio en la Región Metropolitana con <strong>{PROFESSIONAL_NAME}</strong>.</p>
-            <p className="text-sm text-teal-700 font-semibold mb-1 flex items-center gap-1"><Users className="w-4 h-4" /> Hasta 15% de descuento al atender a tu grupo familiar</p>
-            <p className="text-sm text-slate-600 mb-8 flex items-center gap-1"><Clock className="w-4 h-4 text-teal-600" /> {HOURS_LABEL_FULL}</p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button onClick={onLogin} className="px-6 py-3 rounded-xl bg-gradient-to-r from-teal-600 to-blue-600 text-white font-semibold shadow-lg flex items-center justify-center gap-2"><Calendar className="w-5 h-5" /> Reservar atención</button>
-              <a href={'https://wa.me/' + WHATSAPP} target="_blank" rel="noopener noreferrer" className="px-6 py-3 rounded-xl bg-green-500 text-white font-semibold flex items-center justify-center gap-2"><MessageCircle className="w-5 h-5" /> WhatsApp</a>
-            </div>
-          </div>
-          <div className="relative">
-            <div className="aspect-square rounded-3xl bg-gradient-to-br from-teal-400 to-blue-500 p-1 shadow-2xl"><div className="w-full h-full rounded-3xl bg-white flex items-center justify-center"><div className="text-center p-8"><div className="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-teal-100 to-blue-100 flex items-center justify-center mb-4"><Stethoscope className="w-16 h-16 text-teal-600" /></div><div className="text-2xl font-bold text-slate-900">Atención certificada</div><div className="text-slate-500 mt-2">Profesional universitaria</div></div></div></div>
-          </div>
-        </div>
-      </section>
-
-      <section id="servicios" className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="text-center mb-12"><h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">Nuestros servicios</h2></div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {services.map(s => {
-              const Icon = getIconComponent(s.iconId);
-              return (
-                <div key={s.id} className="bg-gradient-to-br from-white to-teal-50/30 rounded-2xl p-6 border border-teal-100 hover:shadow-lg transition-all">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center mb-4"><Icon className="w-6 h-6 text-white" /></div>
-                  <div className="flex items-center gap-2 mb-2 flex-wrap"><h3 className="font-bold text-lg text-slate-900">{s.title}</h3>{s.allowDoses && <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold uppercase flex items-center gap-1"><Package className="w-3 h-3" /> Paquete</span>}</div>
-                  <p className="text-sm text-slate-600 mb-4">{s.desc}</p>
-                  <div className="flex items-center justify-between"><div className="text-teal-600 font-bold">Desde {fmtCLP(s.price)}</div><button onClick={onLogin} className="text-sm font-semibold text-teal-700 flex items-center gap-1">Reservar <ArrowRight className="w-4 h-4" /></button></div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      <section id="como-funciona" className="py-16 bg-gradient-to-br from-teal-50 to-blue-50">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="text-center mb-12"><h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">¿Cómo funciona?</h2></div>
-          <div className="grid md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-2xl p-6 shadow-sm"><div className="flex items-center gap-3 mb-4"><div className="w-10 h-10 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center">1</div><Calendar className="w-6 h-6 text-teal-600" /></div><h3 className="font-bold text-lg text-slate-900 mb-2">Solicita tu hora</h3><p className="text-sm text-slate-600">Reserva online. Agrega familiares y configura paquetes de dosis.</p></div>
-            <div className="bg-white rounded-2xl p-6 shadow-sm"><div className="flex items-center gap-3 mb-4"><div className="w-10 h-10 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center">2</div><CheckCircle className="w-6 h-6 text-teal-600" /></div><h3 className="font-bold text-lg text-slate-900 mb-2">Confirmamos contigo</h3><p className="text-sm text-slate-600">Un profesional asignado confirmará el horario.</p></div>
-            <div className="bg-white rounded-2xl p-6 shadow-sm"><div className="flex items-center gap-3 mb-4"><div className="w-10 h-10 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center">3</div><HomeIcon className="w-6 h-6 text-teal-600" /></div><h3 className="font-bold text-lg text-slate-900 mb-2">Atención en casa</h3><p className="text-sm text-slate-600">Llegamos puntuales con materiales.</p></div>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 bg-white">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="text-center mb-12"><h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">Lo que dicen nuestros pacientes</h2></div>
-          <div className="grid md:grid-cols-3 gap-5">
-            {TESTIMONIALS.map((t, i) => (
-              <div key={i} className="bg-gradient-to-br from-amber-50 to-white rounded-2xl p-6 border border-amber-100">
-                <div className="flex gap-1 mb-3">{Array.from({length: t.stars}).map((_, j) => <Star key={j} className="w-4 h-4 text-amber-500 fill-amber-500" />)}</div>
-                <p className="text-slate-700 mb-4 italic">"{t.text}"</p>
-                <div className="font-semibold text-slate-900">{t.name}</div>
-                <div className="text-sm text-slate-500">{t.comuna}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="cobertura" className="py-16 bg-gradient-to-br from-blue-50 to-teal-50">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="text-center mb-10"><h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">Cobertura en la RM</h2></div>
-          <div className="bg-white rounded-2xl p-8 shadow-sm"><div className="flex flex-wrap gap-2 justify-center">{COMUNAS.map(c => <span key={c} className="px-4 py-2 rounded-full bg-teal-50 text-teal-700 text-sm font-medium border border-teal-100 flex items-center gap-1"><MapPin className="w-3 h-3" /> {c}</span>)}</div></div>
-        </div>
-      </section>
-
-      <section id="faq" className="py-16 bg-white">
-        <div className="max-w-3xl mx-auto px-4">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-8 text-center">Preguntas frecuentes</h2>
-          <div className="space-y-3">
-            {FAQ_ITEMS.map((f, i) => (
-              <div key={i} className="border border-slate-200 rounded-xl overflow-hidden">
-                <button onClick={() => setOpenFaq(openFaq === i ? null : i)} className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 transition text-left"><span className="font-semibold text-slate-900">{f.q}</span><ChevronDown className={'w-5 h-5 text-slate-500 transition-transform ' + (openFaq === i ? 'rotate-180' : '')} /></button>
-                {openFaq === i && <div className="px-5 pb-4 text-slate-600 text-sm">{f.a}</div>}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <footer className="bg-slate-900 text-slate-300 py-10">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid md:grid-cols-3 gap-8">
-            <div><div className="flex items-center gap-2 mb-3"><div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center"><Stethoscope className="w-5 h-5 text-white" /></div><span className="font-bold text-white">Enfermereando</span></div><p className="text-sm">Atención de enfermería profesional a domicilio.</p></div>
-            <div><h3 className="font-semibold text-white mb-3">Contacto</h3><div className="space-y-2 text-sm"><div className="flex items-center gap-2"><Phone className="w-4 h-4" /> {PHONE}</div><div className="flex items-center gap-2"><MessageCircle className="w-4 h-4" /> WhatsApp 24/7</div></div></div>
-            <div><h3 className="font-semibold text-white mb-3 flex items-center gap-1"><Clock className="w-4 h-4" /> Horarios</h3><div className="space-y-1 text-sm"><div>Mañana: {HOURS_LABEL_MORNING}</div><div>Tarde: {HOURS_LABEL_AFTERNOON}</div></div></div>
-          </div>
-          <div className="border-t border-slate-700 mt-8 pt-6 text-center text-sm">© 2026 Enfermereando. enfermereando.cl</div>
-        </div>
-      </footer>
-    </>
-  );
-}
-
 // ==================== CALENDAR VIEW ====================
 function CalendarView({ appointments, onEdit }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -575,386 +406,283 @@ function CalendarView({ appointments, onEdit }) {
   );
 }
 
-// ==================== LOGIN VIEW ACTUALIZADO ====================
-function LoginView({ onLogin, onBack, patients, professionals }) {
-  const [tab, setTab] = useState('patient');
-  const [mode, setMode] = useState('login'); // login | register | recovery
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState('');
-  const [info, setInfo] = useState('');
-
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [password2, setPassword2] = useState('');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [comuna, setComuna] = useState('');
-
-  const resetForm = () => {
-    setUsername(''); 
-    setPassword(''); 
-    setPassword2(''); 
-    setName(''); 
-    setPhone(''); 
-    setEmail(''); 
-    setComuna(''); 
-    setErr(''); 
-    setInfo('');
-  };
-
-  // Validación en tiempo real de integridad (para registro)
-  const validateFormIntegrity = () => {
-    if (mode !== 'register') return true;
-    
-    if (!username.trim()) {
-      setErr('El nombre de usuario es obligatorio');
-      return false;
-    }
-    if (username.length < 4) {
-      setErr('El nombre de usuario debe tener al menos 4 caracteres');
-      return false;
-    }
-    
-    // Validación de contraseña fuerte
-    if (password.length < 6) {
-      setErr('La contraseña debe tener al menos 6 caracteres');
-      return false;
-    }
-    if (password !== password2) {
-      setErr('Las contraseñas no coinciden');
-      return false;
-    }
-
-    if (tab === 'patient') {
-      if (!name.trim()) {
-        setErr('El nombre completo es obligatorio');
-        return false;
+/* =============================================
+   LOGIN VIEW - VERSIÓN COMPLETA
+   (Login + Registro + Recuperación de contraseña)
+   ============================================= */
+   function LoginView({ onLogin, onBack, patients, professionals }) {
+    const [tab, setTab] = useState('login'); // login | register | recovery
+    const [role, setRole] = useState('patient'); // patient | professional
+  
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [comuna, setComuna] = useState('');
+  
+    const [recoveryEmail, setRecoveryEmail] = useState('');
+    const [loading, setLoading] = useState(false);
+  
+    // ==================== LOGIN ====================
+    const handleLogin = async () => {
+      setLoading(true);
+      let foundUser = null;
+  
+      if (role === 'patient') {
+        foundUser = patients.find(p => p.email === email && p.password === password);
+      } else {
+        foundUser = professionals.find(p => p.email === email && p.password === password);
       }
-      if (!phone.trim()) {
-        setErr('El teléfono es obligatorio');
-        return false;
+  
+      if (foundUser) {
+        if (role === 'professional' && foundUser.status === 'pending') {
+          alert('⏳ Tu cuenta de profesional está pendiente de aprobación.');
+        } else {
+          onLogin({ ...foundUser, role });
+        }
+      } else {
+        alert('❌ Credenciales incorrectas');
       }
-      if (email && !isValidEmail(email)) {
-        setErr('El email no es válido');
-        return false;
-      }
-    } else {
-      if (!name.trim()) {
-        setErr('El nombre es obligatorio para profesionales');
-        return false;
-      }
-      if (email && !isValidEmail(email)) {
-        setErr('El email no es válido');
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setErr('');
-    setInfo('');
-    setLoading(true);
-
-    // Validación de integridad antes de cualquier acción
-    if (mode === 'register' && !validateFormIntegrity()) {
       setLoading(false);
-      return;
-    }
-
-    let payload = {};
-
-    if (mode === 'register') {
-      // Validación final de integridad (duplicados) en el backend
-      const integrity = validateUserIntegrity(username, patients, professionals, tab);
-      if (!integrity.ok) {
-        setErr(integrity.error);
-        setLoading(false);
+    };
+  
+    // ==================== REGISTRO ====================
+    const handleRegister = async () => {
+      if (!name || !email || !password || !phone) {
+        alert('❌ Completa todos los campos');
         return;
       }
-
-      if (tab === 'patient') {
-        payload = { 
-          role: 'patient', 
-          action: 'register', 
-          username: username.trim(), 
-          password, 
-          name: name.trim(), 
-          phone: phone.trim(), 
-          comuna, 
-          email: email.trim() 
-        };
+  
+      setLoading(true);
+  
+      const newUser = {
+        id: uid(),
+        name,
+        email,
+        password, // En producción esto debe estar hasheado
+        phone,
+        comuna,
+        role,
+        status: role === 'professional' ? 'pending' : 'active',
+        createdAt: new Date().toISOString()
+      };
+  
+      if (role === 'patient') {
+        await sset('patients', [...patients, newUser]);
       } else {
-        payload = { 
-          role: 'pro', 
-          action: 'register-pro', 
-          username: username.trim(), 
-          password, 
-          name: name.trim(), 
-          email: email.trim() 
-        };
+        await sset('professionals', [...professionals, newUser]);
       }
-    } 
-    else if (mode === 'recovery') {
-      payload = { 
-        role: tab === 'patient' ? 'patient' : 'pro', 
-        action: 'recover', 
-        username: username.trim() 
-      };
-    } 
-    else {
-      payload = { 
-        role: tab === 'patient' ? 'patient' : 'pro', 
-        action: tab === 'patient' ? 'login' : 'login-pro', 
-        username: username.trim(), 
-        password 
-      };
-    }
-
-    const result = await onLogin(payload);
-    setLoading(false);
-
-    if (!result.ok) {
-      setErr(result.error || 'Error al procesar la solicitud');
-    } else if (mode === 'recovery' && result.tempPassword) {
-      setInfo(`✅ Recuperación exitosa.\n\nContraseña temporal: ${result.tempPassword}\n\nPor favor inicia sesión y cámbiala inmediatamente.`);
-      setMode('login');
-      resetForm();
-    } else if (result.pendingApproval) {
-      setInfo('✅ Cuenta de profesional creada. Espera aprobación del administrador.');
-      setMode('login');
-      resetForm();
-    } else if (result.ok) {
-      // Login exitoso ya es manejado por el padre
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-teal-50 via-white to-blue-50">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
-        <div className="px-8 pt-8 pb-6 border-b flex items-center justify-between">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-slate-500 hover:text-teal-600 text-sm font-medium">← Volver</button>
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center"><Stethoscope className="w-5 h-5 text-white" /></div>
-            <div className="font-bold text-2xl text-slate-900">Enfermereando</div>
-          </div>
-        </div>
-
-        {/* Selector de rol */}
-        <div className="px-8 pt-6 pb-2 flex gap-2 bg-slate-50">
-          <button 
-            onClick={() => { setTab('patient'); resetForm(); }} 
-            className={`flex-1 py-3 rounded-2xl text-sm font-semibold ${tab === 'patient' ? 'bg-white shadow text-teal-700' : 'text-slate-600'}`}
-          >
-            👤 Soy Paciente
-          </button>
-          <button 
-            onClick={() => { setTab('pro'); resetForm(); }} 
-            className={`flex-1 py-3 rounded-2xl text-sm font-semibold ${tab === 'pro' ? 'bg-white shadow text-teal-700' : 'text-slate-600'}`}
-          >
-            👩‍⚕️ Soy Profesional
-          </button>
-        </div>
-
-        {/* Selector de acción (Login / Register / Recovery) */}
-        <div className="px-8 pt-4 pb-4 flex gap-1 bg-white border-b">
-          <button
-            onClick={() => { setMode('login'); resetForm(); }}
-            className={`flex-1 py-2.5 text-sm font-semibold rounded-2xl transition-all ${mode === 'login' ? 'bg-teal-600 text-white shadow-inner' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-          >
-            Iniciar sesión
-          </button>
-          <button
-            onClick={() => { setMode('register'); resetForm(); }}
-            className={`flex-1 py-2.5 text-sm font-semibold rounded-2xl transition-all ${mode === 'register' ? 'bg-teal-600 text-white shadow-inner' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-          >
-            Crear cuenta
-          </button>
-          <button
-            onClick={() => { setMode('recovery'); resetForm(); }}
-            className={`flex-1 py-2.5 text-sm font-semibold rounded-2xl transition-all ${mode === 'recovery' ? 'bg-teal-600 text-white shadow-inner' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-          >
-            Recuperar contraseña
-          </button>
-        </div>
-
-        <div className="px-8 py-6">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Campos comunes */}
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1">
-                {mode === 'recovery' ? 'Usuario o Email' : 'Usuario'}
-              </label>
-              <input 
-                type="text" 
-                value={username} 
-                onChange={e => setUsername(e.target.value)} 
-                className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-teal-500 focus:outline-none text-sm" 
-                required 
-                placeholder={mode === 'recovery' ? "Nombre de usuario" : ""}
-              />
+  
+      alert(role === 'professional' 
+        ? '✅ Registro exitoso. Tu cuenta está pendiente de aprobación.' 
+        : '✅ Registro exitoso. Ya puedes iniciar sesión.');
+      
+      setTab('login');
+      setLoading(false);
+    };
+  
+    // ==================== RECUPERACIÓN DE CONTRASEÑA ====================
+    const handleRecovery = async () => {
+      if (!recoveryEmail) {
+        alert('❌ Ingresa tu correo');
+        return;
+      }
+  
+      setLoading(true);
+  
+      // Buscar en pacientes y profesionales
+      const allUsers = [...patients, ...professionals];
+      const user = allUsers.find(u => u.email === recoveryEmail);
+  
+      if (user) {
+        const tempPassword = 'Temp' + Math.floor(1000 + Math.random() * 9000);
+        // En un entorno real se enviaría por email. Aquí simulamos:
+        alert(`🔑 Contraseña temporal generada para ${recoveryEmail}:\n\n${tempPassword}\n\n(En producción se enviaría por correo)`);
+        
+        // Actualizar contraseña (simulación)
+        if (patients.some(p => p.id === user.id)) {
+          const updatedPatients = patients.map(p => 
+            p.id === user.id ? { ...p, password: tempPassword } : p
+          );
+          await sset('patients', updatedPatients);
+        } else {
+          const updatedPros = professionals.map(p => 
+            p.id === user.id ? { ...p, password: tempPassword } : p
+          );
+          await sset('professionals', updatedPros);
+        }
+      } else {
+        alert('❌ No encontramos una cuenta con ese correo.');
+      }
+  
+      setLoading(false);
+      setTab('login');
+    };
+  
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-teal-50 to-white flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
+          
+          {/* Header */}
+          <div className="px-8 pt-8 pb-6 border-b flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Stethoscope className="w-9 h-9 text-teal-600" />
+              <div className="font-bold text-3xl">Enfermereando</div>
             </div>
-
-            {/* Solo para login y register */}
-            {mode !== 'recovery' && (
-              <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">Contraseña</label>
-                <input 
-                  type="password" 
-                  value={password} 
-                  onChange={e => setPassword(e.target.value)} 
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-teal-500 focus:outline-none text-sm" 
-                  required 
-                />
-              </div>
-            )}
-
-            {/* Campos específicos de registro */}
-            {mode === 'register' && (
+            <button onClick={onBack} className="text-slate-400 hover:text-slate-600">
+              ← Volver
+            </button>
+          </div>
+  
+          {/* Tabs principales */}
+          <div className="flex border-b">
+            <button
+              onClick={() => setTab('login')}
+              className={`flex-1 py-5 font-medium ${tab === 'login' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}
+            >
+              Iniciar Sesión
+            </button>
+            <button
+              onClick={() => setTab('register')}
+              className={`flex-1 py-5 font-medium ${tab === 'register' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}
+            >
+              Registrarse
+            </button>
+            <button
+              onClick={() => setTab('recovery')}
+              className={`flex-1 py-5 font-medium ${tab === 'recovery' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}
+            >
+              Recuperar Contraseña
+            </button>
+          </div>
+  
+          <div className="p-8">
+            {/* LOGIN */}
+            {tab === 'login' && (
               <>
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Nombre completo</label>
-                  <input 
-                    type="text" 
-                    value={name} 
-                    onChange={e => setName(e.target.value)} 
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-teal-500 focus:outline-none text-sm" 
-                    required 
-                  />
+                <div className="flex gap-2 mb-6 bg-slate-100 rounded-2xl p-1">
+                  <button
+                    onClick={() => setRole('patient')}
+                    className={`flex-1 py-3 rounded-xl font-medium ${role === 'patient' ? 'bg-white shadow-sm' : ''}`}
+                  >
+                    Paciente
+                  </button>
+                  <button
+                    onClick={() => setRole('professional')}
+                    className={`flex-1 py-3 rounded-xl font-medium ${role === 'professional' ? 'bg-white shadow-sm' : ''}`}
+                  >
+                    Profesional
+                  </button>
                 </div>
-
-                {tab === 'patient' && (
-                  <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-xs font-semibold text-slate-600 block mb-1">Teléfono</label>
-                        <input 
-                          type="tel" 
-                          value={phone} 
-                          onChange={e => setPhone(e.target.value)} 
-                          className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-teal-500 focus:outline-none text-sm" 
-                          required 
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-slate-600 block mb-1">Email</label>
-                        <input 
-                          type="email" 
-                          value={email} 
-                          onChange={e => setEmail(e.target.value)} 
-                          className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-teal-500 focus:outline-none text-sm" 
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-slate-600 block mb-1">Comuna</label>
-                      <select 
-                        value={comuna} 
-                        onChange={e => setComuna(e.target.value)} 
-                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-teal-500 focus:outline-none text-sm"
-                      >
-                        <option value="">Selecciona tu comuna</option>
-                        {COMUNAS.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  </>
-                )}
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">Repetir contraseña</label>
-                  <input 
-                    type="password" 
-                    value={password2} 
-                    onChange={e => setPassword2(e.target.value)} 
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-teal-500 focus:outline-none text-sm" 
-                    required 
-                  />
-                </div>
-
-                {/* Nota de integridad para profesionales */}
-                {tab === 'pro' && (
-                  <div className="text-xs bg-amber-50 border border-amber-200 p-3 rounded-2xl text-amber-700">
-                    <strong>Nota:</strong> Tu cuenta de profesional quedará en revisión por el administrador antes de ser activada.
-                  </div>
-                )}
+  
+                <input
+                  type="email"
+                  placeholder="Correo electrónico"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500 mb-4"
+                />
+                <input
+                  type="password"
+                  placeholder="Contraseña"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500 mb-6"
+                />
+  
+                <button
+                  onClick={handleLogin}
+                  disabled={loading}
+                  className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg disabled:opacity-70"
+                >
+                  {loading ? 'Ingresando...' : 'Iniciar Sesión'}
+                </button>
               </>
             )}
-
-            {/* Mensajes */}
-            {err && (
-              <div className="bg-red-50 text-red-700 px-4 py-3 rounded-2xl text-sm flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                {err}
+  
+            {/* REGISTRO */}
+            {tab === 'register' && (
+              <div className="space-y-4">
+                <div className="flex gap-2 mb-6 bg-slate-100 rounded-2xl p-1">
+                  <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl font-medium ${role === 'patient' ? 'bg-white shadow-sm' : ''}`}>Paciente</button>
+                  <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl font-medium ${role === 'professional' ? 'bg-white shadow-sm' : ''}`}>Profesional</button>
+                </div>
+  
+                <input type="text" placeholder="Nombre completo" value={name} onChange={e => setName(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+                <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+                <input type="tel" placeholder="Teléfono" value={phone} onChange={e => setPhone(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+                <select value={comuna} onChange={e => setComuna(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500">
+                  <option value="">Seleccionar comuna</option>
+                  {COMUNAS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+  
+                <button onClick={handleRegister} disabled={loading} className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg">
+                  {loading ? 'Registrando...' : role === 'professional' ? 'Registrarse como Profesional' : 'Registrarse como Paciente'}
+                </button>
               </div>
             )}
-            {info && (
-              <div className="bg-green-50 text-green-700 px-4 py-3 rounded-2xl text-sm flex items-center gap-2 whitespace-pre-line">
-                <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                {info}
+  
+            {/* RECUPERACIÓN DE CONTRASEÑA */}
+            {tab === 'recovery' && (
+              <div className="space-y-6">
+                <p className="text-slate-600">Ingresa tu correo y te enviaremos una contraseña temporal.</p>
+                <input
+                  type="email"
+                  placeholder="Correo electrónico"
+                  value={recoveryEmail}
+                  onChange={e => setRecoveryEmail(e.target.value)}
+                  className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500"
+                />
+                <button
+                  onClick={handleRecovery}
+                  disabled={loading}
+                  className="w-full py-5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-3xl text-lg"
+                >
+                  {loading ? 'Enviando...' : 'Recuperar Contraseña'}
+                </button>
               </div>
             )}
-
-            <button 
-              type="submit" 
-              disabled={loading} 
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-teal-600 to-blue-600 text-white font-semibold text-lg hover:from-teal-700 hover:to-blue-700 transition-all disabled:opacity-70"
-            >
-              {loading 
-                ? 'Procesando...' 
-                : mode === 'login' 
-                  ? 'Iniciar sesión' 
-                  : mode === 'register' 
-                    ? (tab === 'patient' ? 'Crear cuenta de paciente' : 'Crear cuenta profesional')
-                    : 'Recuperar contraseña'
-              }
-            </button>
-          </form>
-        </div>
-
-        {/* Footer del formulario */}
-        <div className="px-8 py-6 border-t text-center text-xs text-slate-500">
-          {mode === 'login' && (
-            <p>¿No tienes cuenta? <button onClick={() => {setMode('register'); resetForm();}} className="text-teal-600 hover:underline">Regístrate aquí</button></p>
-          )}
-          {mode === 'register' && (
-            <p>¿Ya tienes cuenta? <button onClick={() => {setMode('login'); resetForm();}} className="text-teal-600 hover:underline">Inicia sesión</button></p>
-          )}
-          {mode === 'recovery' && (
-            <p>¿Recordaste tu contraseña? <button onClick={() => {setMode('login'); resetForm();}} className="text-teal-600 hover:underline">Volver al login</button></p>
-          )}
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
 // ==================== PATIENT PORTAL + REQUEST FORM + APPOINTMENT CARD ====================
-// ==================== PATIENT PORTAL + CANCELACIÓN EN SERIE ====================
-function PatientPortal({ user, services, appointments, notifications, saveAppointments, addNotification, onLogout }) {
+
+/* ====================== PATIENT PORTAL ===================================== */
+function PatientPortal({ user, services, appointments, saveAppointments, onLogout }) {
   const [tab, setTab] = useState('inicio');
-  const myApps = appointments
-    .filter(a => a.patientId === user.id)
-    .sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+  const [showRequestForm, setShowRequestForm] = useState(false);
 
-  const upcoming = myApps.filter(a => ['pendiente','asignada','confirmada'].includes(a.status));
-  const recent = myApps.slice(0, 6);
+  // Filtrar solo las atenciones del paciente actual
+  const myAppointments = appointments.filter(app => 
+    app.patientName === user.name || 
+    (app.beneficiaries && app.beneficiaries.some(b => b.name === user.name))
+  );
 
-  // NUEVA FUNCIÓN: Cancelación individual o en serie
-  const cancelByPatient = async (app) => {
+  // Próximas atenciones (Inicio)
+  const upcoming = myAppointments
+    .filter(a => a.status !== 'cancelada' && new Date(a.date) >= new Date())
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  // Historial
+  const history = myAppointments
+    .filter(a => a.status === 'cancelada' || new Date(a.date) < new Date())
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  // ==================== CANCELACIÓN EN SERIE + WHATSAPP ====================
+  const cancelAppointment = async (app) => {
     if (!confirm(`¿Cancelar la atención del ${new Date(app.date).toLocaleDateString('es-CL')}?`)) return;
 
-    const isSeriesApp = !!app.seriesId;
+    const isSeries = !!app.seriesId;
     let appointmentsToCancel = [app.id];
 
-    if (isSeriesApp) {
-      const seriesAppointments = appointments.filter(a => a.seriesId === app.seriesId);
-      const cancelAll = confirm(`Esta cita pertenece a una SERIE de ${seriesAppointments.length} dosis.\n\n¿Cancelar SOLO esta cita o TODA LA SERIE?`);
-      
-      if (cancelAll) {
-        appointmentsToCancel = seriesAppointments.map(a => a.id);
-      }
+    if (isSeries) {
+      const seriesApps = appointments.filter(a => a.seriesId === app.seriesId);
+      const cancelAll = confirm(`Esta cita pertenece a una SERIE de ${seriesApps.length} dosis.\n\n¿Cancelar SOLO esta cita o TODA LA SERIE?`);
+      if (cancelAll) appointmentsToCancel = seriesApps.map(a => a.id);
     }
 
     const updated = appointments.map(a => 
@@ -962,386 +690,843 @@ function PatientPortal({ user, services, appointments, notifications, saveAppoin
     );
 
     await saveAppointments(updated);
-    
-    // Notificar a admin (solo la primera de la serie para no spam)
-    const representativeApp = appointments.find(a => a.id === appointmentsToCancel[0]);
-    await sendWhatsAppToAdmin(representativeApp, 'cancelled', services, appointmentsToCancel.length > 1);
+
+    const representative = appointments.find(a => a.id === appointmentsToCancel[0]);
+    await sendWhatsAppToAdmin(representative, 'cancelled', services, appointmentsToCancel.length > 1);
 
     alert(appointmentsToCancel.length > 1 
       ? `✅ Toda la serie (${appointmentsToCancel.length} citas) ha sido cancelada.` 
-      : '✅ Cita cancelada correctamente.');
+      : '✅ Cita cancelada correctamente.'
+    );
+  };
+
+  // ==================== NUEVA SOLICITUD ====================
+  const handleNewAppointment = async (newAppointmentsArray) => {
+    const updated = [...appointments, ...newAppointmentsArray];
+    await saveAppointments(updated);
+    setShowRequestForm(false);
+    setTab('inicio');
   };
 
   return (
-    <div className="min-h-screen">
-      <header className="bg-white border-b">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex justify-between items-center">
+    <div className="min-h-screen bg-slate-50">
+      {/* HEADER */}
+      <header className="bg-white border-b shadow-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <Stethoscope className="w-8 h-8 text-teal-600" />
-            <div className="font-bold text-xl">Enfermereando</div>
+            <Stethoscope className="w-9 h-9 text-teal-600" />
+            <div className="font-bold text-3xl tracking-tight">Enfermereando</div>
           </div>
-          <button onClick={onLogout} className="text-slate-500 hover:text-red-600">Cerrar sesión</button>
+          <div className="flex items-center gap-6">
+            <div className="text-right">
+              <div className="font-semibold text-lg">Hola, {user.name}</div>
+              <div className="text-teal-600 text-sm">Paciente</div>
+            </div>
+            <button 
+              onClick={onLogout}
+              className="flex items-center gap-2 px-5 py-2.5 hover:bg-slate-100 rounded-2xl text-slate-700 transition-colors"
+            >
+              <LogOut className="w-5 h-5" />
+              Salir
+            </button>
+          </div>
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-8">
-        <div className="flex gap-2 mb-8 border-b pb-2">
-          <button onClick={() => setTab('inicio')} className={`px-6 py-2 font-semibold rounded-2xl ${tab === 'inicio' ? 'bg-teal-600 text-white' : 'bg-white'}`}>Inicio</button>
-          <button onClick={() => setTab('solicitar')} className={`px-6 py-2 font-semibold rounded-2xl ${tab === 'solicitar' ? 'bg-teal-600 text-white' : 'bg-white'}`}>Nueva solicitud</button>
-          <button onClick={() => setTab('historial')} className={`px-6 py-2 font-semibold rounded-2xl ${tab === 'historial' ? 'bg-teal-600 text-white' : 'bg-white'}`}>Historial</button>
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* TABS */}
+        <div className="flex border-b mb-8">
+          <button
+            onClick={() => setTab('inicio')}
+            className={`flex-1 md:flex-none px-8 py-4 text-lg font-medium border-b-4 transition-all ${tab === 'inicio' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500'}`}
+          >
+            Inicio
+          </button>
+          <button
+            onClick={() => setShowRequestForm(true)}
+            className={`flex-1 md:flex-none px-8 py-4 text-lg font-medium border-b-4 transition-all ${tab === 'solicitar' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500'}`}
+          >
+            Solicitar Atención
+          </button>
+          <button
+            onClick={() => setTab('historial')}
+            className={`flex-1 md:flex-none px-8 py-4 text-lg font-medium border-b-4 transition-all ${tab === 'historial' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500'}`}
+          >
+            Historial
+          </button>
         </div>
 
+        {/* PESTAÑA INICIO */}
         {tab === 'inicio' && (
           <div>
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-slate-900 mb-1">Últimas atenciones solicitadas</h2>
-              <p className="text-slate-600">Próximas y recientes reservas</p>
-            </div>
-            {recent.length === 0 ? (
-              <EmptyState icon={Calendar} text="Aún no tienes solicitudes. ¡Agenda tu primera atención!" />
+            <h2 className="text-3xl font-bold mb-6">Próximas Atenciones</h2>
+            {upcoming.length === 0 ? (
+              <div className="bg-white rounded-3xl p-16 text-center text-slate-400 text-xl">
+                No tienes atenciones próximas<br />
+                <button 
+                  onClick={() => setShowRequestForm(true)}
+                  className="mt-6 px-8 py-4 bg-teal-600 text-white rounded-2xl font-medium"
+                >
+                  Solicitar nueva atención
+                </button>
+              </div>
             ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {recent.map(a => {
-                  const net = a.beneficiaries ? appNetPrice(a, services) : 0;
-                  return (
-                    <div key={a.id} className="bg-white rounded-3xl p-6 border border-slate-200 hover:shadow-md transition-all">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <div className="font-semibold">{new Date(a.date).toLocaleDateString('es-CL', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-                          <div className="text-teal-600 text-sm">{fmtTime(a.time)}</div>
-                        </div>
-                        <span className={`text-xs px-3 py-1 rounded-2xl font-medium ${a.status === 'pendiente' ? 'bg-amber-100 text-amber-700' : a.status === 'confirmada' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'}`}>
-                          {a.status}
-                        </span>
+              <div className="space-y-6">
+                {upcoming.map(app => (
+                  <div key={app.id} className="bg-white rounded-3xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border border-slate-200">
+                    <div>
+                      <div className="font-semibold text-xl">{app.patientName}</div>
+                      <div className="text-slate-500 mt-1">
+                        {new Date(app.date).toLocaleDateString('es-CL', { weekday: 'long', month: 'long', day: 'numeric' })} • {fmtTime(app.time)}
                       </div>
-                      <div className="text-sm text-slate-600 mb-3">
-                        {a.beneficiaries?.map(b => b.name).join(', ')}
-                      </div>
-                      <div className="text-teal-600 font-semibold text-lg">{fmtCLP(net)}</div>
-                      {a.seriesId && (
-                        <div className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-3xl mt-3">
-                          <Package className="w-3 h-3" /> Serie
-                        </div>
-                      )}
                     </div>
-                  );
-                })}
+                    <div className="flex items-center gap-4">
+                      <span className="px-6 py-2 bg-teal-100 text-teal-700 rounded-2xl text-sm font-medium">Pendiente</span>
+                      <button
+                        onClick={() => cancelAppointment(app)}
+                        className="text-red-500 hover:text-red-600 text-sm flex items-center gap-1"
+                      >
+                        <Trash2 className="w-4 h-4" /> Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
         )}
 
-        {tab === 'solicitar' && <RequestForm user={user} services={services} appointments={appointments} saveAppointments={saveAppointments} addNotification={addNotification} onDone={() => setTab('inicio')} />}
-        {tab === 'historial' && <div className="space-y-4">{myApps.map(a => <AppointmentCard key={a.id} a={a} services={services} onCancel={cancelByPatient} />)}</div>}
+        {/* PESTAÑA SOLICITAR */}
+        {showRequestForm && (
+          <RequestForm 
+            services={services} 
+            onSubmit={handleNewAppointment} 
+            onCancel={() => setShowRequestForm(false)} 
+          />
+        )}
+
+        {/* PESTAÑA HISTORIAL */}
+        {tab === 'historial' && (
+          <div>
+            <h2 className="text-3xl font-bold mb-6">Historial de Atenciones</h2>
+            {history.length === 0 ? (
+              <div className="bg-white rounded-3xl p-16 text-center text-slate-400">Aún no tienes historial</div>
+            ) : (
+              <div className="space-y-4">
+                {history.map(app => (
+                  <div key={app.id} className="bg-white rounded-3xl p-6 opacity-75">
+                    <div className="flex justify-between">
+                      <div>
+                        <div className="font-medium">{app.patientName}</div>
+                        <div className="text-sm text-slate-500">
+                          {new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}
+                        </div>
+                      </div>
+                      <span className={`px-5 py-1 text-xs font-medium rounded-2xl ${app.status === 'cancelada' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                        {app.status === 'cancelada' ? 'Cancelada' : 'Completada'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ==================== REQUEST FORM (CORREGIDO - SIN ERROR eo(...)) ====================
-function RequestForm({ user, services, appointments, saveAppointments, addNotification, onDone }) {
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
-  const [address, setAddress] = useState('');
-  const [notes, setNotes] = useState('');
-
-  const [beneficiaries, setBeneficiaries] = useState(() => [{
-    id: uid(),
-    name: user?.name || '',
-    relationship: 'Titular',
-    services: []
-  }]);
-
-  const addBen = () => {
-    setBeneficiaries(prev => [...prev, {
+/* ==================== REQUEST FORM ============================================= */
+   function RequestForm({ services, onSubmit, onCancel }) {
+    const [beneficiaries, setBeneficiaries] = useState([{
       id: uid(),
       name: '',
-      relationship: 'Otro familiar',
-      services: []
+      services: [{ serviceId: '', doses: 1, frequency: 'once' }]
     }]);
-  };
-
-  const removeBen = (id) => {
-    if (beneficiaries.length <= 1) return;
-    setBeneficiaries(prev => prev.filter(b => b.id !== id));
-  };
-
-  const updateBen = (id, updates) => {
-    setBeneficiaries(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
-  };
-
-  const toggleService = (benId, serviceId) => {
-    setBeneficiaries(prev => prev.map(ben => {
-      if (ben.id !== benId) return ben;
-      const existsIndex = ben.services.findIndex(s => s.serviceId === serviceId);
-      if (existsIndex >= 0) {
-        return { ...ben, services: ben.services.filter((_, i) => i !== existsIndex) };
-      } else {
-        const svc = services.find(s => s.id === serviceId);
+  
+    const [date, setDate] = useState('');
+    const [time, setTime] = useState('');
+    const [comuna, setComuna] = useState('');
+    const [notes, setNotes] = useState('');
+  
+    // ==================== MANEJADORES DE BENEFICIARIOS ====================
+    const addBeneficiary = () => {
+      setBeneficiaries([
+        ...beneficiaries,
+        {
+          id: uid(),
+          name: '',
+          services: [{ serviceId: '', doses: 1, frequency: 'once' }]
+        }
+      ]);
+    };
+  
+    const removeBeneficiary = (benId) => {
+      if (beneficiaries.length > 1) {
+        setBeneficiaries(beneficiaries.filter(b => b.id !== benId));
+      }
+    };
+  
+    const updateBeneficiaryName = (benId, value) => {
+      setBeneficiaries(beneficiaries.map(b => 
+        b.id === benId ? { ...b, name: value } : b
+      ));
+    };
+  
+    // ==================== MANEJADORES DE SERVICIOS POR BENEFICIARIO ====================
+    const addServiceToBeneficiary = (benId) => {
+      setBeneficiaries(beneficiaries.map(ben => {
+        if (ben.id !== benId) return ben;
         return {
           ...ben,
-          services: [...ben.services, {
-            serviceId,
-            doses: svc?.allowDoses ? 1 : 1,
-            frequency: 'once',
-            completedDoses: 0
-          }]
+          services: [...ben.services, { serviceId: '', doses: 1, frequency: 'once' }]
         };
-      }
-    }));
-  };
-
-  const updateServiceConfig = (benId, serviceId, field, value) => {
-    setBeneficiaries(prev => prev.map(ben => {
-      if (ben.id !== benId) return ben;
-      return {
-        ...ben,
-        services: ben.services.map(item =>
-          item.serviceId === serviceId ? { ...item, [field]: value } : item
-        )
-      };
-    }));
-  };
-
-  // Cálculo de precio
-  const gross = beneficiaries.reduce((sum, ben) => {
-    return sum + ben.services.reduce((acc, item) => {
-      const svc = services.find(s => s.id === item.serviceId);
-      return acc + (svc ? svc.price * (item.doses || 1) : 0);
-    }, 0);
-  }, 0);
-
-  const discount = beneficiaries.length >= 4 ? 0.15 : beneficiaries.length === 3 ? 0.10 : beneficiaries.length === 2 ? 0.05 : 0;
-  const net = Math.round(gross * (1 - discount));
-
-  const submit = async () => {
-    if (!date || !time || !address.trim()) {
-      alert('❌ Completa fecha, hora y dirección');
-      return;
-    }
-
-    const baseApp = {
-      id: uid(),
-      patientId: user.id,
-      patientName: user.name,
-      patientPhone: user.phone,
-      patientComuna: user.comuna,
-      beneficiaries,
-      date,
-      time,
-      address: address.trim(),
-      notes: notes.trim(),
-      status: 'pendiente',
-      createdAt: Date.now()
+      }));
     };
-
-    const seriesAppointments = generateAppointmentSeries(baseApp, services);
-
-    try {
-      await saveAppointments([...appointments, ...seriesAppointments]);
-      await sendWhatsAppToAdmin(baseApp, 'new_appointment', services);
-      alert(`✅ ¡Solicitud enviada! Se generaron ${seriesAppointments.length} cita(s) en serie.`);
-      onDone();
-    } catch (err) {
-      console.error(err);
-      alert('❌ Error al guardar la solicitud');
-    }
-  };
-
-  return (
-    <div className="bg-white rounded-3xl p-8 border border-slate-200 max-w-4xl mx-auto">
-      <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-        <Calendar className="w-7 h-7 text-teal-600" />
-        Nueva solicitud de atención
-      </h3>
-
-      {/* Beneficiarios */}
-      <div className="mb-8">
-        <div className="flex justify-between items-center mb-4">
-          <h4 className="font-semibold text-lg">Personas a atender</h4>
-          <button onClick={addBen} className="flex items-center gap-2 text-teal-600 font-medium text-sm">
-            <UserPlus className="w-4 h-4" /> Agregar persona
-          </button>
-        </div>
-
-        {beneficiaries.map((ben) => (
-          <div key={ben.id} className="bg-slate-50 border border-slate-200 rounded-3xl p-6 mb-6">
-            <div className="flex gap-4 mb-4">
+  
+    const removeServiceFromBeneficiary = (benId, serviceIndex) => {
+      setBeneficiaries(beneficiaries.map(ben => {
+        if (ben.id !== benId) return ben;
+        const newServices = ben.services.filter((_, i) => i !== serviceIndex);
+        return {
+          ...ben,
+          services: newServices.length ? newServices : [{ serviceId: '', doses: 1, frequency: 'once' }]
+        };
+      }));
+    };
+  
+    const updateServiceField = (benId, serviceIndex, field, value) => {
+      setBeneficiaries(beneficiaries.map(ben => {
+        if (ben.id !== benId) return ben;
+        const newServices = [...ben.services];
+        newServices[serviceIndex] = { ...newServices[serviceIndex], [field]: value };
+        return { ...ben, services: newServices };
+      }));
+    };
+  
+    // ==================== GENERACIÓN DE SERIE (auto-reserva) ====================
+    const generateAppointmentSeries = (baseApp, servicesList) => {
+      const seriesId = uid();
+      const allAppointments = [];
+  
+      beneficiaries.forEach((ben, benIndex) => {
+        ben.services.forEach((svcItem) => {
+          const service = servicesList.find(s => s.id === svcItem.serviceId);
+          if (!service) return;
+  
+          const totalDoses = parseInt(svcItem.doses) || 1;
+          const frequency = FREQUENCIES.find(f => f.id === svcItem.frequency);
+          const daysStep = frequency ? frequency.days : 0;
+  
+          for (let i = 0; i < totalDoses; i++) {
+            const newDate = new Date(baseApp.date);
+            newDate.setDate(newDate.getDate() + i * daysStep);
+  
+            const seriesApp = {
+              ...baseApp,
+              id: uid(),
+              date: newDate.toISOString().split('T')[0],
+              seriesId: seriesId,
+              doseNumber: i + 1,
+              totalDoses: totalDoses,
+              patientName: ben.name || baseApp.patientName,
+              beneficiaries: [{
+                id: ben.id,
+                name: ben.name,
+                services: [{
+                  serviceId: svcItem.serviceId,
+                  doses: totalDoses,
+                  frequency: svcItem.frequency,
+                  completedDoses: 0
+                }]
+              }]
+            };
+            allAppointments.push(seriesApp);
+          }
+        });
+      });
+  
+      return allAppointments.length > 0 ? allAppointments : [baseApp];
+    };
+  
+    // ==================== SUBMIT ====================
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+  
+      if (!date || !time || !comuna) {
+        alert('❌ Por favor completa fecha, hora y comuna');
+        return;
+      }
+  
+      // Cita base
+      const baseAppointment = {
+        id: uid(),
+        patientName: beneficiaries[0]?.name || 'Paciente',
+        date,
+        time,
+        comuna,
+        notes: notes || '',
+        status: 'pendiente',
+        assignedTo: null,
+        beneficiaries: beneficiaries.map(b => ({
+          id: b.id,
+          name: b.name,
+          services: b.services.map(s => ({
+            serviceId: s.serviceId,
+            doses: parseInt(s.doses) || 1,
+            frequency: s.frequency,
+            completedDoses: 0
+          }))
+        }))
+      };
+  
+      // Generar serie si corresponde
+      const finalAppointments = generateAppointmentSeries(baseAppointment, services);
+  
+      // Notificar por WhatsApp
+      await sendWhatsAppToAdmin(baseAppointment, 'new', services);
+  
+      // Enviar al padre
+      onSubmit(finalAppointments);
+  
+      alert(`✅ Solicitud enviada correctamente.\nSe generaron ${finalAppointments.length} cita(s) y se notificó por WhatsApp.`);
+  
+      // Limpiar formulario
+      onCancel();
+    };
+  
+    return (
+      <div className="max-w-5xl mx-auto bg-white rounded-3xl shadow-xl p-8">
+        <h2 className="text-3xl font-bold text-center mb-8 text-slate-800">Nueva Solicitud de Atención</h2>
+  
+        <form onSubmit={handleSubmit} className="space-y-10">
+          
+          {/* Beneficiarios */}
+          {beneficiaries.map((ben, benIndex) => (
+            <div key={ben.id} className="border border-slate-200 rounded-3xl p-6 bg-slate-50">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-semibold text-lg">Beneficiario {benIndex + 1}</h3>
+                {beneficiaries.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeBeneficiary(ben.id)}
+                    className="text-red-500 hover:text-red-600 text-sm flex items-center gap-1"
+                  >
+                    <Trash2 className="w-4 h-4" /> Eliminar
+                  </button>
+                )}
+              </div>
+  
               <input
                 type="text"
+                placeholder="Nombre completo del beneficiario"
                 value={ben.name}
-                onChange={e => updateBen(ben.id, { name: e.target.value })}
-                placeholder="Nombre completo"
-                className="flex-1 px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                onChange={(e) => updateBeneficiaryName(ben.id, e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 mb-6"
+                required
               />
-              <select
-                value={ben.relationship}
-                onChange={e => updateBen(ben.id, { relationship: e.target.value })}
-                className="px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+  
+              {/* Servicios del beneficiario */}
+              {ben.services.map((svc, svcIndex) => (
+                <div key={svcIndex} className="flex gap-4 items-end mb-4 bg-white p-4 rounded-2xl border">
+                  {/* Selector de servicio */}
+                  <div className="flex-1">
+                    <label className="block text-xs text-slate-500 mb-1">Servicio</label>
+                    <select
+                      value={svc.serviceId}
+                      onChange={(e) => updateServiceField(ben.id, svcIndex, 'serviceId', e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                      required
+                    >
+                      <option value="">Seleccionar servicio...</option>
+                      {services.filter(s => s.active).map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.title} - {fmtCLP(s.price)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+  
+                  {/* Dosis */}
+                  <div className="w-28">
+                    <label className="block text-xs text-slate-500 mb-1">Dosis</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={svc.doses}
+                      onChange={(e) => updateServiceField(ben.id, svcIndex, 'doses', e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 text-center"
+                    />
+                  </div>
+  
+                  {/* Frecuencia */}
+                  <div className="flex-1">
+                    <label className="block text-xs text-slate-500 mb-1">Frecuencia</label>
+                    <select
+                      value={svc.frequency}
+                      onChange={(e) => updateServiceField(ben.id, svcIndex, 'frequency', e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                    >
+                      {FREQUENCIES.map(f => (
+                        <option key={f.id} value={f.id}>{f.label}</option>
+                      ))}
+                    </select>
+                  </div>
+  
+                  <button
+                    type="button"
+                    onClick={() => removeServiceFromBeneficiary(ben.id, svcIndex)}
+                    className="text-red-500 hover:text-red-600 px-3 py-3"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              ))}
+  
+              <button
+                type="button"
+                onClick={() => addServiceToBeneficiary(ben.id)}
+                className="text-teal-600 hover:text-teal-700 text-sm flex items-center gap-2 mt-2"
               >
-                {RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
+                <Plus className="w-4 h-4" /> Agregar otro servicio
+              </button>
+            </div>
+          ))}
+  
+          <button
+            type="button"
+            onClick={addBeneficiary}
+            className="w-full py-4 border-2 border-dashed border-teal-300 text-teal-600 rounded-3xl hover:bg-teal-50 font-medium flex items-center justify-center gap-2"
+          >
+            <UserPlus className="w-5 h-5" />
+            Agregar otro beneficiario
+          </button>
+  
+          {/* Fecha, Hora y Comuna */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-2">Fecha</label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-2">Hora</label>
+              <input
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-2">Comuna</label>
+              <select
+                value={comuna}
+                onChange={(e) => setComuna(e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                required
+              >
+                <option value="">Seleccionar comuna...</option>
+                {COMUNAS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              {beneficiaries.length > 1 && (
-                <button onClick={() => removeBen(ben.id)} className="text-red-500 hover:text-red-600">
-                  <Trash2 className="w-5 h-5" />
-                </button>
+            </div>
+          </div>
+  
+          {/* Notas */}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-2">Notas / Observaciones</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={4}
+              className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+              placeholder="Detalles adicionales sobre la atención..."
+            />
+          </div>
+  
+          {/* Botones */}
+          <div className="flex justify-end gap-4 pt-6 border-t">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-10 py-4 text-slate-600 hover:bg-slate-100 rounded-2xl font-medium transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-10 py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-semibold transition-colors flex items-center gap-2"
+            >
+              <MessageCircle className="w-5 h-5" />
+              Enviar Solicitud + Notificar por WhatsApp
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+/* ============================ APPOINTMENT CARD ====================================== */
+   function AppointmentCard({ app, services, onEdit, onCancel, saveAppointments }) {
+    const netPrice = appNetPrice(app, services);
+  
+    return (
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 hover:shadow-md transition-all">
+        <div className="flex justify-between items-start">
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <div className="font-semibold text-xl">{app.patientName}</div>
+              {app.seriesId && (
+                <span className="px-3 py-1 text-xs bg-amber-100 text-amber-700 rounded-2xl font-medium">
+                  SERIE • Dosis {app.doseNumber || 1}
+                </span>
               )}
             </div>
+            <div className="text-slate-500 mt-1 flex items-center gap-4 text-sm">
+              <span>{new Date(app.date).toLocaleDateString('es-CL', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+              <span className="font-mono">{fmtTime(app.time)}</span>
+              <span className="text-teal-600">{app.comuna}</span>
+            </div>
+          </div>
+  
+          <div className="text-right">
+            <div className="text-sm text-slate-400">Total</div>
+            <div className="font-semibold text-lg text-teal-700">{fmtCLP(netPrice)}</div>
+          </div>
+        </div>
+  
+        {/* Estado */}
+        <div className="mt-4 flex items-center justify-between">
+          <span className={`px-5 py-1.5 text-xs font-medium rounded-2xl ${
+            app.status === 'pendiente' ? 'bg-yellow-100 text-yellow-700' :
+            app.status === 'asignada' ? 'bg-blue-100 text-blue-700' :
+            app.status === 'en_tratamiento' ? 'bg-purple-100 text-purple-700' :
+            app.status === 'completada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+          }`}>
+            {app.status ? app.status.charAt(0).toUpperCase() + app.status.slice(1) : 'Pendiente'}
+          </span>
+  
+          <div className="flex gap-3">
+            <button
+              onClick={() => onEdit(app)}
+              className="flex items-center gap-2 px-5 py-2 text-teal-600 hover:bg-teal-50 rounded-2xl text-sm font-medium transition-colors"
+            >
+              <Edit className="w-4 h-4" /> Editar
+            </button>
+            
+            {app.status !== 'cancelada' && (
+              <button
+                onClick={() => onCancel(app)}
+                className="flex items-center gap-2 px-5 py-2 text-red-600 hover:bg-red-50 rounded-2xl text-sm font-medium transition-colors"
+              >
+                <Trash2 className="w-4 h-4" /> Cancelar
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-            {/* Servicios */}
-            <div className="mt-4">
-              <p className="text-sm font-medium text-slate-500 mb-3">Servicios</p>
-              <div className="flex flex-wrap gap-2 mb-6">
-                {services.map(svc => {
-                  const selected = ben.services.some(item => item.serviceId === svc.id);
-                  const Icon = getIconComponent(svc.iconId);   // ← FIX AQUÍ
-                  return (
-                    <button
-                      key={svc.id}
-                      onClick={() => toggleService(ben.id, svc.id)}
-                      className={`px-5 py-2.5 text-sm font-medium rounded-3xl border transition-all flex items-center gap-2 ${
-                        selected ? 'bg-teal-600 text-white border-teal-600' : 'bg-white border-slate-300 hover:border-teal-300'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
-                      {svc.title}
-                    </button>
-                  );
-                })}
+/* ======================= EDIT APPOINTMENT MODAL  ============================= */
+   function EditAppointmentModal({ app, services, onSave, onClose }) {
+    const [formData, setFormData] = useState({
+      date: app.date || '',
+      time: app.time || '',
+      status: app.status || 'pendiente',
+      notes: app.notes || ''
+    });
+  
+    const handleChange = (field, value) => {
+      setFormData(prev => ({ ...prev, [field]: value }));
+    };
+  
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      const updatedApp = { ...app, ...formData };
+      await onSave(updatedApp);
+    };
+  
+    return (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100]">
+        <div className="bg-white rounded-3xl max-w-lg w-full mx-4 overflow-hidden">
+          <div className="px-8 py-6 border-b flex justify-between items-center">
+            <h3 className="text-2xl font-bold">Editar Atención</h3>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+  
+          <form onSubmit={handleSubmit} className="p-8 space-y-6">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-2">Fecha</label>
+              <input
+                type="date"
+                value={formData.date}
+                onChange={(e) => handleChange('date', e.target.value)}
+                className="w-full px-4 py-4 rounded-2xl border border-slate-300 focus:border-teal-500"
+                required
+              />
+            </div>
+  
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-2">Hora</label>
+              <input
+                type="time"
+                value={formData.time}
+                onChange={(e) => handleChange('time', e.target.value)}
+                className="w-full px-4 py-4 rounded-2xl border border-slate-300 focus:border-teal-500"
+                required
+              />
+            </div>
+  
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-2">Estado</label>
+              <select
+                value={formData.status}
+                onChange={(e) => handleChange('status', e.target.value)}
+                className="w-full px-4 py-4 rounded-2xl border border-slate-300 focus:border-teal-500"
+              >
+                <option value="pendiente">Pendiente</option>
+                <option value="asignada">Asignada</option>
+                <option value="en_tratamiento">En tratamiento</option>
+                <option value="completada">Completada</option>
+                <option value="cancelada">Cancelada</option>
+              </select>
+            </div>
+  
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-2">Notas / Observaciones</label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => handleChange('notes', e.target.value)}
+                rows={4}
+                className="w-full px-4 py-4 rounded-2xl border border-slate-300 focus:border-teal-500"
+                placeholder="Notas clínicas o comentarios..."
+              />
+            </div>
+  
+            <div className="flex gap-4 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-4 text-slate-600 hover:bg-slate-100 rounded-2xl font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-semibold"
+              >
+                Guardar Cambios
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+/* ========================== LANDING PAGE ======================================== */
+   function Landing({ services, onLogin }) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50">
+        {/* HERO SECTION */}
+        <div className="max-w-7xl mx-auto px-6 pt-16 pb-24">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 bg-white px-6 py-3 rounded-3xl shadow-sm mb-6">
+                <Stethoscope className="w-6 h-6 text-teal-600" />
+                <span className="font-semibold text-teal-700">Enfermereando</span>
               </div>
-
-              {/* Configuración de servicios seleccionados */}
-              {ben.services.map(item => {
-                const svc = services.find(s => s.id === item.serviceId);
-                if (!svc) return null;
+              
+              <h1 className="text-6xl md:text-7xl font-bold leading-none text-slate-900 tracking-tighter">
+                Atención de enfermería<br />
+                <span className="text-teal-600">a domicilio</span>
+              </h1>
+              
+              <p className="mt-8 text-2xl text-slate-600 max-w-lg">
+                Inyecciones, curaciones, consejería y más.<br />
+                Con profesionalidad, cercanía y en tu hogar.
+              </p>
+  
+              <div className="flex flex-wrap gap-4 mt-10">
+                <button 
+                  onClick={onLogin}
+                  className="px-10 py-5 bg-teal-600 hover:bg-teal-700 text-white text-xl font-semibold rounded-3xl transition-all flex items-center gap-3 shadow-lg shadow-teal-200"
+                >
+                  Iniciar Sesión
+                  <ArrowRight className="w-6 h-6" />
+                </button>
+                
+                <a 
+                  href="https://wa.me/56920489639"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-8 py-5 bg-white border-2 border-teal-600 text-teal-700 hover:bg-teal-50 text-xl font-semibold rounded-3xl transition-all flex items-center gap-3"
+                >
+                  <Phone className="w-6 h-6" />
+                  Hablar por WhatsApp
+                </a>
+              </div>
+  
+              <div className="mt-12 flex items-center gap-8 text-sm">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-teal-500" />
+                  <span className="font-medium">Profesional certificada</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-teal-500" />
+                  <span className="font-medium">Atención en tu hogar</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-teal-500" />
+                  <span className="font-medium">Santiago y alrededores</span>
+                </div>
+              </div>
+            </div>
+  
+            {/* Imagen hero */}
+            <div className="hidden md:block">
+              <div className="bg-white rounded-3xl shadow-2xl p-4">
+                <img 
+                  src="https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=800"
+                  alt="Enfermera en domicilio"
+                  className="rounded-3xl w-full aspect-video object-cover"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+  
+        {/* SERVICIOS DESTACADOS */}
+        <div className="bg-white py-20">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="text-center mb-12">
+              <h2 className="text-4xl font-bold text-slate-900">Nuestros Servicios</h2>
+              <p className="text-slate-600 mt-3">Profesionales, seguros y a tu medida</p>
+            </div>
+  
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {services.map((service) => {
+                const Icon = getIconComponent(service.iconId);
                 return (
-                  <div key={item.serviceId} className="bg-white border border-slate-200 rounded-2xl p-4 mb-4 flex flex-wrap items-center gap-6">
-                    <div className="flex-1">
-                      <div className="font-medium">{svc.title}</div>
+                  <div key={service.id} className="bg-slate-50 hover:bg-white border border-slate-200 hover:border-teal-200 rounded-3xl p-8 transition-all group">
+                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                      <Icon className="w-8 h-8 text-teal-600" />
                     </div>
-                    <div className="flex items-center gap-6">
-                      {svc.allowDoses && (
-                        <>
-                          <div>
-                            <label className="block text-[10px] font-medium text-slate-500 mb-1">DOSIS</label>
-                            <input
-                              type="number"
-                              min="1"
-                              max="12"
-                              value={item.doses || 1}
-                              onChange={e => updateServiceConfig(ben.id, item.serviceId, 'doses', parseInt(e.target.value) || 1)}
-                              className="w-20 px-3 py-2 border border-slate-300 rounded-2xl text-center"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-medium text-slate-500 mb-1">FRECUENCIA</label>
-                            <select
-                              value={item.frequency || 'once'}
-                              onChange={e => updateServiceConfig(ben.id, item.serviceId, 'frequency', e.target.value)}
-                              className="px-4 py-2 border border-slate-300 rounded-2xl text-sm"
-                            >
-                              {FREQUENCIES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
-                            </select>
-                          </div>
-                        </>
-                      )}
-                      <div className="text-right">
-                        <div className="text-xs text-slate-500">Subtotal</div>
-                        <div className="font-semibold text-teal-600">{fmtCLP(svc.price * (item.doses || 1))}</div>
+                    <h3 className="font-semibold text-xl mb-2">{service.title}</h3>
+                    <p className="text-slate-600 text-sm leading-relaxed mb-6">{service.desc}</p>
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <span className="text-xs text-slate-400">Desde</span>
+                        <div className="text-3xl font-bold text-teal-700">{fmtCLP(service.price)}</div>
                       </div>
+                      {service.allowDoses && (
+                        <span className="text-xs bg-teal-100 text-teal-700 px-4 py-1 rounded-2xl font-medium">Múltiples dosis</span>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
           </div>
-        ))}
-      </div>
-
-      {/* Fecha, hora, dirección y notas (igual que antes) */}
-      <div className="grid grid-cols-2 gap-6 mb-8">
-        <div>
-          <label className="block text-sm font-medium mb-2">Fecha de la primera cita</label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500" />
         </div>
-        <div>
-          <label className="block text-sm font-medium mb-2">Hora</label>
-          <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500" />
-        </div>
-      </div>
-
-      <div className="mb-8">
-        <label className="block text-sm font-medium mb-2">Dirección completa</label>
-        <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="Calle, número, departamento, comuna" className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500" />
-      </div>
-
-      <div className="mb-8">
-        <label className="block text-sm font-medium mb-2">Notas adicionales (opcional)</label>
-        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500" />
-      </div>
-
-      {/* Resumen de precio */}
-      <div className="bg-teal-50 rounded-3xl p-6 flex justify-between items-center mb-8">
-        <div>
-          <div className="text-sm font-medium text-teal-700">Total estimado</div>
-          <div className="text-4xl font-bold text-teal-800">{fmtCLP(net)}</div>
-        </div>
-        {discount > 0 && <div className="text-teal-600 text-sm font-medium">Descuento familiar: -{Math.round(discount * 100)}%</div>}
-      </div>
-
-      <button
-        onClick={submit}
-        className="w-full py-5 bg-gradient-to-r from-teal-600 to-blue-600 text-white rounded-3xl font-semibold text-xl flex items-center justify-center gap-3 hover:from-teal-700 hover:to-blue-700 transition-all"
-      >
-        <Calendar className="w-6 h-6" />
-        Enviar solicitud y generar serie
-      </button>
-    </div>
-  );
-}
-
-// ==================== APPOINTMENTCARD CON INDICADOR DE SERIE ====================
-function AppointmentCard({ a, services, onCancel }) {
-  const net = a.beneficiaries ? appNetPrice(a, services) : 0;
-  const isSeries = !!a.seriesId;
-
-  return (
-    <div className="bg-white rounded-3xl p-6 border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-6">
-      <div className="flex-1">
-        <div className="flex justify-between items-start">
-          <div>
-            <div className="font-semibold text-lg">{new Date(a.date).toLocaleDateString('es-CL')}</div>
-            <div className="text-teal-600">{fmtTime(a.time)} · {a.address}</div>
-          </div>
-          <span className={`text-xs px-4 py-1 rounded-3xl font-medium ${a.status === 'pendiente' ? 'bg-amber-100 text-amber-700' : a.status === 'confirmada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-            {a.status}
-          </span>
-        </div>
-        {a.beneficiaries && <div className="text-sm text-slate-600 mt-2">{a.beneficiaries.map(b => b.name).join(', ')}</div>}
-        
-        {isSeries && (
-          <div className="flex items-center gap-2 mt-4">
-            <div className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-3xl">
-              <Package className="w-3 h-3" />
-              Serie • Dosis {a.doseNumber || 1}
+  
+        {/* BENEFICIOS */}
+        <div className="py-20 bg-slate-50">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="grid md:grid-cols-3 gap-10">
+              <div className="text-center">
+                <div className="mx-auto w-16 h-16 bg-teal-100 rounded-2xl flex items-center justify-center mb-6">
+                  <HomeIcon className="w-8 h-8 text-teal-600" />
+                </div>
+                <h4 className="font-semibold text-2xl mb-3">En tu hogar</h4>
+                <p className="text-slate-600">Sin traslados. Comodidad y seguridad en el lugar que más te gusta.</p>
+              </div>
+              <div className="text-center">
+                <div className="mx-auto w-16 h-16 bg-teal-100 rounded-2xl flex items-center justify-center mb-6">
+                  <Shield className="w-8 h-8 text-teal-600" />
+                </div>
+                <h4 className="font-semibold text-2xl mb-3">Profesionalismo</h4>
+                <p className="text-slate-600">Técnicas estériles, experiencia y atención personalizada.</p>
+              </div>
+              <div className="text-center">
+                <div className="mx-auto w-16 h-16 bg-teal-100 rounded-2xl flex items-center justify-center mb-6">
+                  <Clock className="w-8 h-8 text-teal-600" />
+                </div>
+                <h4 className="font-semibold text-2xl mb-3">Horarios flexibles</h4>
+                <p className="text-slate-600">Mañana y tarde. Adaptamos el horario a tus necesidades.</p>
+              </div>
             </div>
           </div>
-        )}
+        </div>
+  
+        {/* CTA FINAL */}
+        <div className="bg-teal-700 text-white py-20">
+          <div className="max-w-7xl mx-auto px-6 text-center">
+            <h2 className="text-5xl font-bold mb-6">¿Necesitas atención hoy?</h2>
+            <p className="text-2xl mb-10 max-w-xl mx-auto">Agenda tu atención en minutos y recibe atención profesional en casa.</p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <button 
+                onClick={onLogin}
+                className="px-12 py-6 bg-white text-teal-700 text-2xl font-semibold rounded-3xl hover:scale-105 transition-transform"
+              >
+                Iniciar Sesión como Paciente
+              </button>
+              <a 
+                href={`https://wa.me/${WHATSAPP}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-12 py-6 border-2 border-white text-white text-2xl font-semibold rounded-3xl hover:bg-white/10 transition-all flex items-center gap-3"
+              >
+                <Phone className="w-7 h-7" />
+                Hablar por WhatsApp
+              </a>
+            </div>
+            
+            <p className="text-teal-200 mt-8 text-sm">
+              📍 Santiago y comunas cercanas • Profesional: {PROFESSIONAL_NAME}
+            </p>
+          </div>
+        </div>
+  
+        {/* FOOTER */}
+        <footer className="bg-slate-900 text-white py-12">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-8">
+              <div className="flex items-center gap-3">
+                <Stethoscope className="w-8 h-8" />
+                <div className="font-bold text-2xl">Enfermereando</div>
+              </div>
+              
+              <div className="flex gap-8 text-sm">
+                <a href="https://wa.me/56920489639" target="_blank" rel="noopener noreferrer" className="hover:text-teal-400 transition-colors flex items-center gap-2">
+                  <Phone className="w-4 h-4" /> WhatsApp
+                </a>
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4" /> {PHONE}
+                </div>
+              </div>
+  
+              <div className="text-xs text-slate-400 text-center md:text-right">
+                © 2026 Enfermereando • Atención de enfermería a domicilio<br />
+                Profesional: {PROFESSIONAL_NAME}
+              </div>
+            </div>
+          </div>
+        </footer>
       </div>
-      <div className="text-right">
-        <div className="font-bold text-xl text-teal-700">{fmtCLP(net)}</div>
-        {onCancel && (
-          <button 
-            onClick={() => onCancel(a)} 
-            className="mt-4 text-red-500 hover:text-red-600 text-sm font-medium flex items-center gap-1"
-          >
-            <Trash2 className="w-4 h-4" /> Cancelar
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
+    );
+  }
 
 // ==================== ADMINPANEL ====================
 function AdminPanel({ 
@@ -1752,152 +1937,237 @@ function ServicesManager({ services, saveServices }) {
   );
 }
 
-// ==================== EDIT APPOINTMENT MODAL (NUEVO - COMPLETO) ====================
-function EditAppointmentModal({ app, services, onSave, onClose }) {
-  const [form, setForm] = useState({
-    date: app.date || '',
-    time: app.time || '',
-    address: app.address || '',
-    notes: app.notes || '',
-    status: app.status || 'pendiente',
-    assignedTo: app.assignedTo || '',
-  });
-
-  const handleChange = (field, value) => {
-    setForm(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSave({
-      ...app,
-      ...form,
-      // Mantener datos importantes
-      patientId: app.patientId,
-      patientName: app.patientName,
-      beneficiaries: app.beneficiaries,
-    });
-  };
-
-  return (
-    <>
-      {/* Backdrop */}
-      <div 
-        className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
-        onClick={onClose}
-      >
-        {/* Modal Card */}
-        <div 
-          className="bg-white rounded-3xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden"
-          onClick={e => e.stopImmediatePropagation()}
-        >
-          <div className="px-6 pt-6 pb-4 border-b flex items-center justify-between">
-            <h3 className="text-xl font-bold text-slate-900">Editar Cita</h3>
-            <button 
-              onClick={onClose}
-              className="text-slate-400 hover:text-slate-600"
-            >
-              <X className="w-6 h-6" />
-            </button>
+/* =============================================
+   PROFESSIONAL DASHBOARD - Dashboard del Profesional
+   ============================================= */
+   function ProfessionalDashboard({ 
+    user, 
+    services, 
+    appointments, 
+    saveAppointments, 
+    onLogout 
+  }) {
+    const [tab, setTab] = useState('mis-atenciones');
+    const [editingApp, setEditingApp] = useState(null);
+  
+    // Solo las atenciones asignadas a este profesional
+    const myAppointments = appointments.filter(a => a.assignedTo === user.id);
+  
+    // ==================== TOMAR TAREA ====================
+    const takeTask = async (app) => {
+      if (app.status !== 'pendiente') return;
+      const updated = appointments.map(a => 
+        a.id === app.id ? { ...a, status: 'asignada', assignedTo: user.id } : a
+      );
+      await saveAppointments(updated);
+      await sendWhatsAppToAdmin(app, 'status_change', services);
+    };
+  
+    // ==================== ACTUALIZAR DOSIS ====================
+    const updateDoses = async (appId, completedDoses) => {
+      const updated = appointments.map(app => {
+        if (app.id !== appId) return app;
+        return {
+          ...app,
+          beneficiaries: app.beneficiaries.map(ben => ({
+            ...ben,
+            services: ben.services.map(s => ({
+              ...s,
+              completedDoses: parseInt(completedDoses) || 0
+            }))
+          }))
+        };
+      });
+      await saveAppointments(updated);
+    };
+  
+    // ==================== ACTUALIZAR ESTADO ====================
+    const updateStatus = async (appId, newStatus) => {
+      const updated = appointments.map(app => 
+        app.id === appId ? { ...app, status: newStatus } : app
+      );
+      await saveAppointments(updated);
+    };
+  
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {/* HEADER */}
+        <header className="bg-white border-b shadow-sm">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <Stethoscope className="w-8 h-8 text-teal-600" />
+              <div className="font-bold text-2xl">Enfermereando</div>
+              <span className="text-teal-600 font-medium">• Dashboard Profesional</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <NotificationBell userId={user.id} notifications={[]} />
+              <div>
+                <div className="font-semibold">{user.name}</div>
+                <div className="text-xs text-teal-600">Profesional</div>
+              </div>
+              <button onClick={onLogout} className="p-2 hover:bg-slate-100 rounded-xl">
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
           </div>
-
-          <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-            {/* Paciente */}
+        </header>
+  
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          {/* TABS */}
+          <div className="flex gap-2 mb-8 border-b pb-2">
+            <TabButton 
+              active={tab === 'mis-atenciones'} 
+              onClick={() => setTab('mis-atenciones')} 
+              icon={Users}
+            >
+              Mis Atenciones
+            </TabButton>
+            <TabButton 
+              active={tab === 'hoy'} 
+              onClick={() => setTab('hoy')} 
+              icon={Calendar}
+            >
+              Hoy
+            </TabButton>
+            <TabButton 
+              active={tab === 'calendario'} 
+              onClick={() => setTab('calendario')} 
+              icon={Calendar}
+            >
+              Calendario
+            </TabButton>
+          </div>
+  
+          {/* MIS ATENCIONES */}
+          {tab === 'mis-atenciones' && (
+            <div className="space-y-6">
+              {myAppointments.length === 0 ? (
+                <div className="bg-white rounded-3xl p-16 text-center text-slate-400">
+                  No tienes atenciones asignadas aún
+                </div>
+              ) : (
+                myAppointments.map(app => (
+                  <div key={app.id} className="bg-white border border-slate-200 rounded-3xl p-6">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-semibold text-xl">{app.patientName}</div>
+                        <div className="text-sm text-slate-500">
+                          {new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => setEditingApp(app)}
+                        className="text-teal-600 hover:text-teal-700 font-medium"
+                      >
+                        Ver / Editar →
+                      </button>
+                    </div>
+  
+                    <div className="grid grid-cols-3 gap-6 mt-6">
+                      {/* Estado */}
+                      <div>
+                        <label className="text-xs text-slate-500">Estado</label>
+                        <select
+                          value={app.status || 'pendiente'}
+                          onChange={(e) => updateStatus(app.id, e.target.value)}
+                          className="w-full mt-2 px-4 py-3 rounded-2xl border border-slate-300"
+                        >
+                          <option value="pendiente">Pendiente</option>
+                          <option value="asignada">Asignada</option>
+                          <option value="en_tratamiento">En tratamiento</option>
+                          <option value="completada">Completada</option>
+                        </select>
+                      </div>
+  
+                      {/* Dosis */}
+                      <div>
+                        <label className="text-xs text-slate-500">Dosis completadas</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={app.beneficiaries?.[0]?.services?.[0]?.completedDoses || 0}
+                          onChange={(e) => updateDoses(app.id, e.target.value)}
+                          className="w-full mt-2 px-4 py-3 rounded-2xl border border-slate-300"
+                        />
+                      </div>
+  
+                      {/* Botón tomar tarea */}
+                      {app.status === 'pendiente' && (
+                        <button
+                          onClick={() => takeTask(app)}
+                          className="mt-8 h-fit px-8 py-4 bg-teal-600 text-white rounded-2xl font-semibold hover:bg-teal-700"
+                        >
+                          Tomar esta tarea
+                        </button>
+                      )}
+                    </div>
+  
+                    {/* Notas rápidas */}
+                    <textarea
+                      value={app.notes || ''}
+                      onChange={(e) => {
+                        const updated = appointments.map(a => 
+                          a.id === app.id ? { ...a, notes: e.target.value } : a
+                        );
+                        saveAppointments(updated);
+                      }}
+                      placeholder="Notas clínicas..."
+                      className="w-full mt-6 px-4 py-3 rounded-2xl border border-slate-300 text-sm"
+                      rows={2}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+  
+          {/* HOY */}
+          {tab === 'hoy' && (
             <div>
-              <label className="block text-sm font-medium text-slate-500 mb-1">Paciente</label>
-              <div className="px-4 py-3 bg-slate-100 rounded-2xl text-slate-900 font-medium">
-                {app.patientName}
-              </div>
+              <h2 className="text-2xl font-bold mb-6">Atenciones de Hoy</h2>
+              {/* Filtra solo las de hoy */}
+              {myAppointments.filter(a => a.date === new Date().toISOString().split('T')[0]).length === 0 ? (
+                <div className="text-center py-20 text-slate-400">No tienes atenciones programadas para hoy</div>
+              ) : (
+                // Reutiliza AppointmentCard o el mismo estilo
+                myAppointments.filter(a => a.date === new Date().toISOString().split('T')[0]).map(app => (
+                  <AppointmentCard 
+                    key={app.id} 
+                    app={app} 
+                    services={services} 
+                    onEdit={setEditingApp} 
+                    onCancel={() => {}} 
+                    saveAppointments={saveAppointments} 
+                  />
+                ))
+              )}
             </div>
-
-            {/* Fecha y Hora */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-500 mb-1">Fecha</label>
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={e => handleChange('date', e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-500 mb-1">Hora</label>
-                <input
-                  type="time"
-                  value={form.time}
-                  onChange={e => handleChange('time', e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Dirección */}
-            <div>
-              <label className="block text-sm font-medium text-slate-500 mb-1">Dirección</label>
-              <input
-                type="text"
-                value={form.address}
-                onChange={e => handleChange('address', e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
-                placeholder="Calle, número, comuna..."
-              />
-            </div>
-
-            {/* Estado */}
-            <div>
-              <label className="block text-sm font-medium text-slate-500 mb-1">Estado</label>
-              <select
-                value={form.status}
-                onChange={e => handleChange('status', e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
-              >
-                <option value="pendiente">Pendiente</option>
-                <option value="asignada">Asignada</option>
-                <option value="confirmada">Confirmada</option>
-                <option value="completada">Completada</option>
-                <option value="cancelada">Cancelada</option>
-              </select>
-            </div>
-
-            {/* Notas */}
-            <div>
-              <label className="block text-sm font-medium text-slate-500 mb-1">Notas / Observaciones</label>
-              <textarea
-                value={form.notes}
-                onChange={e => handleChange('notes', e.target.value)}
-                rows={4}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
-                placeholder="Información adicional para la enfermera..."
-              />
-            </div>
-
-            {/* Botones */}
-            <div className="flex gap-3 pt-4 border-t">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-4 text-slate-700 font-semibold border border-slate-300 rounded-3xl hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="flex-1 py-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl transition-all"
-              >
-                Guardar cambios
-              </button>
-            </div>
-          </form>
+          )}
+  
+          {/* CALENDARIO */}
+          {tab === 'calendario' && (
+            <CalendarView appointments={myAppointments} onEdit={setEditingApp} />
+          )}
+  
+          {/* MODAL DE EDICIÓN */}
+          {editingApp && (
+            <EditAppointmentModal 
+              app={editingApp} 
+              services={services} 
+              onSave={async (updates) => {
+                const newList = appointments.map(a => a.id === updates.id ? { ...a, ...updates } : a);
+                await saveAppointments(newList);
+                setEditingApp(null);
+              }} 
+              onClose={() => setEditingApp(null)} 
+            />
+          )}
         </div>
       </div>
-    </>
-  );
-}
+    );
+  }
 
-// ==================== APP PRINCIPAL ====================
+// ==================== APP PRINCIPAL - VERSIÓN COMPLETA ====================
 export default function App() {
   const [view, setView] = useState('landing');
   const [user, setUser] = useState(null);
@@ -1908,16 +2178,25 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ==================== CARGAR DATOS ====================
   useEffect(() => {
     (async () => {
       let svcs = await sget('enf:services', DEFAULT_SERVICES);
-      let apps = (await sget('enf:appointments', [])).map(normalizeApp);
+      let apps = (await sget('enf:appointments', [])).map(normalizeApp || (x => x));
       const pats = await sget('enf:patients', []);
       let profs = await sget('enf:professionals', []);
       const notifs = await sget('enf:notifications', []);
 
+      // Admin por defecto
       if (!profs.some(p => p.role === 'admin')) {
-        profs = [{ id: 'admin-default', username: 'admin', password: 'enfermera2026', name: PROFESSIONAL_NAME, role: 'admin', active: true }].concat(profs);
+        profs = [{
+          id: 'admin-default',
+          username: 'admin',
+          password: 'enfermera2026',
+          name: PROFESSIONAL_NAME,
+          role: 'admin',
+          active: true
+        }].concat(profs);
       }
 
       setServices(svcs);
@@ -1929,143 +2208,87 @@ export default function App() {
     })();
   }, []);
 
+  // ==================== GUARDAR CITAS ====================
   const saveAppointmentsLocal = async (list) => {
     setAppointments(list);
     await sset('enf:appointments', list);
   };
 
-  // ==================== LOGIN MEJORADO CON RECUPERACIÓN Y VALIDACIÓN DE INTEGRIDAD ====================
-  const login = async (data) => {
-    if (data.action === 'register') {
-      // Validación de integridad ya realizada en el componente
-      if (patients.some(p => p.username.toLowerCase() === data.username.toLowerCase())) {
-        return { ok: false, error: 'Este nombre de usuario ya existe' };
-      }
-      const pat = { 
-        id: uid(), 
-        username: data.username, 
-        password: data.password, 
-        name: data.name, 
-        phone: data.phone, 
-        comuna: data.comuna,
-        email: data.email || '', 
-        createdAt: Date.now() 
-      };
-      await savePatients(patients.concat([pat]));
-      const safe = { ...pat };
-      delete safe.password;
-      setUser({ role: 'patient', ...safe });
+  // ==================== LOGIN ====================
+  const login = (loggedUser) => {
+    setUser(loggedUser);
+    if (loggedUser.role === 'patient') {
       setView('patient');
-      requestPushPermission().then(granted => {
-        if (granted) console.log('✅ Notificaciones push habilitadas');
-      });
-      return { ok: true };
+    } else if (loggedUser.role === 'admin') {
+      setView('admin');
+    } else {
+      setView('professional');   // ← Nuevo: Dashboard del Profesional
     }
-
-    if (data.action === 'register-pro') {
-      if (professionals.some(p => p.username.toLowerCase() === data.username.toLowerCase())) {
-        return { ok: false, error: 'Este nombre de usuario ya existe' };
-      }
-      const newPro = { 
-        id: uid(), 
-        username: data.username, 
-        password: data.password, 
-        name: data.name, 
-        email: data.email || '', 
-        role: 'professional', 
-        active: false, 
-        createdAt: Date.now() 
-      };
-      await saveProfessionals(professionals.concat([newPro]));
-      return { ok: true, pendingApproval: true };
-    }
-
-    // === NUEVA LÓGICA DE RECUPERACIÓN DE CONTRASEÑA ===
-    if (data.action === 'recover') {
-      const isPatient = data.role === 'patient';
-      let found = null;
-      let listToUpdate = null;
-      let setter = null;
-
-      if (isPatient) {
-        found = patients.find(p => p.username.toLowerCase() === data.username.toLowerCase());
-        listToUpdate = patients;
-        setter = savePatients;
-      } else {
-        found = professionals.find(p => p.username.toLowerCase() === data.username.toLowerCase());
-        listToUpdate = professionals;
-        setter = saveProfessionals;
-      }
-
-      if (!found) {
-        return { ok: false, error: 'Usuario no encontrado. Verifica tu nombre de usuario.' };
-      }
-
-      // Generar contraseña temporal segura
-      const tempPassword = 'temp-' + uid().slice(0, 8);
-      
-      // Actualizar contraseña
-      const updatedList = listToUpdate.map(u => 
-        u.id === found.id ? { ...u, password: tempPassword } : u
-      );
-      await setter(updatedList);
-
-      return { 
-        ok: true, 
-        tempPassword,
-        message: `Contraseña temporal generada para ${found.name}. Por favor inicia sesión con ella y cámbiala inmediatamente.` 
-      };
-    }
-
-    // Login normal
-    if (data.role === 'patient') {
-      const pat = patients.find(p => p.username.toLowerCase() === data.username.toLowerCase());
-      if (!pat) return { ok: false, error: 'Usuario no encontrado' };
-      if (pat.password !== data.password) return { ok: false, error: 'Contraseña incorrecta' };
-      const safe = { ...pat };
-      delete safe.password;
-      setUser({ role: 'patient', ...safe });
-      setView('patient');
-      return { ok: true };
-    }
-
-    // Login profesional
-    const pro = professionals.find(p => p.username.toLowerCase() === data.username.toLowerCase());
-    if (!pro) return { ok: false, error: 'Usuario no encontrado' };
-    if (pro.password !== data.password) return { ok: false, error: 'Contraseña incorrecta' };
-    if (!pro.active) return { ok: false, error: 'Tu cuenta está pendiente de aprobación.' };
-    
-    const safe = { ...pro };
-    delete safe.password;
-    setUser({ ...safe });
-    setView('admin');
-    return { ok: true };
   };
 
+  // ==================== LOGOUT ====================
   const logout = () => {
     setUser(null);
     setView('landing');
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-2xl text-slate-400">
+        Cargando Enfermereando...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50">
+      {/* LANDING */}
       {view === 'landing' && <Landing services={services.filter(s => s.active)} onLogin={() => setView('login')} />}
-      {view === 'login' && <LoginView onLogin={login} onBack={() => setView('landing')} patients={patients} professionals={professionals} />}
+
+      {/* LOGIN + REGISTRO + RECUPERACIÓN */}
+      {view === 'login' && (
+        <LoginView 
+          onLogin={login} 
+          onBack={() => setView('landing')} 
+          patients={patients} 
+          professionals={professionals} 
+        />
+      )}
+
+      {/* PORTAL DEL PACIENTE */}
       {view === 'patient' && user && user.role === 'patient' && (
         <PatientPortal 
           user={user} 
           services={services.filter(s => s.active)} 
           appointments={appointments} 
-          notifications={notifications} 
           saveAppointments={saveAppointmentsLocal} 
-          addNotification={() => {}} 
           onLogout={logout} 
         />
       )}
-      {view === 'admin' && user && user.role !== 'patient' && (
-        <AdminPanel user={user} setUser={setUser} services={services} appointments={appointments} patients={patients} professionals={professionals} notifications={notifications} saveAppointments={saveAppointmentsLocal} savePatients={() => {}} saveProfessionals={() => {}} addNotification={() => {}} onLogout={logout} />
+
+      {/* DASHBOARD DEL PROFESIONAL (NUEVO) */}
+      {view === 'professional' && user && user.role === 'professional' && (
+        <ProfessionalDashboard 
+          user={user} 
+          services={services} 
+          appointments={appointments} 
+          saveAppointments={saveAppointmentsLocal} 
+          onLogout={logout} 
+        />
+      )}
+
+      {/* PANEL DEL ADMINISTRADOR */}
+      {view === 'admin' && user && user.role === 'admin' && (
+        <AdminPanel 
+          user={user} 
+          services={services} 
+          appointments={appointments} 
+          patients={patients} 
+          professionals={professionals} 
+          notifications={notifications} 
+          saveAppointments={saveAppointmentsLocal} 
+          onLogout={logout} 
+        />
       )}
     </div>
   );
