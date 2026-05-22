@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase } from './supabase';
 import { useState, useEffect } from 'react';
 import {
   Pill, Activity, Syringe, Home as HomeIcon, Cross, Heart, BookOpen,
@@ -8,7 +8,7 @@ import {
   ChevronDown, Tag, UserCog, Clock, Package, Bell, Route
 } from 'lucide-react';
 
-const WHATSAPP = '56920489639';           // Número de Mariela
+const WHATSAPP = '56920489639';
 const PHONE = '+56 9 2048 9639';
 const PROFESSIONAL_NAME = 'Mariela Droguett';
 
@@ -104,8 +104,8 @@ const appNetPrice = (a, services) => {
 };
 
 /* === INTEGRACIÓN CALLMEBOT WHATSAPP === */
-const sendWhatsAppToAdmin = async (app, action = 'new', services = [], isSeriesCancel = false) => {
-  try {
+const sendWhatsAppToAdmin = async (app, action = 'new', services = []) => {
+    try {
     let msg = `🔔 *Enfermereando - ${PROFESSIONAL_NAME}*\n\n`;
 
     if (action === 'new') {
@@ -407,159 +407,108 @@ function CalendarView({ appointments, onEdit }) {
 }
 
 /* =============================================
-   LOGIN VIEW - VERSIÓN MEJORADA CON EMAIL Y VERIFICACIÓN
+   LOGIN VIEW - SUPABASE AUTH REAL
    ============================================= */
-   function LoginView({ onLogin, onBack, patients, professionals }) {
+   function LoginView({ onLogin, onBack }) {
     const [tab, setTab] = useState('login'); // login | register | recovery
     const [role, setRole] = useState('patient'); // patient | professional
-  
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
-    const [phone, setPhone] = useState('');
-    const [comuna, setComuna] = useState('');
-  
-    const [recoveryEmail, setRecoveryEmail] = useState('');
     const [loading, setLoading] = useState(false);
   
-    // ==================== VALIDACIÓN SIMPLE DE EMAIL ====================
-    const isValidEmail = (em) => {
-      return em.includes('@') && em.includes('.');
-    };
-  
-    // ==================== LOGIN ====================
+    // ==================== INICIAR SESIÓN ====================
     const handleLogin = async () => {
-      setLoading(true);
-      let foundUser = null;
-  
-      if (role === 'patient') {
-        foundUser = patients.find(p => p.email === email && p.password === password);
-      } else {
-        foundUser = professionals.find(p => p.email === email && p.password === password);
-      }
-  
-      if (foundUser) {
-        if (role === 'professional' && foundUser.status === 'pending') {
-          alert('⏳ Tu cuenta de profesional está pendiente de aprobación por el administrador.');
-        } else {
-          onLogin({ ...foundUser, role });
-        }
-      } else {
-        alert('❌ Credenciales incorrectas. Verifica tu correo y contraseña.');
-      }
-      setLoading(false);
-    };
-  
-    // ==================== REGISTRO CON EMAIL Y VERIFICACIÓN ====================
-    const handleRegister = async () => {
-      if (!name || !email || !password || !phone) {
-        alert('❌ Todos los campos son obligatorios');
-        return;
-      }
-  
-      if (!isValidEmail(email)) {
-        alert('❌ Ingresa un correo electrónico válido (debe contener @ y .)');
-        return;
-      }
-  
+      if (!email || !password) return alert('Ingresa correo y contraseña');
       setLoading(true);
   
-      const newUser = {
-        id: uid(),
-        name: name.trim(),
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
-        password: password,           // En producción debes hashear esto
-        phone: phone.trim(),
-        comuna: comuna || 'No especificada',
-        role: role,
-        status: role === 'professional' ? 'pending' : 'active',
-        createdAt: new Date().toISOString()
-      };
+        password,
+      });
   
-      let updatedList = [];
-  
-      if (role === 'patient') {
-        updatedList = [...patients, newUser];
-        await sset('enf:patients', updatedList);
-      } else {
-        updatedList = [...professionals, newUser];
-        await sset('enf:professionals', updatedList);
+      if (error) {
+        alert('❌ Credenciales incorrectas o cuenta no confirmada.\n\n' + error.message);
+      } else if (data.user) {
+        // Obtener rol desde metadata
+        const userRole = data.user.user_metadata?.role || 'patient';
+        onLogin({
+          id: data.user.id,
+          name: data.user.user_metadata?.name || data.user.email,
+          email: data.user.email,
+          role: userRole
+        });
       }
-  
-      // ==================== VERIFICACIÓN DE CREACIÓN ====================
-      console.log('✅ Usuario creado correctamente:', newUser);
-      alert(`✅ ¡Usuario creado exitosamente!\n\n` +
-            `Nombre: ${newUser.name}\n` +
-            `Correo: ${newUser.email}\n` +
-            `Rol: ${role === 'patient' ? 'Paciente' : 'Profesional'}\n\n` +
-            (role === 'professional' 
-              ? 'Tu cuenta está pendiente de aprobación por el administrador.' 
-              : 'Ya puedes iniciar sesión.'));
-  
-      // Limpiar formulario y volver a login
-      setName('');
-      setEmail('');
-      setPassword('');
-      setPhone('');
-      setComuna('');
-      setTab('login');
       setLoading(false);
     };
   
-    // ==================== RECUPERACIÓN ====================
-    const handleRecovery = async () => {
-      if (!recoveryEmail || !isValidEmail(recoveryEmail)) {
-        alert('❌ Ingresa un correo electrónico válido');
-        return;
+    // ==================== REGISTRARSE ====================
+    const handleRegister = async () => {
+      if (!name || !email || !password) {
+        return alert('❌ Completa nombre, correo y contraseña');
       }
   
       setLoading(true);
-      const allUsers = [...patients, ...professionals];
-      const user = allUsers.find(u => u.email === recoveryEmail.toLowerCase());
   
-      if (user) {
-        const tempPassword = 'Temp' + Math.floor(100000 + Math.random() * 900000);
-        alert(`🔑 Contraseña temporal generada para ${recoveryEmail}:\n\n${tempPassword}\n\nGuárdala. En producción se enviaría por correo.`);
-  
-        // Actualizar contraseña
-        if (patients.some(p => p.id === user.id)) {
-          const updated = patients.map(p => p.id === user.id ? { ...p, password: tempPassword } : p);
-          await sset('enf:patients', updated);
-        } else {
-          const updated = professionals.map(p => p.id === user.id ? { ...p, password: tempPassword } : p);
-          await sset('enf:professionals', updated);
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: {
+          data: {
+            name: name.trim(),
+            role: role
+          }
         }
-      } else {
-        alert('❌ No encontramos ninguna cuenta con ese correo electrónico.');
-      }
+      });
   
+      if (error) {
+        alert('❌ Error al registrar: ' + error.message);
+      } else {
+        alert(`✅ Cuenta creada correctamente.\n\nRevisa tu correo (${email}) para confirmar la cuenta.`);
+        setTab('login');
+      }
       setLoading(false);
-      setTab('login');
+    };
+  
+    // ==================== RECUPERAR CONTRASEÑA ====================
+    const handleRecovery = async () => {
+      if (!email) return alert('Ingresa tu correo');
+  
+      setLoading(true);
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        redirectTo: window.location.origin + '/login'
+      });
+  
+      if (error) {
+        alert('❌ Error: ' + error.message);
+      } else {
+        alert(`✅ Se envió un enlace de recuperación a ${email}`);
+        setTab('login');
+      }
+      setLoading(false);
     };
   
     return (
       <div className="min-h-screen bg-gradient-to-br from-teal-50 to-white flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
-          {/* Header */}
           <div className="px-8 pt-8 pb-6 border-b flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Stethoscope className="w-9 h-9 text-teal-600" />
               <div className="font-bold text-3xl">Enfermereando</div>
             </div>
-            <button onClick={onBack} className="text-slate-400 hover:text-slate-600 text-xl">←</button>
+            <button onClick={onBack} className="text-slate-400 hover:text-slate-600">← Volver</button>
           </div>
   
-          {/* Tabs */}
           <div className="flex border-b text-sm">
-            <button onClick={() => setTab('login')} className={`flex-1 py-5 font-medium ${tab === 'login' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Iniciar Sesión</button>
-            <button onClick={() => setTab('register')} className={`flex-1 py-5 font-medium ${tab === 'register' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Registrarse</button>
-            <button onClick={() => setTab('recovery')} className={`flex-1 py-5 font-medium ${tab === 'recovery' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Recuperar</button>
+            <button onClick={() => setTab('login')} className={`flex-1 py-5 ${tab === 'login' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Iniciar Sesión</button>
+            <button onClick={() => setTab('register')} className={`flex-1 py-5 ${tab === 'register' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Registrarse</button>
+            <button onClick={() => setTab('recovery')} className={`flex-1 py-5 ${tab === 'recovery' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Recuperar</button>
           </div>
   
           <div className="p-8 space-y-6">
             {tab === 'login' && (
               <>
-                <div className="flex gap-2 bg-slate-100 rounded-2xl p-1">
+                <div className="flex bg-slate-100 rounded-2xl p-1">
                   <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}>Paciente</button>
                   <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}>Profesional</button>
                 </div>
@@ -567,7 +516,7 @@ function CalendarView({ appointments, onEdit }) {
                 <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
                 <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
   
-                <button onClick={handleLogin} disabled={loading} className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg disabled:opacity-70">
+                <button onClick={handleLogin} disabled={loading} className="w-full py-5 bg-teal-600 text-white font-semibold rounded-3xl text-lg disabled:opacity-70">
                   {loading ? 'Ingresando...' : 'Iniciar Sesión'}
                 </button>
               </>
@@ -575,32 +524,27 @@ function CalendarView({ appointments, onEdit }) {
   
             {tab === 'register' && (
               <div className="space-y-5">
-                <div className="flex gap-2 bg-slate-100 rounded-2xl p-1">
+                <div className="flex bg-slate-100 rounded-2xl p-1">
                   <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}>Paciente</button>
                   <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}>Profesional</button>
                 </div>
   
                 <input type="text" placeholder="Nombre completo" value={name} onChange={e => setName(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
                 <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-                <input type="tel" placeholder="Teléfono" value={phone} onChange={e => setPhone(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-                <select value={comuna} onChange={e => setComuna(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500">
-                  <option value="">Seleccionar comuna</option>
-                  {COMUNAS.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+                <input type="password" placeholder="Contraseña (mínimo 6 caracteres)" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
   
-                <button onClick={handleRegister} disabled={loading} className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg">
+                <button onClick={handleRegister} disabled={loading} className="w-full py-5 bg-teal-600 text-white font-semibold rounded-3xl text-lg disabled:opacity-70">
                   {loading ? 'Creando cuenta...' : 'Crear Cuenta'}
                 </button>
               </div>
             )}
   
             {tab === 'recovery' && (
-              <div className="space-y-6">
-                <p className="text-slate-600">Ingresa tu correo electrónico para recuperar la contraseña.</p>
-                <input type="email" placeholder="Correo electrónico" value={recoveryEmail} onChange={e => setRecoveryEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-                <button onClick={handleRecovery} disabled={loading} className="w-full py-5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-3xl text-lg">
-                  {loading ? 'Enviando...' : 'Recuperar Contraseña'}
+              <div>
+                <p className="text-slate-600 mb-4">Ingresa tu correo y te enviaremos un enlace para restablecer la contraseña.</p>
+                <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+                <button onClick={handleRecovery} disabled={loading} className="w-full py-5 bg-amber-600 text-white font-semibold rounded-3xl text-lg mt-6 disabled:opacity-70">
+                  {loading ? 'Enviando enlace...' : 'Enviar enlace de recuperación'}
                 </button>
               </div>
             )}
@@ -2139,41 +2083,32 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ==================== LISTENER DE AUTENTICACIÓN REAL ====================
   useEffect(() => {
-    (async () => {
-      let svcs = await sget('enf:services', DEFAULT_SERVICES);
-      let apps = (await sget('enf:appointments', [])).map(normalizeApp || (x => x));
-      const pats = await sget('enf:patients', []);
-      let profs = await sget('enf:professionals', []);
-      const notifs = await sget('enf:notifications', []);
-
-      // ==================== CREACIÓN FORZADA DEL ADMINISTRADOR ====================
-      const adminEmail = 'admin@enfermereando.cl';
-      let existingAdmin = profs.find(p => p.email === adminEmail || p.role === 'admin');
-
-      if (!existingAdmin) {
-        const defaultAdmin = {
-          id: 'admin-default',
-          name: PROFESSIONAL_NAME,
-          email: adminEmail,
-          password: 'enfermera2026',
-          phone: PHONE,
-          role: 'admin',
-          status: 'active',
-          createdAt: new Date().toISOString()
+    // Escuchar cambios de sesión
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        const userData = {
+          id: session.user.id,
+          email: session.user.email,
+          name: session.user.user_metadata?.name || session.user.email,
+          role: session.user.user_metadata?.role || 'patient'
         };
-
-        profs = [defaultAdmin, ...profs];
-        await sset('enf:professionals', profs);
-        console.log('✅ Administrador creado correctamente:', defaultAdmin);
-      } else if (!existingAdmin.email) {
-        // Actualizar admin antiguo que no tenía email
-        profs = profs.map(p => 
-          p.role === 'admin' ? { ...p, email: adminEmail } : p
-        );
-        await sset('enf:professionals', profs);
-        console.log('✅ Administrador actualizado con email');
+        setUser(userData);
+        setView(userData.role === 'patient' ? 'patient' : userData.role === 'admin' ? 'admin' : 'professional');
+      } else {
+        setUser(null);
+        setView('landing');
       }
+    });
+
+    // Cargar datos iniciales
+    const loadData = async () => {
+      const svcs = await sget('enf:services', DEFAULT_SERVICES);
+      const apps = await sget('enf:appointments', []);
+      const pats = await sget('enf:patients', []);
+      const profs = await sget('enf:professionals', []);
+      const notifs = await sget('enf:notifications', []);
 
       setServices(svcs);
       setAppointments(apps);
@@ -2181,7 +2116,11 @@ export default function App() {
       setProfessionals(profs);
       setNotifications(notifs);
       setLoading(false);
-    })();
+    };
+
+    loadData();
+
+    return () => authListener.subscription.unsubscribe();
   }, []);
 
   const saveAppointmentsLocal = async (list) => {
@@ -2189,16 +2128,8 @@ export default function App() {
     await sset('enf:appointments', list);
   };
 
-  const login = (loggedUser) => {
-    setUser(loggedUser);
-    if (loggedUser.role === 'patient') setView('patient');
-    else if (loggedUser.role === 'admin') setView('admin');
-    else setView('professional');
-  };
-
-  const logout = () => {
-    setUser(null);
-    setView('landing');
+  const logout = async () => {
+    await supabase.auth.signOut();
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-2xl">Cargando...</div>;
@@ -2206,10 +2137,10 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50">
       {view === 'landing' && <Landing services={services.filter(s => s.active)} onLogin={() => setView('login')} />}
-      {view === 'login' && <LoginView onLogin={login} onBack={() => setView('landing')} patients={patients} professionals={professionals} />}
-      {view === 'patient' && user && user.role === 'patient' && <PatientPortal user={user} services={services.filter(s => s.active)} appointments={appointments} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
-      {view === 'professional' && user && user.role === 'professional' && <ProfessionalDashboard user={user} services={services} appointments={appointments} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
-      {view === 'admin' && user && user.role === 'admin' && <AdminPanel user={user} services={services} appointments={appointments} patients={patients} professionals={professionals} notifications={notifications} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
+      {view === 'login' && <LoginView onLogin={setUser} onBack={() => setView('landing')} />}
+      {view === 'patient' && user && <PatientPortal user={user} services={services.filter(s => s.active)} appointments={appointments} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
+      {view === 'professional' && user && <ProfessionalDashboard user={user} services={services} appointments={appointments} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
+      {view === 'admin' && user && <AdminPanel user={user} services={services} appointments={appointments} patients={patients} professionals={professionals} notifications={notifications} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
     </div>
   );
 }
