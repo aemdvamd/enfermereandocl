@@ -633,7 +633,10 @@ function PatientPortal({ user, services, appointments, saveAppointments, onLogou
               <div className="font-semibold text-lg">Hola, {user.name}</div>
               <div className="text-teal-600 text-sm">Paciente</div>
             </div>
-            <button onClick={onLogout} className="flex items-center gap-2 px-5 py-2.5 hover:bg-slate-100 rounded-2xl text-slate-700">
+            <button 
+              onClick={onLogout}
+              className="flex items-center gap-2 px-5 py-2.5 hover:bg-slate-100 rounded-2xl text-slate-700 transition-colors"
+            >
               <LogOut className="w-5 h-5" /> Salir
             </button>
           </div>
@@ -663,23 +666,22 @@ function PatientPortal({ user, services, appointments, saveAppointments, onLogou
           </button>
         </div>
 
-        {/* CONTENIDO - SOLO SE MUESTRA UNA SECCIÓN */}
+        {/* CONTENIDO - SOLO UNA SECCIÓN ACTIVA */}
         {showRequestForm ? (
           <RequestForm 
-          services={services} 
-          onSubmit={handleNewAppointment} 
-          onCancel={() => setShowRequestForm(false)} 
-          user={user}          // ← Agregar esta línea
-        />
+            services={services} 
+            onSubmit={handleNewAppointment} 
+            onCancel={() => setShowRequestForm(false)} 
+          />
         ) : tab === 'inicio' ? (
           <div>
             <h2 className="text-3xl font-bold mb-6">Próximas Atenciones</h2>
             {upcoming.length === 0 ? (
               <div className="bg-white rounded-3xl p-16 text-center text-slate-400 text-xl">
-                No tienes atenciones próximas
+                No tienes atenciones próximas<br />
                 <button 
                   onClick={() => setShowRequestForm(true)}
-                  className="mt-6 block mx-auto px-8 py-4 bg-teal-600 text-white rounded-2xl font-medium"
+                  className="mt-6 px-8 py-4 bg-teal-600 text-white rounded-2xl font-medium"
                 >
                   Solicitar nueva atención
                 </button>
@@ -737,10 +739,10 @@ function PatientPortal({ user, services, appointments, saveAppointments, onLogou
 }
 
 /* ==================== REQUEST FORM ============================================= */
-function RequestForm({ services, onSubmit, onCancel, user }) {
+function RequestForm({ services, onSubmit, onCancel }) {
   const [beneficiaries, setBeneficiaries] = useState([{
     id: uid(),
-    name: user?.name || '',           // ← Prellenado con el usuario logueado
+    name: '',
     services: [{ serviceId: '', doses: 1, frequency: 'once' }]
   }]);
 
@@ -749,7 +751,7 @@ function RequestForm({ services, onSubmit, onCancel, user }) {
   const [comuna, setComuna] = useState('');
   const [notes, setNotes] = useState('');
 
-  // ==================== AGREGAR / ELIMINAR BENEFICIARIO ====================
+  // ==================== BENEFICIARIOS ====================
   const addBeneficiary = () => {
     setBeneficiaries([...beneficiaries, {
       id: uid(),
@@ -801,6 +803,51 @@ function RequestForm({ services, onSubmit, onCancel, user }) {
     }));
   };
 
+  // ==================== GENERACIÓN DE SERIE ====================
+  const generateAppointmentSeries = (baseApp, servicesList) => {
+    const seriesId = uid();
+    const allAppointments = [];
+
+    beneficiaries.forEach(ben => {
+      ben.services.forEach(svcItem => {
+        const service = servicesList.find(s => s.id === svcItem.serviceId);
+        if (!service) return;
+
+        const totalDoses = parseInt(svcItem.doses) || 1;
+        const frequency = FREQUENCIES.find(f => f.id === svcItem.frequency);
+        const daysStep = frequency ? frequency.days : 0;
+
+        for (let i = 0; i < totalDoses; i++) {
+          const newDate = new Date(baseApp.date);
+          newDate.setDate(newDate.getDate() + i * daysStep);
+
+          const seriesApp = {
+            ...baseApp,
+            id: uid(),
+            date: newDate.toISOString().split('T')[0],
+            seriesId: seriesId,
+            doseNumber: i + 1,
+            totalDoses: totalDoses,
+            patientName: ben.name || baseApp.patientName,
+            beneficiaries: [{
+              id: ben.id,
+              name: ben.name,
+              services: [{
+                serviceId: svcItem.serviceId,
+                doses: totalDoses,
+                frequency: svcItem.frequency,
+                completedDoses: 0
+              }]
+            }]
+          };
+          allAppointments.push(seriesApp);
+        }
+      });
+    });
+
+    return allAppointments.length > 0 ? allAppointments : [baseApp];
+  };
+
   // ==================== SUBMIT ====================
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -810,7 +857,7 @@ function RequestForm({ services, onSubmit, onCancel, user }) {
 
     const baseAppointment = {
       id: uid(),
-      patientName: beneficiaries[0].name,
+      patientName: beneficiaries[0].name || 'Sin nombre',
       date,
       time,
       comuna,
@@ -819,7 +866,7 @@ function RequestForm({ services, onSubmit, onCancel, user }) {
       assignedTo: null,
       beneficiaries: beneficiaries.map(b => ({
         id: b.id,
-        name: b.name,
+        name: b.name || 'Sin nombre',
         services: b.services.map(s => ({
           serviceId: s.serviceId,
           doses: parseInt(s.doses) || 1,
@@ -829,7 +876,7 @@ function RequestForm({ services, onSubmit, onCancel, user }) {
       }))
     };
 
-    const finalAppointments = generateAppointmentSeries ? generateAppointmentSeries(baseAppointment, services) : [baseAppointment];
+    const finalAppointments = generateAppointmentSeries(baseAppointment, services);
 
     await sendWhatsAppToAdmin(baseAppointment, 'new', services);
     onSubmit(finalAppointments);
@@ -847,9 +894,7 @@ function RequestForm({ services, onSubmit, onCancel, user }) {
         {beneficiaries.map((ben, index) => (
           <div key={ben.id} className="border border-slate-200 rounded-3xl p-6 bg-slate-50">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold text-lg">
-                Beneficiario {index + 1} {index === 0 && <span className="text-teal-600">(Tú)</span>}
-              </h3>
+              <h3 className="font-semibold text-lg">Beneficiario {index + 1}</h3>
               {beneficiaries.length > 1 && (
                 <button type="button" onClick={() => removeBeneficiary(ben.id)} className="text-red-500 hover:text-red-600 text-sm flex items-center gap-1">
                   <Trash2 className="w-4 h-4" /> Eliminar
@@ -857,18 +902,15 @@ function RequestForm({ services, onSubmit, onCancel, user }) {
               )}
             </div>
 
-            {/* Nombre del beneficiario - El primero está prellenado y deshabilitado */}
             <input
               type="text"
               placeholder="Nombre completo del beneficiario"
               value={ben.name}
               onChange={(e) => updateBeneficiaryName(ben.id, e.target.value)}
-              disabled={index === 0}   // ← Solo el primer beneficiario está bloqueado
-              className={`w-full px-4 py-3 rounded-2xl border border-slate-300 mb-6 ${index === 0 ? 'bg-slate-100 cursor-not-allowed' : ''}`}
+              className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 mb-6"
               required
             />
 
-            {/* Servicios */}
             {ben.services.map((svc, svcIndex) => (
               <div key={svcIndex} className="flex gap-4 items-end mb-4 bg-white p-4 rounded-2xl border">
                 <div className="flex-1">
