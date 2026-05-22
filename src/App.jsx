@@ -1678,7 +1678,7 @@ function AdminPanel({
   );
 }
 
-// ==================== MONITORING PANEL - VERSIÓN ESTABLE (SIN ERRORES DE EVENTOS) ====================
+// ==================== MONITORING PANEL - REDISEÑO SIMPLE Y ESTABLE ====================
 function MonitoringPanel({ 
   appointments, 
   patients, 
@@ -1688,60 +1688,62 @@ function MonitoringPanel({
   saveAppointments,
   onEdit 
 }) {
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filter, setFilter] = useState('all');
   const isAdmin = currentUser.role === 'admin';
 
-  const myAppointments = isAdmin 
+  const myApps = isAdmin 
     ? appointments 
     : appointments.filter(a => a.assignedTo === currentUser.id);
 
-  const filteredApps = filterStatus === 'all' 
-    ? myAppointments 
-    : myAppointments.filter(a => a.status === filterStatus);
+  const filteredApps = filter === 'all' 
+    ? myApps 
+    : myApps.filter(a => a.status === filter);
 
+  // Tomar tarea (Pendiente → Asignada)
   const takeTask = async (appId) => {
-    const updated = appointments.map(app =>
-      app.id === appId ? { 
-        ...app, 
-        status: 'asignada', 
+    const updated = appointments.map(app => 
+      app.id === appId ? {
+        ...app,
+        status: 'asignada',
         assignedTo: currentUser.id,
         assignedToName: currentUser.name,
-        takenAt: Date.now() 
+        takenAt: Date.now()
       } : app
     );
     await saveAppointments(updated);
   };
 
-  const toggleChecklistItem = async (appId, serviceId, itemId) => {
-    let updated = appointments.map(app => {
+  // Marcar ítem del checklist
+  const toggleItem = async (appId, serviceId, itemId) => {
+    const updated = appointments.map(app => {
       if (app.id !== appId) return app;
+
       return {
         ...app,
         beneficiaries: app.beneficiaries.map(ben => ({
           ...ben,
-          services: ben.services.map(item => {
-            if (item.serviceId !== serviceId) return item;
-            const checklist = item.checklist || SERVICE_CHECKLISTS[serviceId] || [];
-            const updatedChecklist = checklist.map(ch => 
-              ch.id === itemId 
-                ? { ...ch, completed: !ch.completed, completedAt: !ch.completed ? Date.now() : null }
-                : ch
+          services: ben.services.map(service => {
+            if (service.serviceId !== serviceId) return service;
+
+            const checklist = service.checklist || SERVICE_CHECKLISTS[service.serviceId] || [];
+            const newChecklist = checklist.map(item =>
+              item.id === itemId 
+                ? { ...item, completed: !item.completed, completedAt: !item.completed ? Date.now() : null }
+                : item
             );
-            return { ...item, checklist: updatedChecklist };
+
+            return { ...service, checklist: newChecklist };
           })
         }))
       };
     });
 
-    const app = updated.find(a => a.id === appId);
-    if (app && isTaskComplete(app)) {
-      updated = updated.map(a => 
-        a.id === appId ? { ...a, status: 'completada', completedAt: Date.now() } : a
-      );
-    } else if (app && app.status === 'asignada') {
-      updated = updated.map(a => 
-        a.id === appId ? { ...a, status: 'en_tratamiento' } : a
-      );
+    // Auto-avance de estado
+    const currentApp = updated.find(a => a.id === appId);
+    if (currentApp && isTaskComplete(currentApp)) {
+      updated = updated.map(a => a.id === appId ? { ...a, status: 'completada', completedAt: Date.now() } : a);
+    } else if (currentApp && currentApp.status === 'asignada') {
+      updated = updated.map(a => a.id === appId ? { ...a, status: 'en_tratamiento' } : a);
     }
 
     await saveAppointments(updated);
@@ -1761,84 +1763,86 @@ function MonitoringPanel({
     <div className="bg-white rounded-3xl p-6 border border-slate-200">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">Monitoreo de Atenciones</h2>
-        
-        <div className="flex gap-2 flex-wrap">
-          {['all', 'pendiente', 'asignada', 'en_tratamiento', 'completada'].map(status => (
-            <button
-              key={status}
-              onClick={() => setFilterStatus(status)}
-              className={`px-4 py-2 text-sm rounded-2xl transition-all ${
-                filterStatus === status ? 'bg-teal-600 text-white' : 'bg-slate-100 hover:bg-slate-200'
-              }`}
-            >
-              {status === 'all' ? 'Todas' : status.charAt(0).toUpperCase() + status.slice(1)}
-            </button>
-          ))}
-        </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex gap-2 mb-6 flex-wrap">
+        {['all', 'pendiente', 'asignada', 'en_tratamiento', 'completada'].map(s => (
+          <button
+            key={s}
+            onClick={() => setFilter(s)}
+            className={`px-5 py-2 rounded-2xl text-sm font-medium transition-all ${
+              filter === s ? 'bg-teal-600 text-white' : 'bg-slate-100 hover:bg-slate-200'
+            }`}
+          >
+            {s === 'all' ? 'Todas' : s.charAt(0).toUpperCase() + s.slice(1)}
+          </button>
+        ))}
       </div>
 
       <div className="space-y-4">
         {filteredApps.length === 0 ? (
-          <div className="text-center py-12 text-slate-400">No hay atenciones en este filtro</div>
+          <div className="text-center py-16 text-slate-400">
+            No hay atenciones para mostrar
+          </div>
         ) : (
           filteredApps.map(app => {
             const net = app.beneficiaries ? appNetPrice(app, services) : 0;
-            const isAssignedToMe = app.assignedTo === currentUser.id;
+            const isMine = app.assignedTo === currentUser.id;
 
             return (
-              <div key={app.id} className="border border-slate-200 rounded-3xl p-6 hover:shadow-md transition-all">
-                <div className="flex justify-between items-start mb-4">
+              <div key={app.id} className="border border-slate-200 rounded-3xl p-6">
+                <div className="flex justify-between items-start">
                   <div>
                     <div className="font-semibold text-lg">{app.patientName}</div>
                     <div className="text-sm text-slate-500">
                       {new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}
                     </div>
                   </div>
-                  <button 
-                    onClick={() => onEdit(app)}
-                    className="text-teal-600 hover:text-teal-700 font-medium text-sm"
-                  >
-                    Ver detalle →
+                  <button onClick={() => onEdit(app)} className="text-teal-600 font-medium">
+                    Detalle →
                   </button>
                 </div>
 
-                {/* Tomar tarea */}
-                {app.status === 'pendiente' && isAssignedToMe && (
-                  <button
+                {/* BOTÓN PRINCIPAL */}
+                {app.status === 'pendiente' && isMine && (
+                  <button 
                     onClick={() => takeTask(app.id)}
-                    className="w-full py-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl mb-6"
+                    className="mt-6 w-full py-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg"
                   >
                     Tomar esta tarea
                   </button>
                 )}
 
-                {/* Checklist */}
-                {['asignada', 'en_tratamiento'].includes(app.status) && isAssignedToMe && app.beneficiaries && (
+                {/* CHECKLIST */}
+                {['asignada', 'en_tratamiento'].includes(app.status) && isMine && app.beneficiaries && (
                   <div className="mt-6">
-                    <h4 className="font-semibold mb-4 text-slate-900">Seguimiento del servicio</h4>
-                    {app.beneficiaries.map((ben, idx) => (
-                      <div key={idx} className="mb-6 bg-slate-50 rounded-2xl p-5">
-                        <div className="font-medium mb-4">{ben.name}</div>
-                        {ben.services.map(service => {
+                    <h4 className="font-semibold mb-4">Registro de atención</h4>
+                    {app.beneficiaries.map((ben, bIdx) => (
+                      <div key={bIdx} className="mb-8 bg-slate-50 rounded-2xl p-5">
+                        <div className="font-medium mb-4 text-slate-800">{ben.name}</div>
+                        {ben.services.map((service, sIdx) => {
                           const svc = services.find(s => s.id === service.serviceId);
                           const checklist = service.checklist || SERVICE_CHECKLISTS[service.serviceId] || [];
                           return (
-                            <div key={service.serviceId} className="mb-5">
-                              <div className="font-medium mb-3 text-teal-700">{svc?.title}</div>
-                              {checklist.map(item => (
-                                <button
-                                  key={item.id}
-                                  onClick={() => toggleChecklistItem(app.id, service.serviceId, item.id)}
-                                  className="flex w-full items-center gap-4 py-4 px-5 hover:bg-white rounded-2xl text-left border border-transparent hover:border-slate-100 mb-2"
-                                >
-                                  <div className={`w-8 h-8 flex items-center justify-center rounded-2xl border-2 text-xl flex-shrink-0 ${
-                                    item.completed ? 'bg-teal-500 text-white border-teal-500' : 'border-slate-300'
-                                  }`}>
-                                    {item.completed ? '✓' : ''}
-                                  </div>
-                                  <span className="flex-1 text-sm">{item.label}</span>
-                                </button>
-                              ))}
+                            <div key={sIdx} className="mb-6">
+                              <div className="font-medium text-teal-700 mb-3">{svc?.title}</div>
+                              <div className="space-y-2">
+                                {checklist.map(item => (
+                                  <button
+                                    key={item.id}
+                                    onClick={() => toggleItem(app.id, service.serviceId, item.id)}
+                                    className="w-full flex items-center gap-4 p-4 bg-white rounded-2xl border border-slate-100 hover:border-teal-200 transition-all text-left"
+                                  >
+                                    <div className={`w-9 h-9 rounded-2xl border-2 flex items-center justify-center text-2xl flex-shrink-0 ${
+                                      item.completed ? 'bg-teal-500 text-white border-teal-500' : 'border-slate-300'
+                                    }`}>
+                                      {item.completed ? '✓' : ''}
+                                    </div>
+                                    <span className="flex-1 text-base">{item.label}</span>
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                           );
                         })}
@@ -1847,7 +1851,7 @@ function MonitoringPanel({
                   </div>
                 )}
 
-                <div className="text-xs text-slate-500 mt-4 pt-4 border-t">
+                <div className="text-center text-xs text-slate-500 mt-4">
                   Estado: <span className="font-medium capitalize">{app.status || 'pendiente'}</span>
                 </div>
               </div>
