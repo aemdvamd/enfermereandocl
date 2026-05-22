@@ -1687,7 +1687,7 @@ function AdminPanel({
   );
 }
 
-// ==================== KANBAN BOARD - BOTONES FIJOS ====================
+// ==================== KANBAN BOARD - VERSIÓN ESTABLE (BOTONES FUNCIONANDO) ====================
 function KanbanBoard({ 
   appointments, 
   patients, 
@@ -1728,8 +1728,7 @@ function KanbanBoard({
     grouped[status].push(app);
   });
 
-  const takeTask = async (appId, e) => {
-    if (e) e.stopPropagation();
+  const takeTask = async (appId) => {
     const updated = appointments.map(app =>
       app.id === appId ? { 
         ...app, 
@@ -1741,8 +1740,7 @@ function KanbanBoard({
     await saveAppointments(updated);
   };
 
-  const toggleChecklistItem = async (appId, serviceId, itemId, e) => {
-    if (e) e.stopPropagation();
+  const toggleChecklistItem = async (appId, serviceId, itemId) => {
     let updated = appointments.map(app => {
       if (app.id !== appId) return app;
       return {
@@ -1763,7 +1761,7 @@ function KanbanBoard({
       };
     });
 
-    // Validación de completitud
+    // Validación de completitud automática
     const app = updated.find(a => a.id === appId);
     if (app && isTaskComplete(app)) {
       updated = updated.map(a => 
@@ -1833,17 +1831,17 @@ function KanbanBoard({
                         {new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}
                       </div>
 
-                      {/* TOMAR TAREA */}
-                      {isAssignedToMe && !isTaken && ['asignada', 'confirmada'].includes(app.status) && (
+                      {/* Tomar Tarea */}
+                      {isAssignedToMe && !isTaken && ['asignada', 'confirmada'].includes(app.status || '') && (
                         <button
-                          onClick={(e) => takeTask(app.id, e)}
-                          className="mt-4 w-full py-3 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-2xl transition-all active:scale-95"
+                          onClick={() => takeTask(app.id)}
+                          className="mt-4 w-full py-3 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-2xl transition-all"
                         >
                           Tomar tarea
                         </button>
                       )}
 
-                      {/* CHECKLIST */}
+                      {/* Checklist */}
                       {isTaken && isAssignedToMe && app.beneficiaries && (
                         <div className="mt-4 space-y-4">
                           {app.beneficiaries.flatMap(ben =>
@@ -1858,7 +1856,7 @@ function KanbanBoard({
                                   {checklistItems.map(item => (
                                     <button
                                       key={item.id}
-                                      onClick={(e) => toggleChecklistItem(app.id, service.serviceId, item.id, e)}
+                                      onClick={() => toggleChecklistItem(app.id, service.serviceId, item.id)}
                                       className="flex w-full items-center gap-3 py-2 px-2 hover:bg-slate-50 rounded-xl text-left"
                                     >
                                       <div className={`w-6 h-6 flex items-center justify-center rounded-xl border text-xs font-medium transition-all flex-shrink-0 ${
@@ -1887,10 +1885,11 @@ function KanbanBoard({
                           placeholder="Notas / Observaciones..."
                           value={app.notes || ''}
                           onChange={(e) => {
-                            const updated = appointments.map(a => a.id === app.id ? { ...a, notes: e.target.value } : a);
+                            const updated = appointments.map(a => 
+                              a.id === app.id ? { ...a, notes: e.target.value } : a
+                            );
                             saveAppointments(updated);
                           }}
-                          onClick={e => e.stopPropagation()}
                           className="w-full mt-4 text-sm border border-slate-200 rounded-2xl p-3 focus:border-teal-400"
                           rows={2}
                         />
