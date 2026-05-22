@@ -1184,13 +1184,13 @@ function PatientPortal({ user, services, appointments, notifications, saveAppoin
   );
 }
 
+// ==================== REQUEST FORM (CORREGIDO - SIN ERROR eo(...)) ====================
 function RequestForm({ user, services, appointments, saveAppointments, addNotification, onDone }) {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
-  
-  // Estado inicial seguro
+
   const [beneficiaries, setBeneficiaries] = useState(() => [{
     id: uid(),
     name: user?.name || '',
@@ -1219,27 +1219,19 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
   const toggleService = (benId, serviceId) => {
     setBeneficiaries(prev => prev.map(ben => {
       if (ben.id !== benId) return ben;
-      
       const existsIndex = ben.services.findIndex(s => s.serviceId === serviceId);
-      
       if (existsIndex >= 0) {
-        // Eliminar servicio
-        return {
-          ...ben,
-          services: ben.services.filter((_, i) => i !== existsIndex)
-        };
+        return { ...ben, services: ben.services.filter((_, i) => i !== existsIndex) };
       } else {
-        // Agregar servicio
         const svc = services.find(s => s.id === serviceId);
-        const defaultItem = {
-          serviceId,
-          doses: svc?.allowDoses ? 1 : 1,
-          frequency: 'once',
-          completedDoses: 0
-        };
         return {
           ...ben,
-          services: [...ben.services, defaultItem]
+          services: [...ben.services, {
+            serviceId,
+            doses: svc?.allowDoses ? 1 : 1,
+            frequency: 'once',
+            completedDoses: 0
+          }]
         };
       }
     }));
@@ -1270,7 +1262,7 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
 
   const submit = async () => {
     if (!date || !time || !address.trim()) {
-      alert('❌ Por favor completa fecha, hora y dirección');
+      alert('❌ Completa fecha, hora y dirección');
       return;
     }
 
@@ -1294,12 +1286,11 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
     try {
       await saveAppointments([...appointments, ...seriesAppointments]);
       await sendWhatsAppToAdmin(baseApp, 'new_appointment', services);
-      
-      alert(`✅ Solicitud enviada correctamente.\nSe generaron ${seriesAppointments.length} cita(s) en serie.`);
+      alert(`✅ ¡Solicitud enviada! Se generaron ${seriesAppointments.length} cita(s) en serie.`);
       onDone();
     } catch (err) {
       console.error(err);
-      alert('❌ Error al guardar la solicitud. Inténtalo de nuevo.');
+      alert('❌ Error al guardar la solicitud');
     }
   };
 
@@ -1314,10 +1305,7 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
       <div className="mb-8">
         <div className="flex justify-between items-center mb-4">
           <h4 className="font-semibold text-lg">Personas a atender</h4>
-          <button
-            onClick={addBen}
-            className="flex items-center gap-2 text-teal-600 font-medium text-sm hover:text-teal-700"
-          >
+          <button onClick={addBen} className="flex items-center gap-2 text-teal-600 font-medium text-sm">
             <UserPlus className="w-4 h-4" /> Agregar persona
           </button>
         </div>
@@ -1352,17 +1340,16 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
               <div className="flex flex-wrap gap-2 mb-6">
                 {services.map(svc => {
                   const selected = ben.services.some(item => item.serviceId === svc.id);
+                  const Icon = getIconComponent(svc.iconId);   // ← FIX AQUÍ
                   return (
                     <button
                       key={svc.id}
                       onClick={() => toggleService(ben.id, svc.id)}
                       className={`px-5 py-2.5 text-sm font-medium rounded-3xl border transition-all flex items-center gap-2 ${
-                        selected
-                          ? 'bg-teal-600 text-white border-teal-600'
-                          : 'bg-white border-slate-300 hover:border-teal-300'
+                        selected ? 'bg-teal-600 text-white border-teal-600' : 'bg-white border-slate-300 hover:border-teal-300'
                       }`}
                     >
-                      {getIconComponent(svc.iconId)({ className: 'w-4 h-4' })}
+                      <Icon className="w-4 h-4" />
                       {svc.title}
                     </button>
                   );
@@ -1375,10 +1362,9 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
                 if (!svc) return null;
                 return (
                   <div key={item.serviceId} className="bg-white border border-slate-200 rounded-2xl p-4 mb-4 flex flex-wrap items-center gap-6">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{svc.title}</div>
+                    <div className="flex-1">
+                      <div className="font-medium">{svc.title}</div>
                     </div>
-
                     <div className="flex items-center gap-6">
                       {svc.allowDoses && (
                         <>
@@ -1418,60 +1404,35 @@ function RequestForm({ user, services, appointments, saveAppointments, addNotifi
         ))}
       </div>
 
-      {/* Fecha, hora y dirección */}
+      {/* Fecha, hora, dirección y notas (igual que antes) */}
       <div className="grid grid-cols-2 gap-6 mb-8">
         <div>
           <label className="block text-sm font-medium mb-2">Fecha de la primera cita</label>
-          <input
-            type="date"
-            value={date}
-            onChange={e => setDate(e.target.value)}
-            className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500"
-          />
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500" />
         </div>
         <div>
           <label className="block text-sm font-medium mb-2">Hora</label>
-          <input
-            type="time"
-            value={time}
-            onChange={e => setTime(e.target.value)}
-            className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500"
-          />
+          <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500" />
         </div>
       </div>
 
       <div className="mb-8">
         <label className="block text-sm font-medium mb-2">Dirección completa</label>
-        <input
-          type="text"
-          value={address}
-          onChange={e => setAddress(e.target.value)}
-          placeholder="Calle, número, departamento, comuna"
-          className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500"
-        />
+        <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="Calle, número, departamento, comuna" className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500" />
       </div>
 
       <div className="mb-8">
         <label className="block text-sm font-medium mb-2">Notas adicionales (opcional)</label>
-        <textarea
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          rows={3}
-          className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500"
-        />
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="w-full px-4 py-4 rounded-3xl border border-slate-300 focus:border-teal-500" />
       </div>
 
-      {/* Resumen */}
+      {/* Resumen de precio */}
       <div className="bg-teal-50 rounded-3xl p-6 flex justify-between items-center mb-8">
         <div>
           <div className="text-sm font-medium text-teal-700">Total estimado</div>
           <div className="text-4xl font-bold text-teal-800">{fmtCLP(net)}</div>
         </div>
-        {discount > 0 && (
-          <div className="text-teal-600 text-sm font-medium">
-            Descuento familiar: -{Math.round(discount * 100)}%
-          </div>
-        )}
+        {discount > 0 && <div className="text-teal-600 text-sm font-medium">Descuento familiar: -{Math.round(discount * 100)}%</div>}
       </div>
 
       <button
