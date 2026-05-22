@@ -360,6 +360,51 @@ function NotificationBell({ userId, notifications, markNotifRead, markAllNotifsR
   );
 }
 
+// ==================== VALIDACIÓN CENTRALIZADA DE INTEGRIDAD (BACKEND-LIKE) ====================
+const validateDataIntegrity = (type, data, patients, professionals, services, appointments = []) => {
+  const issues = [];
+
+  if (type === 'appointments' || type === 'all') {
+    const referential = validateReferentialIntegrity(data, patients, professionals, services);
+    issues.push(...referential.issues);
+  }
+
+  if (type === 'patients' || type === 'all') {
+    // Unicidad de username
+    const usernames = new Set(patients.map(p => p.username?.toLowerCase().trim()).filter(Boolean));
+    data.forEach(p => {
+      if (usernames.has(p.username?.toLowerCase().trim()) && !patients.some(existing => existing.id === p.id)) {
+        issues.push({ type: 'error', entity: 'patient', message: `Usuario "${p.username}" ya existe` });
+      }
+    });
+  }
+
+  if (type === 'professionals' || type === 'all') {
+    const usernames = new Set(professionals.map(p => p.username?.toLowerCase().trim()).filter(Boolean));
+    data.forEach(p => {
+      if (usernames.has(p.username?.toLowerCase().trim()) && !professionals.some(existing => existing.id === p.id)) {
+        issues.push({ type: 'error', entity: 'professional', message: `Usuario profesional "${p.username}" ya existe` });
+      }
+    });
+  }
+
+  if (type === 'services' || type === 'all') {
+    // Servicios deben tener ID único y precio válido
+    data.forEach(s => {
+      if (!s.id || !s.title || s.price <= 0) {
+        issues.push({ type: 'error', entity: 'service', message: `Servicio inválido: ${s.title || 'sin título'}` });
+      }
+    });
+  }
+
+  if (issues.some(i => i.type === 'error')) {
+    console.error('❌ Validación de integridad falló:', issues);
+    throw new Error(issues.map(i => i.message).join('\n'));
+  }
+
+  return { ok: true, issues: issues.filter(i => i.type === 'warning') };
+};
+
 // ==================== INTEGRACIÓN CON SUPABASE REALTIME ====================
 const setupRealtimeNotifications = (userId, addNotification) => {
   if (!userId) return;
@@ -459,6 +504,9 @@ const validateAllAppointments = (apps, patients, professionals, services) => {
 };
 
 const saveAppointments = async (list, setAppointments, patients, professionals, services) => {
+  const { ok, issues } = validateDataIntegrity('appointments', list, patients, professionals, services, list);
+  if (!ok) throw new Error('Validación fallida');
+
   const validated = validateAllAppointments(list, patients, professionals, services);
   setAppointments(validated);
   await sset('enf:appointments', validated);
@@ -485,13 +533,27 @@ const sset = async (k, v) => {
 };
 
 const savePatients = async (list, setPatients) => {
+  const { ok } = validateDataIntegrity('patients', list, list, [], []);
+  if (!ok) throw new Error('Validación fallida');
+
   setPatients(list);
   await sset('enf:patients', list);
 };
 
 const saveProfessionals = async (list, setProfessionals) => {
+  const { ok } = validateDataIntegrity('professionals', list, [], list, []);
+  if (!ok) throw new Error('Validación fallida');
+
   setProfessionals(list);
   await sset('enf:professionals', list);
+};
+
+const saveServices = async (list, setServices) => {
+  const { ok } = validateDataIntegrity('services', list, [], [], list);
+  if (!ok) throw new Error('Validación fallida');
+
+  setServices(list);
+  await sset('enf:services', list);
 };
 
 // ==================== COMPONENTES AUXILIARES ====================
@@ -1576,7 +1638,7 @@ function AdminPanel({
   );
 }
 
-// ==================== KANBAN BOARD CON MARCACIÓN DE DOSIS ====================
+// ==================== KANBAN BOARD CORREGIDO (INTEGRIDAD MEJORADA) ====================
 function KanbanBoard({ 
   appointments, 
   patients, 
@@ -1600,14 +1662,12 @@ function KanbanBoard({
     { id: 'cancelada',      title: 'Cancelada',     color: 'red',   icon: X }
   ];
 
-  // Agrupar citas
   const grouped = {};
   COLUMNS.forEach(col => { grouped[col.id] = []; });
 
   visibleApps.forEach(app => {
     let status = app.status || 'pendiente';
 
-    // Lógica automática de "En tratamiento"
     if (app.seriesId && app.beneficiaries) {
       let totalDoses = 0;
       let completedDoses = 0;
@@ -1624,27 +1684,29 @@ function KanbanBoard({
     if (grouped[status]) grouped[status].push(app);
   });
 
-  // Función para marcar una dosis como completada
   const markDoseCompleted = async (appId, serviceId, increment = 1) => {
-    const updatedAppointments = appointments.map(app => {
+    const updated = appointments.map(app => {
       if (app.id !== appId) return app;
-
-      const newBeneficiaries = app.beneficiaries.map(ben => ({
-        ...ben,
-        services: ben.services.map(item => {
-          if (item.serviceId !== serviceId) return item;
-          const newCompleted = Math.min(
-            (item.completedDoses || 0) + increment,
-            item.doses || 1
-          );
-          return { ...item, completedDoses: newCompleted };
-        })
-      }));
-
-      return { ...app, beneficiaries: newBeneficiaries };
+      return {
+        ...app,
+        beneficiaries: app.beneficiaries.map(ben => ({
+          ...ben,
+          services: ben.services.map(item => 
+            item.serviceId === serviceId 
+              ? { ...item, completedDoses: Math.min((item.completedDoses || 0) + increment, item.doses || 1) }
+              : item
+          )
+        }))
+      };
     });
+    await saveAppointments(updated);
+  };
 
-    await saveAppointments(updatedAppointments);
+  const changeStatus = async (appId, newStatus) => {
+    const updated = appointments.map(app => 
+      app.id === appId ? { ...app, status: newStatus } : app
+    );
+    await saveAppointments(updated);
   };
 
   return (
@@ -1655,7 +1717,7 @@ function KanbanBoard({
           Seguimiento de Solicitudes
         </h2>
         <div className="text-sm text-slate-500">
-          {visibleApps.length} citas • {isAdmin ? 'Todos los profesionales' : 'Mis asignadas'}
+          {visibleApps.length} citas • {isAdmin ? 'Todos' : 'Mis asignadas'}
         </div>
       </div>
 
@@ -1669,7 +1731,7 @@ function KanbanBoard({
               <div className={`px-4 py-3 rounded-2xl mb-4 flex items-center gap-2 bg-white shadow-sm border border-${column.color}-200`}>
                 <Icon className={`w-5 h-5 text-${column.color}-600`} />
                 <span className="font-semibold">{column.title}</span>
-                <span className="ml-auto text-xs font-medium bg-slate-100 px-3 py-1 rounded-2xl">
+                <span className="ml-auto bg-slate-100 px-3 py-1 rounded-2xl text-xs font-medium">
                   {appsInColumn.length}
                 </span>
               </div>
@@ -1679,9 +1741,7 @@ function KanbanBoard({
                   const net = app.beneficiaries ? appNetPrice(app, services) : 0;
                   const isSeries = !!app.seriesId;
 
-                  // Calcular totales de dosis para esta cita
-                  let totalDoses = 0;
-                  let completedDoses = 0;
+                  let totalDoses = 0, completedDoses = 0;
                   if (isSeries && app.beneficiaries) {
                     app.beneficiaries.forEach(ben => {
                       ben.services.forEach(item => {
@@ -1694,16 +1754,33 @@ function KanbanBoard({
                   return (
                     <div
                       key={app.id}
-                      className="bg-white border border-slate-200 rounded-2xl p-4 cursor-pointer hover:shadow-md transition-all hover:border-teal-300"
-                      onClick={() => onEdit(app)}
+                      className="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-md transition-all hover:border-teal-300 relative"
+                      draggable
+                      onDragStart={e => e.dataTransfer.setData('text/plain', app.id)}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => {
+                        e.preventDefault();
+                        const draggedId = e.dataTransfer.getData('text/plain');
+                        if (draggedId && draggedId !== app.id) {
+                          changeStatus(draggedId, column.id);
+                        }
+                      }}
                     >
-                      <div className="flex justify-between">
-                        <div className="font-medium text-slate-900">{app.patientName}</div>
-                        <span className="text-xs text-slate-500">{fmtTime(app.time)}</span>
-                      </div>
-                      <div className="text-xs text-slate-500 mt-0.5">{new Date(app.date).toLocaleDateString('es-CL')}</div>
+                      {/* Botón Editar explícito */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(app);
+                        }}
+                        className="absolute top-3 right-3 text-teal-600 hover:text-teal-700 text-xs font-medium px-3 py-1 bg-teal-50 hover:bg-teal-100 rounded-2xl transition-all"
+                      >
+                        Editar
+                      </button>
 
-                      {/* TRACKER DE DOSIS */}
+                      <div className="font-medium text-slate-900 pr-16">{app.patientName}</div>
+                      <div className="text-xs text-slate-500">{new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}</div>
+
+                      {/* Tracker de dosis */}
                       {isSeries && totalDoses > 1 && (
                         <div className="mt-4">
                           <div className="flex justify-between text-xs mb-2">
@@ -1719,11 +1796,10 @@ function KanbanBoard({
                                   key={doseNum}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    // Marcamos la dosis correspondiente
-                                    const serviceId = app.beneficiaries[0]?.services[0]?.serviceId;
+                                    const serviceId = app.beneficiaries?.[0]?.services?.[0]?.serviceId;
                                     if (serviceId) markDoseCompleted(app.id, serviceId, 1);
                                   }}
-                                  className={`w-6 h-6 flex items-center justify-center text-[10px] font-medium rounded-xl border transition-all ${
+                                  className={`w-7 h-7 flex items-center justify-center text-xs font-medium rounded-2xl border transition-all ${
                                     isCompleted 
                                       ? 'bg-teal-500 text-white border-teal-500' 
                                       : 'bg-white border-slate-300 hover:border-teal-400'
@@ -1746,9 +1822,9 @@ function KanbanBoard({
                         ).join(' • ')}
                       </div>
 
-                      <div className="mt-4 flex justify-between text-xs">
+                      <div className="mt-4 flex justify-between items-center">
                         <div className="font-semibold text-teal-600">{fmtCLP(net)}</div>
-                        {isSeries && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-[10px] rounded-xl">Serie</span>}
+                        {isSeries && <span className="text-[10px] bg-purple-100 text-purple-700 px-3 py-0.5 rounded-2xl">Serie</span>}
                       </div>
                     </div>
                   );
