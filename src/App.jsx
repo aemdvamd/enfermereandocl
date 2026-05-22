@@ -777,6 +777,7 @@ function RequestForm({ services, onSubmit, onCancel }) {
   const [beneficiaries, setBeneficiaries] = useState([{
     id: uid(),
     name: '',
+    direccion: '',                    // ← Nuevo campo Dirección
     services: [{ serviceId: '', doses: 1, frequency: 'once' }]
   }]);
 
@@ -790,6 +791,7 @@ function RequestForm({ services, onSubmit, onCancel }) {
     setBeneficiaries([...beneficiaries, {
       id: uid(),
       name: '',
+      direccion: '',
       services: [{ serviceId: '', doses: 1, frequency: 'once' }]
     }]);
   };
@@ -801,11 +803,14 @@ function RequestForm({ services, onSubmit, onCancel }) {
   };
 
   const updateBeneficiaryName = (benId, value) => {
-    setBeneficiaries(beneficiaries.map(b => 
-      b.id === benId ? { ...b, name: value } : b
-    ));
+    setBeneficiaries(beneficiaries.map(b => b.id === benId ? { ...b, name: value } : b));
   };
 
+  const updateBeneficiaryDireccion = (benId, value) => {
+    setBeneficiaries(beneficiaries.map(b => b.id === benId ? { ...b, direccion: value } : b));
+  };
+
+  // ==================== SERVICIOS ====================
   const addServiceToBeneficiary = (benId) => {
     setBeneficiaries(beneficiaries.map(ben => {
       if (ben.id !== benId) return ben;
@@ -855,6 +860,7 @@ function RequestForm({ services, onSubmit, onCancel }) {
       beneficiaries: beneficiaries.map(b => ({
         id: b.id,
         name: b.name || 'Sin nombre',
+        direccion: b.direccion || 'No especificada',
         services: b.services.map(s => ({
           serviceId: s.serviceId,
           doses: parseInt(s.doses) || 1,
@@ -864,10 +870,8 @@ function RequestForm({ services, onSubmit, onCancel }) {
       }))
     };
 
-    const finalAppointments = [baseAppointment]; // puedes volver a agregar generateAppointmentSeries si lo necesitas
-
     await sendWhatsAppToAdmin(baseAppointment, 'new', services);
-    onSubmit(finalAppointments);
+    onSubmit([baseAppointment]);   // puedes volver a poner series si lo necesitas
 
     alert(`✅ Solicitud enviada correctamente.`);
     onCancel();
@@ -885,26 +889,32 @@ function RequestForm({ services, onSubmit, onCancel }) {
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-semibold text-lg">Beneficiario {index + 1}</h3>
               {beneficiaries.length > 1 && (
-                <button 
-                  type="button" 
-                  onClick={() => removeBeneficiary(ben.id)} 
-                  className="text-red-500 hover:text-red-600 text-sm flex items-center gap-1"
-                >
+                <button type="button" onClick={() => removeBeneficiary(ben.id)} className="text-red-500 hover:text-red-600 text-sm flex items-center gap-1">
                   <Trash2 className="w-4 h-4" /> Eliminar
                 </button>
               )}
             </div>
 
+            {/* Nombre */}
             <input
               type="text"
               placeholder="Nombre completo del beneficiario"
               value={ben.name}
               onChange={(e) => updateBeneficiaryName(ben.id, e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 mb-6"
+              className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 mb-4"
               required
             />
 
-            {/* Servicios del beneficiario */}
+            {/* Dirección - Nuevo campo */}
+            <input
+              type="text"
+              placeholder="Dirección completa (calle, número, departamento...)"
+              value={ben.direccion}
+              onChange={(e) => updateBeneficiaryDireccion(ben.id, e.target.value)}
+              className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 mb-6"
+            />
+
+            {/* Servicios */}
             {ben.services.map((svc, svcIndex) => (
               <div key={svcIndex} className="flex gap-4 items-end mb-4 bg-white p-4 rounded-2xl border">
                 <div className="flex-1">
@@ -962,7 +972,7 @@ function RequestForm({ services, onSubmit, onCancel }) {
           </div>
         ))}
 
-        {/* BOTÓN PARA AGREGAR OTRO BENEFICIARIO */}
+        {/* Botón Agregar otro beneficiario */}
         <button
           type="button"
           onClick={addBeneficiary}
@@ -972,7 +982,33 @@ function RequestForm({ services, onSubmit, onCancel }) {
           Agregar otro beneficiario
         </button>
 
-        {/* BOTONES FINALES */}
+        {/* CAMPOS COMUNES - AL FINAL */}
+        <div className="pt-8 border-t">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-2">Fecha</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-2">Hora</label>
+              <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-2">Comuna</label>
+              <select value={comuna} onChange={e => setComuna(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required>
+                <option value="">Seleccionar comuna...</option>
+                {COMUNAS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <label className="block text-xs font-medium text-slate-500 mb-2">Notas / Observaciones</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" placeholder="Detalles adicionales de la atención..." />
+          </div>
+        </div>
+
+        {/* Botones finales */}
         <div className="flex justify-end gap-4 pt-8 border-t">
           <button type="button" onClick={onCancel} className="px-10 py-4 text-slate-600 hover:bg-slate-100 rounded-2xl font-medium">Cancelar</button>
           <button type="submit" className="px-10 py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-semibold">Enviar Solicitud + Notificar por WhatsApp</button>
