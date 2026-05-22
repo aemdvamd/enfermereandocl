@@ -972,32 +972,6 @@ function RequestForm({ services, onSubmit, onCancel }) {
           Agregar otro beneficiario
         </button>
 
-        {/* CAMPOS COMUNES - SIEMPRE VISIBLES */}
-        <div className="pt-6 border-t">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-2">Fecha</label>
-              <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-2">Hora</label>
-              <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-2">Comuna</label>
-              <select value={comuna} onChange={e => setComuna(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required>
-                <option value="">Seleccionar comuna...</option>
-                {COMUNAS.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <label className="block text-xs font-medium text-slate-500 mb-2">Notas / Observaciones</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" placeholder="Detalles adicionales..." />
-          </div>
-        </div>
-
         {/* BOTONES FINALES */}
         <div className="flex justify-end gap-4 pt-8 border-t">
           <button type="button" onClick={onCancel} className="px-10 py-4 text-slate-600 hover:bg-slate-100 rounded-2xl font-medium">Cancelar</button>
