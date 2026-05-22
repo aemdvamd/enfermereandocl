@@ -1814,8 +1814,8 @@ function MonitoringPanel({
 
                 {/* Checklist */}
                 {['asignada', 'en_tratamiento'].includes(app.status) && isAssignedToMe && app.beneficiaries && (
-                  <div className="mt-4">
-                    <h4 className="font-semibold mb-4">Seguimiento del servicio</h4>
+                  <div className="mt-6">
+                    <h4 className="font-semibold mb-4 text-slate-900">Seguimiento del servicio</h4>
                     {app.beneficiaries.map((ben, idx) => (
                       <div key={idx} className="mb-6 bg-slate-50 rounded-2xl p-5">
                         <div className="font-medium mb-4">{ben.name}</div>
