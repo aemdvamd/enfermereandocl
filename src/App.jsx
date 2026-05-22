@@ -1914,7 +1914,151 @@ function DuplicateMerger({
   );
 }
 
-// ==================== EXPORT APP (con login actualizado) ====================
+// ==================== EDIT APPOINTMENT MODAL (NUEVO - COMPLETO) ====================
+function EditAppointmentModal({ app, services, onSave, onClose }) {
+  const [form, setForm] = useState({
+    date: app.date || '',
+    time: app.time || '',
+    address: app.address || '',
+    notes: app.notes || '',
+    status: app.status || 'pendiente',
+    assignedTo: app.assignedTo || '',
+  });
+
+  const handleChange = (field, value) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave({
+      ...app,
+      ...form,
+      // Mantener datos importantes
+      patientId: app.patientId,
+      patientName: app.patientName,
+      beneficiaries: app.beneficiaries,
+    });
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div 
+        className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        {/* Modal Card */}
+        <div 
+          className="bg-white rounded-3xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden"
+          onClick={e => e.stopImmediatePropagation()}
+        >
+          <div className="px-6 pt-6 pb-4 border-b flex items-center justify-between">
+            <h3 className="text-xl font-bold text-slate-900">Editar Cita</h3>
+            <button 
+              onClick={onClose}
+              className="text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+            {/* Paciente */}
+            <div>
+              <label className="block text-sm font-medium text-slate-500 mb-1">Paciente</label>
+              <div className="px-4 py-3 bg-slate-100 rounded-2xl text-slate-900 font-medium">
+                {app.patientName}
+              </div>
+            </div>
+
+            {/* Fecha y Hora */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-500 mb-1">Fecha</label>
+                <input
+                  type="date"
+                  value={form.date}
+                  onChange={e => handleChange('date', e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-500 mb-1">Hora</label>
+                <input
+                  type="time"
+                  value={form.time}
+                  onChange={e => handleChange('time', e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Dirección */}
+            <div>
+              <label className="block text-sm font-medium text-slate-500 mb-1">Dirección</label>
+              <input
+                type="text"
+                value={form.address}
+                onChange={e => handleChange('address', e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                placeholder="Calle, número, comuna..."
+              />
+            </div>
+
+            {/* Estado */}
+            <div>
+              <label className="block text-sm font-medium text-slate-500 mb-1">Estado</label>
+              <select
+                value={form.status}
+                onChange={e => handleChange('status', e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+              >
+                <option value="pendiente">Pendiente</option>
+                <option value="asignada">Asignada</option>
+                <option value="confirmada">Confirmada</option>
+                <option value="completada">Completada</option>
+                <option value="cancelada">Cancelada</option>
+              </select>
+            </div>
+
+            {/* Notas */}
+            <div>
+              <label className="block text-sm font-medium text-slate-500 mb-1">Notas / Observaciones</label>
+              <textarea
+                value={form.notes}
+                onChange={e => handleChange('notes', e.target.value)}
+                rows={4}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                placeholder="Información adicional para la enfermera..."
+              />
+            </div>
+
+            {/* Botones */}
+            <div className="flex gap-3 pt-4 border-t">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-4 text-slate-700 font-semibold border border-slate-300 rounded-3xl hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl transition-all"
+              >
+                Guardar cambios
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ==================== APP PRINCIPAL ====================
 export default function App() {
   const [view, setView] = useState('landing');
