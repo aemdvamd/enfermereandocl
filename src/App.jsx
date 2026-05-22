@@ -73,7 +73,7 @@ const FAQ_ITEMS = [
   { q: '¿Puedo programar dosis múltiples?', a: 'Sí. Puedes elegir un paquete con varias dosis y la frecuencia que necesites. Cada dosis se agenda como visita independiente.' },
   { q: '¿Cuál es el tiempo de respuesta?', a: 'Respondemos en menos de 30 minutos en horario hábil.' },
   { q: '¿Puedo agendar para varios miembros de mi familia?', a: 'Sí. Aplicamos descuento automático por grupo familiar: 5% desde 2 personas, 10% desde 3 y 15% desde 4.' },
-  { q: '¿Cómo se realiza el pago?', a: 'Aceptamos transferencia bancaria, efectivo y tarjetas.' },
+  { q: '¿Cómo se realiza el pago?', a: 'Aceptamos transferencia bancaria y efectivo.' },
   { q: '¿Atienden urgencias?', a: 'Sí, atendemos urgencias con disponibilidad inmediata sujeta a agenda.' }
 ];
 
@@ -132,6 +132,125 @@ const appNetPrice = (a, services) => {
   }, 0), 0);
   const discount = a.beneficiaries.length >= 4 ? 0.15 : a.beneficiaries.length === 3 ? 0.10 : a.beneficiaries.length === 2 ? 0.05 : 0;
   return Math.round(gross * (1 - discount));
+};
+
+// ==================== VALIDACIÓN COMPLETA DE CITAS ====================
+const normalizeApp = (a) => {
+  let app = { ...a };
+  
+  // Normalizar beneficiaries
+  if (!app.beneficiaries || !Array.isArray(app.beneficiaries) || app.beneficiaries.length === 0) {
+    app.beneficiaries = [{
+      id: 'b0',
+      name: app.patientName || 'Paciente',
+      relationship: 'Titular',
+      services: app.serviceId ? [{ serviceId: app.serviceId, doses: 1, frequency: 'once', completedDoses: 0 }] : []
+    }];
+  }
+
+  // Normalizar servicios dentro de beneficiaries
+  app.beneficiaries = app.beneficiaries.map(b => ({
+    ...b,
+    services: (b.services || []).map(item => 
+      typeof item === 'string' 
+        ? { serviceId: item, doses: 1, frequency: 'once', completedDoses: 0 }
+        : { serviceId: item.serviceId, doses: item.doses || 1, frequency: item.frequency || 'once', completedDoses: item.completedDoses || 0 }
+    )
+  }));
+
+  // Campos obligatorios
+  if (!app.seriesId) app.seriesId = app.id || app.parentId || uid();
+  if (typeof app.doseNumber === 'undefined') app.doseNumber = 1;
+  if (!app.createdAt) app.createdAt = Date.now();
+
+  return app;
+};
+
+const validateAndFixAppointment = (app, patients, professionals, services) => {
+  let fixed = normalizeApp({ ...app });
+
+  let fixedIssues = [];
+
+  // 1. Paciente existe
+  if (!fixed.patientId || !patients.some(p => p.id === fixed.patientId)) {
+    const possiblePatient = patients.find(p => p.name === fixed.patientName);
+    if (possiblePatient) {
+      fixed.patientId = possiblePatient.id;
+      fixedIssues.push('Paciente reasignado automáticamente');
+    } else {
+      fixedIssues.push('Paciente no encontrado (cita huérfana)');
+    }
+  }
+
+  // 2. Profesional asignado existe
+  if (fixed.assignedTo && !professionals.some(p => p.id === fixed.assignedTo)) {
+    fixed.assignedTo = null;
+    fixed.assignedToName = null;
+    fixedIssues.push('Profesional asignado no existe → se quitó la asignación');
+  }
+
+  // 3. Servicios válidos
+  fixed.beneficiaries = fixed.beneficiaries.map(b => ({
+    ...b,
+    services: b.services.filter(item => {
+      const exists = services.some(s => s.id === item.serviceId);
+      if (!exists) fixedIssues.push(`Servicio ${item.serviceId} no existe → eliminado`);
+      return exists;
+    })
+  })).filter(b => b.services.length > 0);
+
+  // 4. Reglas de negocio
+  if (new Date(fixed.date) < new Date(todayISO())) {
+    fixedIssues.push('Fecha en el pasado → se permitió pero se marcó como advertencia');
+  }
+
+  if (fixed.time && !isTimeInOperatingHours(fixed.time)) {
+    fixedIssues.push('Hora fuera del horario operativo');
+  }
+
+  fixed.validationIssues = fixedIssues;
+  return fixed;
+};
+
+const validateAllAppointments = (apps, patients, professionals, services) => {
+  return apps.map(app => validateAndFixAppointment(app, patients, professionals, services));
+};
+
+// ==================== ACTUALIZAR saveAppointments ====================
+const saveAppointments = async (list, setAppointments, patients, professionals, services) => {
+  const validated = validateAllAppointments(list, patients, professionals, services);
+  setAppointments(validated);
+  await sset('enf:appointments', validated);
+  return validated;
+};
+
+// ==================== FUNCIONES DE PERSISTENCIA ====================
+const sget = async (k, def) => {
+  try {
+    const { data } = await supabase.from('app_storage').select('value').eq('key', k).single();
+    return data ? data.value : def;
+  } catch (e) {
+    console.error('Supabase read error:', e);
+    return def;
+  }
+};
+
+const sset = async (k, v) => {
+  try {
+    await supabase.from('app_storage').upsert({ key: k, value: v }, { onConflict: 'key' });
+  } catch (e) {
+    console.error('Supabase write error:', e);
+  }
+};
+
+const savePatients = async (list, setPatients) => {
+  setPatients(list);
+  await sset('enf:patients', list);
+};
+
+const saveProfessionals = async (list, setProfessionals) => {
+  setProfessionals(list);
+  await sset('enf:professionals', list);
 };
 
 // ==================== NORMALIZACIÓN Y VALIDACIÓN ====================
@@ -659,12 +778,19 @@ function AppointmentCard({ a, services, onCancel }) {
 }
 
 // ==================== ADMIN PANEL + MODALES ====================
-function AdminPanel({ user, setUser, services, saveServices, appointments, patients, professionals, notifications, saveAppointments, savePatients, saveProfessionals, addNotification, onLogout }) {
+function AdminPanel({ 
+  user, setUser, services, saveServices, appointments, patients, 
+  professionals, notifications, saveAppointments, savePatients, 
+  saveProfessionals, addNotification, onLogout 
+}) {
   const [tab, setTab] = useState('hoy');
   const [editingApp, setEditingApp] = useState(null);
 
   const isAdmin = user.role === 'admin';
   const visibleApps = isAdmin ? appointments : appointments.filter(a => a.assignedTo === user.id);
+  const handleSaveAppointments = async (newList) => {
+    await saveAppointments(newList, setAppointments, patients, professionals, services); // ← usa la nueva versión
+  };
 
   const confirmAppointment = async (appId) => {
     const app = appointments.find(a => a.id === appId);
@@ -675,30 +801,49 @@ function AdminPanel({ user, setUser, services, saveServices, appointments, patie
   };
 
   return (
-    <div className="min-h-screen">
-      <header className="bg-white border-b">
+    <div className="min-h-screen bg-slate-50">
+      <header className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <Stethoscope className="w-8 h-8 text-teal-600" />
-            <div className="font-bold text-2xl">Enfermereando</div>
+            <div className="font-bold text-2xl text-slate-900">Enfermereando</div>
           </div>
-          <button onClick={onLogout} className="text-slate-500">Cerrar sesión</button>
+          <div className="flex items-center gap-4">
+            <NotificationBell userId={user.id} notifications={notifications} />
+            <div className="text-right">
+              <div className="font-semibold">{user.name}</div>
+              <RoleBadge role={user.role} />
+            </div>
+            <button onClick={onLogout} className="p-2 hover:bg-slate-100 rounded-xl">
+              <LogOut className="w-5 h-5 text-slate-600" />
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex gap-2 mb-8">
+        {/* PESTAÑAS COMPLETAS */}
+        <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
           <TabButton active={tab === 'hoy'} onClick={() => setTab('hoy')} icon={Calendar}>Hoy</TabButton>
           <TabButton active={tab === 'calendario'} onClick={() => setTab('calendario')} icon={Calendar}>Calendario</TabButton>
+          <TabButton active={tab === 'integridad'} onClick={() => setTab('integridad')} icon={Shield}>Integridad</TabButton>
+          <TabButton active={tab === 'duplicados'} onClick={() => setTab('duplicados')} icon={Users}>Duplicados</TabButton>
         </div>
 
+        {/* CONTENIDO DE LAS PESTAÑAS */}
+        {tab === 'hoy' && <div className="text-center py-12 text-slate-400">Vista Hoy (en desarrollo)</div>}
         {tab === 'calendario' && <CalendarView appointments={visibleApps} onEdit={setEditingApp} />}
+        {tab === 'integridad' && <IntegrityDashboard appointments={appointments} patients={patients} professionals={professionals} services={services} currentUser={user} saveAppointments={saveAppointments} />}
+        {tab === 'duplicados' && <DuplicateMerger patients={patients} professionals={professionals} appointments={appointments} savePatients={savePatients} saveAppointments={saveAppointments} currentUser={user} />}
+
+        {/* MODAL DE EDICIÓN */}
         {editingApp && (
           <EditAppointmentModal 
             app={editingApp} 
             services={services} 
             onSave={(updates) => {
-              saveAppointments(appointments.map(a => a.id === updates.id ? { ...a, ...updates } : a));
+              const newList = appointments.map(a => a.id === updates.id ? { ...a, ...updates } : a);
+              await handleSaveAppointments(newList);   // ← validación automática
               setEditingApp(null);
             }} 
             onClose={() => setEditingApp(null)} 
@@ -709,23 +854,249 @@ function AdminPanel({ user, setUser, services, saveServices, appointments, patie
   );
 }
 
-function EditAppointmentModal({ app, services, onSave, onClose }) {
-  const [date, setDate] = useState(app.date);
-  const [time, setTime] = useState(app.time);
-  const [address, setAddress] = useState(app.address);
+// ==================== INTEGRITY DASHBOARD (COMPLETO) ====================
+function IntegrityDashboard({ appointments, patients, professionals, services, currentUser, saveAppointments }) {
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const runFullIntegrityCheck = () => {
+    setLoading(true);
+
+    const issues = [];
+
+    // 1. Validación de citas
+    const validatedApps = validateAllAppointments(appointments);
+    if (validatedApps.length !== appointments.length) {
+      issues.push({ type: 'error', message: `${appointments.length - validatedApps.length} citas tenían problemas de integridad y fueron corregidas.` });
+    }
+
+    // 2. Duplicados de pacientes
+    const dupPatients = findDuplicatePatients(patients);
+    if (dupPatients.length > 0) {
+      issues.push({ type: 'warning', message: `${dupPatients.length} grupos de pacientes duplicados detectados.` });
+    }
+
+    // 3. Duplicados de profesionales
+    const dupPros = findDuplicateProfessionals(professionals);
+    if (dupPros.length > 0) {
+      issues.push({ type: 'warning', message: `${dupPros.length} grupos de profesionales duplicados detectados.` });
+    }
+
+    // 4. Citas sin paciente válido
+    const orphanedApps = appointments.filter(app => !patients.some(p => p.id === app.patientId));
+    if (orphanedApps.length > 0) {
+      issues.push({ type: 'error', message: `${orphanedApps.length} citas huérfanas (sin paciente válido).` });
+    }
+
+    setReport({
+      totalIssues: issues.length,
+      errors: issues.filter(i => i.type === 'error').length,
+      warnings: issues.filter(i => i.type === 'warning').length,
+      issues
+    });
+
+    setLoading(false);
+  };
+
+  const autoFixAll = async () => {
+    const fixed = validateAllAppointments(appointments);
+    await saveAppointments(fixed);
+    alert('✅ Todos los problemas de integridad fueron corregidos automáticamente.');
+    runFullIntegrityCheck();
+  };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-white rounded-3xl w-full max-w-lg p-8">
-        <h3 className="text-xl font-bold mb-6">Editar atención</h3>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full mb-4 px-4 py-3 border rounded-2xl" />
-        <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full mb-4 px-4 py-3 border rounded-2xl" />
-        <input type="text" value={address} onChange={e => setAddress(e.target.value)} className="w-full mb-6 px-4 py-3 border rounded-2xl" />
-        <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 py-4 border rounded-3xl">Cancelar</button>
-          <button onClick={() => onSave({ id: app.id, date, time, address })} className="flex-1 py-4 bg-teal-600 text-white rounded-3xl">Guardar</button>
-        </div>
+    <div className="bg-white rounded-3xl p-8 shadow-sm">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold flex items-center gap-3">
+          <Shield className="w-7 h-7 text-teal-600" />
+          Panel de Integridad de Datos
+        </h2>
+        <button
+          onClick={runFullIntegrityCheck}
+          disabled={loading}
+          className="px-6 py-3 bg-teal-600 text-white rounded-2xl font-semibold flex items-center gap-2 hover:bg-teal-700 disabled:opacity-70"
+        >
+          {loading ? 'Analizando...' : 'Ejecutar chequeo completo'}
+        </button>
       </div>
+
+      {report && (
+        <>
+          <div className="grid grid-cols-3 gap-4 mb-8">
+            <StatCard label="Errores" value={report.errors} color="red" />
+            <StatCard label="Advertencias" value={report.warnings} color="amber" />
+            <StatCard label="Total Issues" value={report.totalIssues} color="teal" />
+          </div>
+
+          <div className="space-y-3">
+            {report.issues.map((issue, i) => (
+              <div key={i} className={`p-4 rounded-2xl flex gap-3 ${issue.type === 'error' ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}>
+                {issue.type === 'error' ? <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" /> : <Shield className="w-5 h-5 text-amber-600 mt-0.5" />}
+                <div className="flex-1 text-sm">{issue.message}</div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={autoFixAll}
+            className="mt-8 w-full py-4 bg-gradient-to-r from-teal-600 to-blue-600 text-white rounded-3xl font-semibold text-lg hover:shadow-lg transition"
+          >
+            Corregir todo automáticamente
+          </button>
+        </>
+      )}
+
+      {!report && (
+        <div className="text-center py-12 text-slate-400">
+          Presiona "Ejecutar chequeo completo" para analizar la integridad de los datos
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==================== DUPLICATE MERGER (COMPLETO) ====================
+function DuplicateMerger({ patients, professionals, appointments, savePatients, saveAppointments, currentUser }) {
+  const [activeTab, setActiveTab] = useState('patients');
+  const [selectedDuplicates, setSelectedDuplicates] = useState(null);
+
+  const patientDuplicates = findDuplicatePatients(patients);
+  const proDuplicates = findDuplicateProfessionals(professionals);
+
+  const mergePatients = async (group) => {
+    if (group.length < 2) return;
+    const master = group[0]; // El primero es el que se mantiene
+    const toDelete = group.slice(1);
+
+    let updatedPatients = [...patients];
+    let updatedAppointments = [...appointments];
+
+    toDelete.forEach(dup => {
+      // Reasignar citas
+      updatedAppointments = updatedAppointments.map(app =>
+        app.patientId === dup.id ? { ...app, patientId: master.id, patientName: master.name } : app
+      );
+      // Eliminar duplicado
+      updatedPatients = updatedPatients.filter(p => p.id !== dup.id);
+    });
+
+    await savePatients(updatedPatients);
+    await saveAppointments(updatedAppointments);
+    alert(`✅ ${toDelete.length} perfiles de pacientes fusionados correctamente`);
+    setSelectedDuplicates(null);
+  };
+
+  const mergeProfessionals = async (group) => {
+    if (group.length < 2) return;
+    const master = group[0];
+    const toDelete = group.slice(1);
+
+    let updatedPros = [...professionals];
+    let updatedApps = [...appointments];
+
+    toDelete.forEach(dup => {
+      updatedApps = updatedApps.map(app =>
+        app.assignedTo === dup.id ? { ...app, assignedTo: master.id, assignedToName: master.name } : app
+      );
+      updatedPros = updatedPros.filter(p => p.id !== dup.id);
+    });
+
+    await saveProfessionals(updatedPros);
+    await saveAppointments(updatedApps);
+    alert(`✅ ${toDelete.length} perfiles de profesionales fusionados correctamente`);
+    setSelectedDuplicates(null);
+  };
+
+  return (
+    <div className="bg-white rounded-3xl p-8">
+      <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
+        <Users className="w-7 h-7 text-teal-600" />
+        Fusión de Perfiles Duplicados
+      </h2>
+
+      <div className="flex border-b mb-6">
+        <button
+          onClick={() => setActiveTab('patients')}
+          className={`flex-1 py-3 font-semibold ${activeTab === 'patients' ? 'border-b-4 border-teal-600 text-teal-700' : 'text-slate-500'}`}
+        >
+          Pacientes ({patientDuplicates.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('professionals')}
+          className={`flex-1 py-3 font-semibold ${activeTab === 'professionals' ? 'border-b-4 border-teal-600 text-teal-700' : 'text-slate-500'}`}
+        >
+          Profesionales ({proDuplicates.length})
+        </button>
+      </div>
+
+      {activeTab === 'patients' && (
+        <div className="space-y-4">
+          {patientDuplicates.map((group, idx) => (
+            <div key={idx} className="border border-slate-200 rounded-2xl p-5">
+              <div className="flex justify-between items-center">
+                <div>
+                  <span className="font-semibold">Grupo de duplicados:</span>
+                  <span className="ml-3 text-teal-600">{group.map(p => p.name).join(' • ')}</span>
+                </div>
+                <button
+                  onClick={() => mergePatients(group)}
+                  className="px-6 py-2 bg-teal-600 text-white rounded-2xl text-sm font-semibold"
+                >
+                  Fusionar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'professionals' && (
+        <div className="space-y-4">
+          {proDuplicates.map((group, idx) => (
+            <div key={idx} className="border border-slate-200 rounded-2xl p-5">
+              <div className="flex justify-between items-center">
+                <div>
+                  <span className="font-semibold">Grupo de duplicados:</span>
+                  <span className="ml-3 text-teal-600">{group.map(p => p.name).join(' • ')}</span>
+                </div>
+                <button
+                  onClick={() => mergeProfessionals(group)}
+                  className="px-6 py-2 bg-teal-600 text-white rounded-2xl text-sm font-semibold"
+                >
+                  Fusionar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// COMPONENTES EXTRAS //
+
+function IntegrityDashboard({ appointments, patients, professionals, services, currentUser, saveAppointments }) {
+  return (
+    <div className="bg-white rounded-3xl p-8">
+      <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
+        <Shield className="w-6 h-6 text-teal-600" /> Panel de Integridad de Datos
+      </h2>
+      <p className="text-slate-600">Aquí se mostrarán alertas de integridad, duplicados y validaciones.</p>
+      {/* Puedes expandir más tarde */}
+    </div>
+  );
+}
+
+function DuplicateMerger({ patients, professionals, appointments, savePatients, saveAppointments, currentUser }) {
+  return (
+    <div className="bg-white rounded-3xl p-8">
+      <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
+        <Users className="w-6 h-6 text-teal-600" /> Fusión de Duplicados
+      </h2>
+      <p className="text-slate-600">Herramienta para fusionar perfiles duplicados de pacientes y profesionales.</p>
+      {/* Puedes expandir más tarde */}
     </div>
   );
 }
