@@ -2129,6 +2129,7 @@ function ServicesManager({ services, saveServices }) {
   }
 
 // ==================== APP PRINCIPAL - VERSIÓN COMPLETA ====================
+// ==================== APP PRINCIPAL - CON ADMIN CREADO ====================
 export default function App() {
   const [view, setView] = useState('landing');
   const [user, setUser] = useState(null);
@@ -2139,7 +2140,6 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ==================== CARGAR DATOS ====================
   useEffect(() => {
     (async () => {
       let svcs = await sget('enf:services', DEFAULT_SERVICES);
@@ -2148,16 +2148,23 @@ export default function App() {
       let profs = await sget('enf:professionals', []);
       const notifs = await sget('enf:notifications', []);
 
-      // Admin por defecto
-      if (!profs.some(p => p.role === 'admin')) {
-        profs = [{
+      // ==================== CREACIÓN DEL ADMINISTRADOR ====================
+      const adminExists = profs.some(p => p.role === 'admin' || p.email === 'admin@enfermereando.cl');
+      
+      if (!adminExists) {
+        const defaultAdmin = {
           id: 'admin-default',
-          username: 'admin',
-          password: 'enfermera2026',
           name: PROFESSIONAL_NAME,
+          email: 'admin@enfermereando.cl',
+          password: 'enfermera2026',
+          phone: PHONE,
           role: 'admin',
-          active: true
-        }].concat(profs);
+          status: 'active',
+          createdAt: new Date().toISOString()
+        };
+        profs = [defaultAdmin, ...profs];
+        await sset('enf:professionals', profs);
+        console.log('✅ Administrador creado automáticamente:', defaultAdmin);
       }
 
       setServices(svcs);
@@ -2169,88 +2176,32 @@ export default function App() {
     })();
   }, []);
 
-  // ==================== GUARDAR CITAS ====================
   const saveAppointmentsLocal = async (list) => {
     setAppointments(list);
     await sset('enf:appointments', list);
   };
 
-  // ==================== LOGIN ====================
   const login = (loggedUser) => {
     setUser(loggedUser);
-    if (loggedUser.role === 'patient') {
-      setView('patient');
-    } else if (loggedUser.role === 'admin') {
-      setView('admin');
-    } else {
-      setView('professional');   // ← Nuevo: Dashboard del Profesional
-    }
+    if (loggedUser.role === 'patient') setView('patient');
+    else if (loggedUser.role === 'admin') setView('admin');
+    else setView('professional');
   };
 
-  // ==================== LOGOUT ====================
   const logout = () => {
     setUser(null);
     setView('landing');
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-2xl text-slate-400">
-        Cargando Enfermereando...
-      </div>
-    );
-  }
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-2xl">Cargando...</div>;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50">
-      {/* LANDING */}
       {view === 'landing' && <Landing services={services.filter(s => s.active)} onLogin={() => setView('login')} />}
-
-      {/* LOGIN + REGISTRO + RECUPERACIÓN */}
-      {view === 'login' && (
-        <LoginView 
-          onLogin={login} 
-          onBack={() => setView('landing')} 
-          patients={patients} 
-          professionals={professionals} 
-        />
-      )}
-
-      {/* PORTAL DEL PACIENTE */}
-      {view === 'patient' && user && user.role === 'patient' && (
-        <PatientPortal 
-          user={user} 
-          services={services.filter(s => s.active)} 
-          appointments={appointments} 
-          saveAppointments={saveAppointmentsLocal} 
-          onLogout={logout} 
-        />
-      )}
-
-      {/* DASHBOARD DEL PROFESIONAL (NUEVO) */}
-      {view === 'professional' && user && user.role === 'professional' && (
-        <ProfessionalDashboard 
-          user={user} 
-          services={services} 
-          appointments={appointments} 
-          saveAppointments={saveAppointmentsLocal} 
-          onLogout={logout} 
-        />
-      )}
-
-      {/* PANEL DEL ADMINISTRADOR */}
-      {view === 'admin' && user && user.role === 'admin' && (
-        <AdminPanel 
-          user={user} 
-          services={services} 
-          appointments={appointments} 
-          patients={patients} 
-          professionals={professionals} 
-          notifications={notifications} 
-          saveAppointments={saveAppointmentsLocal} 
-          onLogout={logout} 
-        />
-      )}
+      {view === 'login' && <LoginView onLogin={login} onBack={() => setView('landing')} patients={patients} professionals={professionals} />}
+      {view === 'patient' && user && user.role === 'patient' && <PatientPortal user={user} services={services.filter(s => s.active)} appointments={appointments} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
+      {view === 'professional' && user && user.role === 'professional' && <ProfessionalDashboard user={user} services={services} appointments={appointments} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
+      {view === 'admin' && user && user.role === 'admin' && <AdminPanel user={user} services={services} appointments={appointments} patients={patients} professionals={professionals} notifications={notifications} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
     </div>
   );
 }
