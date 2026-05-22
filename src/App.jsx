@@ -60,46 +60,6 @@ const FREQUENCIES = [
   { id: 'monthly', label: 'Mensual', days: 30 }
 ];
 
-// ==================== CHECKLISTS POR SERVICIO ====================
-const SERVICE_CHECKLISTS = {
-  'inj-anti': [
-    { id: 'consent', label: 'Consentimiento informado obtenido' },
-    { id: 'sterile', label: 'Técnica aséptica correcta' },
-    { id: 'injection', label: 'Inyección aplicada correctamente' },
-    { id: 'observation', label: 'Observación post-aplicación (15 min)' },
-    { id: 'instructions', label: 'Indicaciones entregadas al paciente' }
-  ],
-  'inj-im': [
-    { id: 'site', label: 'Sitio de punción seleccionado' },
-    { id: 'sterile', label: 'Técnica estéril' },
-    { id: 'aspiration', label: 'Aspiración negativa' },
-    { id: 'injection', label: 'Medicamento administrado' },
-    { id: 'tolerance', label: 'Tolerancia del paciente' }
-  ],
-  'inj-ev': [
-    { id: 'vein', label: 'Acceso venoso permeable' },
-    { id: 'sterile', label: 'Técnica estéril' },
-    { id: 'infusion', label: 'Infusión iniciada a velocidad correcta' },
-    { id: 'monitoring', label: 'Monitoreo durante infusión' }
-  ],
-  'cur-simple': [
-    { id: 'cleaning', label: 'Limpieza de herida' },
-    { id: 'dressing', label: 'Aplicación de apósito' },
-    { id: 'instructions', label: 'Indicaciones de cuidados en casa' }
-  ],
-  'cur-adv': [
-    { id: 'assessment', label: 'Evaluación de la herida' },
-    { id: 'debridement', label: 'Desbridamiento realizado' },
-    { id: 'dressing', label: 'Apósito avanzado aplicado' },
-    { id: 'instructions', label: 'Plan de cuidados entregado' }
-  ],
-  'exam': [
-    { id: 'reviewed', label: 'Exámenes revisados' },
-    { id: 'findings', label: 'Hallazgos relevantes documentados' },
-    { id: 'plan', label: 'Plan de acción definido' }
-  ]
-};
-
 const TEMPLATES = {
   'inj-anti': 'Medicamento administrado:\nDosis:\nVía / Sitio de punción:\nReacción adversa: No / Sí\nFecha próxima dosis:',
   'inj-im': 'Medicamento administrado:\nDosis:\nSitio de punción:\nReacción adversa: No / Sí\nTolerancia:',
@@ -1678,7 +1638,7 @@ function AdminPanel({
   );
 }
 
-// ==================== MONITORING PANEL - VERSIÓN FORMULARIO SIMPLE ====================
+// ==================== MONITORING PANEL - VERSIÓN FINAL ESTABLE ====================
 function MonitoringPanel({ 
   appointments, 
   patients, 
@@ -1699,10 +1659,28 @@ function MonitoringPanel({
     ? myAppointments 
     : myAppointments.filter(a => a.status === filterStatus);
 
-  const updateAppointment = async (appId, updates) => {
-    const updated = appointments.map(app => 
-      app.id === appId ? { ...app, ...updates } : app
-    );
+  const updateField = async (appId, field, value) => {
+    const updated = appointments.map(app => {
+      if (app.id !== appId) return app;
+      return { ...app, [field]: value };
+    });
+    await saveAppointments(updated);
+  };
+
+  const updateDoses = async (appId, completedDoses) => {
+    const updated = appointments.map(app => {
+      if (app.id !== appId) return app;
+      return {
+        ...app,
+        beneficiaries: app.beneficiaries.map(ben => ({
+          ...ben,
+          services: ben.services.map(service => ({
+            ...service,
+            completedDoses: parseInt(completedDoses) || 0
+          }))
+        }))
+      };
+    });
     await saveAppointments(updated);
   };
 
@@ -1712,7 +1690,6 @@ function MonitoringPanel({
         <h2 className="text-2xl font-bold">Monitoreo de Atenciones</h2>
       </div>
 
-      {/* Filtros */}
       <div className="flex gap-2 mb-6 flex-wrap">
         {['all', 'pendiente', 'asignada', 'en_tratamiento', 'completada'].map(s => (
           <button
@@ -1744,22 +1721,19 @@ function MonitoringPanel({
                       {new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}
                     </div>
                   </div>
-                  <button 
-                    onClick={() => onEdit(app)}
-                    className="text-teal-600 hover:text-teal-700 font-medium"
-                  >
+                  <button onClick={() => onEdit(app)} className="text-teal-600 hover:text-teal-700">
                     Ver detalle →
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   {/* Estado */}
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Estado</label>
+                    <label className="block text-xs font-medium text-slate-500 mb-2">Estado</label>
                     <select
                       value={app.status || 'pendiente'}
-                      onChange={(e) => updateAppointment(app.id, { status: e.target.value })}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                      onChange={(e) => updateField(app.id, 'status', e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 bg-white"
                     >
                       <option value="pendiente">Pendiente</option>
                       <option value="asignada">Asignada</option>
@@ -1768,47 +1742,32 @@ function MonitoringPanel({
                     </select>
                   </div>
 
-                  {/* Progreso de dosis (si es serie) */}
+                  {/* Dosis Completadas */}
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Dosis completadas</label>
+                    <label className="block text-xs font-medium text-slate-500 mb-2">Dosis completadas</label>
                     <input
                       type="number"
+                      min="0"
                       value={app.beneficiaries?.[0]?.services?.[0]?.completedDoses || 0}
-                      onChange={(e) => {
-                        const value = parseInt(e.target.value) || 0;
-                        const updated = appointments.map(a => {
-                          if (a.id !== app.id) return a;
-                          return {
-                            ...a,
-                            beneficiaries: a.beneficiaries.map(ben => ({
-                              ...ben,
-                              services: ben.services.map(s => ({
-                                ...s,
-                                completedDoses: value
-                              }))
-                            }))
-                          };
-                        });
-                        saveAppointments(updated);
-                      }}
+                      onChange={(e) => updateDoses(app.id, e.target.value)}
                       className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
                     />
                   </div>
 
                   {/* Notas */}
                   <div className="md:col-span-3">
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Notas / Observaciones</label>
+                    <label className="block text-xs font-medium text-slate-500 mb-2">Notas / Observaciones</label>
                     <textarea
                       value={app.notes || ''}
-                      onChange={(e) => updateAppointment(app.id, { notes: e.target.value })}
+                      onChange={(e) => updateField(app.id, 'notes', e.target.value)}
                       rows={3}
                       className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
-                      placeholder="Escribe aquí el avance, observaciones o incidencias..."
+                      placeholder="Escribe aquí observaciones, evolución o incidencias..."
                     />
                   </div>
                 </div>
 
-                <div className="text-xs text-slate-500 mt-4">
+                <div className="text-xs text-slate-500 mt-5 pt-4 border-t">
                   Total estimado: <span className="font-medium text-teal-600">{fmtCLP(net)}</span>
                 </div>
               </div>
