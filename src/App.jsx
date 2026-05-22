@@ -88,6 +88,97 @@ const FAQ_ITEMS = [
 
 const RELATIONSHIPS = ['Titular','Cónyuge','Hijo/a','Padre','Madre','Abuelo/a','Hermano/a','Otro familiar','Otro'];
 
+// ==================== VALIDACIÓN DE INTEGRIDAD REFERENCIAL (NUEVO) ====================
+const validateReferentialIntegrity = (appointments, patients, professionals, services) => {
+  const issues = [];
+  const fixedAppointments = [...appointments];
+
+  // 1. Citas con patientId inexistente (huérfanas)
+  fixedAppointments.forEach((app, index) => {
+    if (!app.patientId || !patients.some(p => p.id === app.patientId)) {
+      const possiblePatient = patients.find(p => p.name === app.patientName);
+      if (possiblePatient) {
+        fixedAppointments[index] = { ...app, patientId: possiblePatient.id };
+        issues.push({
+          type: 'warning',
+          entity: 'appointment',
+          id: app.id,
+          message: `Paciente reasignado automáticamente (cita ${app.id})`
+        });
+      } else {
+        issues.push({
+          type: 'error',
+          entity: 'appointment',
+          id: app.id,
+          message: `Cita huérfana - paciente inexistente (ID: ${app.patientId || 'sin ID'})`
+        });
+      }
+    }
+  });
+
+  // 2. Citas con assignedTo (profesional) inexistente
+  fixedAppointments.forEach((app, index) => {
+    if (app.assignedTo && !professionals.some(p => p.id === app.assignedTo)) {
+      fixedAppointments[index] = { ...app, assignedTo: null, assignedToName: null };
+      issues.push({
+        type: 'warning',
+        entity: 'appointment',
+        id: app.id,
+        message: `Profesional asignado inexistente → asignación removida (cita ${app.id})`
+      });
+    }
+  });
+
+  // 3. Servicios referenciados inexistentes
+  fixedAppointments.forEach((app, index) => {
+    if (!app.beneficiaries) return;
+    let hasChanges = false;
+    const newBeneficiaries = app.beneficiaries.map(ben => {
+      const validServices = ben.services.filter(item => {
+        const exists = services.some(s => s.id === item.serviceId);
+        if (!exists) {
+          hasChanges = true;
+          issues.push({
+            type: 'warning',
+            entity: 'appointment',
+            id: app.id,
+            message: `Servicio ${item.serviceId} inexistente → eliminado de cita ${app.id}`
+          });
+          return false;
+        }
+        return true;
+      });
+      return { ...ben, services: validServices };
+    }).filter(ben => ben.services.length > 0);
+
+    if (hasChanges || newBeneficiaries.length !== app.beneficiaries.length) {
+      fixedAppointments[index] = { ...app, beneficiaries: newBeneficiaries };
+    }
+  });
+
+  // 4. Series inconsistentes (citas con seriesId pero sin otras citas en la serie)
+  const seriesMap = {};
+  fixedAppointments.forEach(app => {
+    if (app.seriesId) {
+      if (!seriesMap[app.seriesId]) seriesMap[app.seriesId] = [];
+      seriesMap[app.seriesId].push(app);
+    }
+  });
+  Object.keys(seriesMap).forEach(seriesId => {
+    const series = seriesMap[seriesId];
+    if (series.length === 1) {
+      issues.push({
+        type: 'warning',
+        entity: 'series',
+        id: seriesId,
+        message: `Serie ${seriesId} con una sola cita (posible serie incompleta)`
+      });
+    }
+  });
+
+  return { issues, fixedAppointments };
+};
+
 // ==================== HELPERS PARA SERIES ====================
 const getFrequencyLabel = (freqId) => FREQUENCIES.find(f => f.id === freqId)?.label || 'Una sola vez';
 
@@ -326,38 +417,38 @@ const normalizeApp = (a) => {
 };
 
 const validateAndFixAppointment = (app, patients, professionals, services) => {
-  let fixed = normalizeApp({ ...app });
-
+  let fixed = { ...app };
   let fixedIssues = [];
 
+  // Normalización previa
+  fixed = normalizeApp(fixed);
+
+  // === INTEGRIDAD REFERENCIAL ===
   if (!fixed.patientId || !patients.some(p => p.id === fixed.patientId)) {
     const possiblePatient = patients.find(p => p.name === fixed.patientName);
     if (possiblePatient) {
       fixed.patientId = possiblePatient.id;
       fixedIssues.push('Paciente reasignado automáticamente');
     } else {
-      fixedIssues.push('Paciente no encontrado (cita huérfana)');
+      fixedIssues.push('Cita huérfana (paciente inexistente)');
     }
   }
 
   if (fixed.assignedTo && !professionals.some(p => p.id === fixed.assignedTo)) {
     fixed.assignedTo = null;
     fixed.assignedToName = null;
-    fixedIssues.push('Profesional asignado no existe → se quitó la asignación');
+    fixedIssues.push('Profesional inexistente → asignación removida');
   }
 
+  // Servicios
   fixed.beneficiaries = fixed.beneficiaries.map(b => ({
     ...b,
     services: b.services.filter(item => {
       const exists = services.some(s => s.id === item.serviceId);
-      if (!exists) fixedIssues.push(`Servicio ${item.serviceId} no existe → eliminado`);
+      if (!exists) fixedIssues.push(`Servicio ${item.serviceId} inexistente → eliminado`);
       return exists;
     })
   })).filter(b => b.services.length > 0);
-
-  if (new Date(fixed.date) < new Date(todayISO())) {
-    fixedIssues.push('Fecha en el pasado → se permitió pero se marcó como advertencia');
-  }
 
   fixed.validationIssues = fixedIssues;
   return fixed;
@@ -1390,6 +1481,19 @@ function AdminPanel({
   const [tab, setTab] = useState('hoy');
   const [editingApp, setEditingApp] = useState(null);
 
+  {tab === 'integridad' && (
+    <IntegrityDashboard 
+      appointments={appointments} 
+      patients={patients} 
+      professionals={professionals} 
+      services={services} 
+      currentUser={user} 
+      saveAppointments={handleSaveAppointments} 
+    />
+  )}
+  {tab === 'duplicados' && <DuplicateMerger ... />}
+}
+
   const isAdmin = user.role === 'admin';
   const visibleApps = isAdmin ? appointments : appointments.filter(a => a.assignedTo === user.id);
 
@@ -1496,7 +1600,7 @@ function AdminPanel({
   );
 }
 
-// ==================== INTEGRITY DASHBOARD (COMPLETO) ====================
+// ==================== INTEGRITY DASHBOARD ACTUALIZADO (con validación referencial) ====================
 function IntegrityDashboard({ appointments, patients, professionals, services, currentUser, saveAppointments }) {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1504,36 +1608,26 @@ function IntegrityDashboard({ appointments, patients, professionals, services, c
   const runFullIntegrityCheck = () => {
     setLoading(true);
 
-    const issues = [];
+    const referential = validateReferentialIntegrity(appointments, patients, professionals, services);
+    const validatedApps = validateAllAppointments(appointments, patients, professionals, services);
 
-    // 1. Validación de citas
-    const validatedApps = validateAllAppointments(appointments);
-    if (validatedApps.length !== appointments.length) {
-      issues.push({ type: 'error', message: `${appointments.length - validatedApps.length} citas tenían problemas de integridad y fueron corregidas.` });
-    }
-
-    // 2. Duplicados de pacientes
-    const dupPatients = findDuplicatePatients(patients);
-    if (dupPatients.length > 0) {
-      issues.push({ type: 'warning', message: `${dupPatients.length} grupos de pacientes duplicados detectados.` });
-    }
-
-    // 3. Duplicados de profesionales
-    const dupPros = findDuplicateProfessionals(professionals);
-    if (dupPros.length > 0) {
-      issues.push({ type: 'warning', message: `${dupPros.length} grupos de profesionales duplicados detectados.` });
-    }
-
-    // 4. Citas sin paciente válido
-    const orphanedApps = appointments.filter(app => !patients.some(p => p.id === app.patientId));
-    if (orphanedApps.length > 0) {
-      issues.push({ type: 'error', message: `${orphanedApps.length} citas huérfanas (sin paciente válido).` });
-    }
+    const issues = [
+      ...referential.issues,
+      ...validatedApps
+        .filter(a => a.validationIssues && a.validationIssues.length > 0)
+        .flatMap(a => a.validationIssues.map(msg => ({
+          type: 'warning',
+          entity: 'appointment',
+          id: a.id,
+          message: msg
+        })))
+    ];
 
     setReport({
       totalIssues: issues.length,
       errors: issues.filter(i => i.type === 'error').length,
       warnings: issues.filter(i => i.type === 'warning').length,
+      referentialIssues: referential.issues,
       issues
     });
 
@@ -1541,18 +1635,23 @@ function IntegrityDashboard({ appointments, patients, professionals, services, c
   };
 
   const autoFixAll = async () => {
-    const fixed = validateAllAppointments(appointments);
-    await saveAppointments(fixed);
-    alert('✅ Todos los problemas de integridad fueron corregidos automáticamente.');
+    // 1. Validación referencial + corrección automática
+    const { fixedAppointments } = validateReferentialIntegrity(appointments, patients, professionals, services);
+    
+    // 2. Validación completa
+    const fullyValidated = validateAllAppointments(fixedAppointments, patients, professionals, services);
+    
+    await saveAppointments(fullyValidated);
+    alert('✅ Integridad referencial y validación completa aplicada automáticamente.');
     runFullIntegrityCheck();
   };
 
   return (
-    <div className="bg-white rounded-3xl p-8 shadow-sm">
+    <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold flex items-center gap-3">
           <Shield className="w-7 h-7 text-teal-600" />
-          Panel de Integridad de Datos
+          Panel de Integridad Referencial
         </h2>
         <button
           onClick={runFullIntegrityCheck}
@@ -1571,11 +1670,17 @@ function IntegrityDashboard({ appointments, patients, professionals, services, c
             <StatCard label="Total Issues" value={report.totalIssues} color="teal" />
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-96 overflow-y-auto">
             {report.issues.map((issue, i) => (
-              <div key={i} className={`p-4 rounded-2xl flex gap-3 ${issue.type === 'error' ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}>
+              <div
+                key={i}
+                className={`p-4 rounded-2xl flex gap-3 ${issue.type === 'error' ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}
+              >
                 {issue.type === 'error' ? <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" /> : <Shield className="w-5 h-5 text-amber-600 mt-0.5" />}
-                <div className="flex-1 text-sm">{issue.message}</div>
+                <div className="flex-1">
+                  <div className="text-sm font-medium">{issue.message}</div>
+                  {issue.entity && <div className="text-xs text-slate-500 mt-1">Entidad: {issue.entity} • ID: {issue.id}</div>}
+                </div>
               </div>
             ))}
           </div>
@@ -1584,14 +1689,14 @@ function IntegrityDashboard({ appointments, patients, professionals, services, c
             onClick={autoFixAll}
             className="mt-8 w-full py-4 bg-gradient-to-r from-teal-600 to-blue-600 text-white rounded-3xl font-semibold text-lg hover:shadow-lg transition"
           >
-            Corregir todo automáticamente
+            Corregir todo automáticamente (Integridad Referencial)
           </button>
         </>
       )}
 
       {!report && (
         <div className="text-center py-12 text-slate-400">
-          Presiona "Ejecutar chequeo completo" para analizar la integridad de los datos
+          Presiona "Ejecutar chequeo completo" para validar referencias entre citas, pacientes, profesionales y servicios
         </div>
       )}
     </div>
