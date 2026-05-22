@@ -134,6 +134,114 @@ const appNetPrice = (a, services) => {
   return Math.round(gross * (1 - discount));
 };
 
+// ==================== NOTIFICACIONES PUSH (BROWSER) ====================
+let pushSubscription = null;
+
+const requestPushPermission = async () => {
+  if (!('Notification' in window) || !('PushManager' in window)) {
+    console.warn('Push notifications no soportadas en este navegador');
+    return false;
+  }
+
+  if (Notification.permission === 'granted') return true;
+  
+  const permission = await Notification.requestPermission();
+  return permission === 'granted';
+};
+
+const sendPushNotification = (title, body, icon = '/icon-192.png') => {
+  if (Notification.permission !== 'granted') return;
+  
+  new Notification(title, {
+    body: body,
+    icon: icon,
+    tag: 'enfermereando-notification',
+    requireInteraction: false
+  });
+};
+
+function NotificationBell({ userId, notifications, markNotifRead, markAllNotifsRead }) {
+  const [open, setOpen] = useState(false);
+  const myNotifs = notifications.filter(n => n.userId === userId).slice(0, 20);
+  const unreadCount = myNotifs.filter(n => !n.read).length;
+
+  return (
+    <div className="relative">
+      <button 
+        onClick={() => setOpen(!open)} 
+        className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors"
+      >
+        <Bell className="w-5 h-5 text-slate-600" />
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">
+            {unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-12 z-40 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b flex justify-between items-center">
+              <div className="font-semibold">Notificaciones</div>
+              {unreadCount > 0 && (
+                <button onClick={() => markAllNotifsRead(userId)} className="text-xs text-teal-600 font-medium">
+                  Marcar todo como leído
+                </button>
+              )}
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {myNotifs.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-sm">No hay notificaciones</div>
+              ) : (
+                myNotifs.map(notif => (
+                  <div 
+                    key={notif.id} 
+                    onClick={() => markNotifRead(notif.id)}
+                    className={`px-4 py-3 border-b hover:bg-slate-50 cursor-pointer ${!notif.read ? 'bg-teal-50' : ''}`}
+                  >
+                    <div className="font-medium text-sm">{notif.title}</div>
+                    <div className="text-xs text-slate-600 mt-1 line-clamp-2">{notif.body}</div>
+                    <div className="text-[10px] text-slate-400 mt-2">{new Date(notif.createdAt).toLocaleString('es-CL')}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ==================== INTEGRACIÓN CON SUPABASE REALTIME ====================
+const setupRealtimeNotifications = (userId, addNotification) => {
+  if (!userId) return;
+
+  const channel = supabase
+    .channel(`notifications:${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'app_storage',
+        filter: `key=eq.enf:notifications`
+      },
+      (payload) => {
+        const newNotif = payload.new.value.find(n => n.userId === userId && !n.read);
+        if (newNotif) {
+          addNotification(newNotif);
+          sendPushNotification(newNotif.title, newNotif.body);
+        }
+      }
+    )
+    .subscribe();
+
+  return () => supabase.removeChannel(channel);
+};
+
 // ==================== VALIDACIÓN COMPLETA DE CITAS ====================
 const normalizeApp = (a) => {
   let app = { ...a };
@@ -777,31 +885,58 @@ function AppointmentCard({ a, services, onCancel }) {
   );
 }
 
-// ==================== ADMIN PANEL + MODALES ====================
+// ==================== ADMIN PANEL COMPLETO ====================
 function AdminPanel({ 
-  user, setUser, services, saveServices, appointments, patients, 
-  professionals, notifications, saveAppointments, savePatients, 
-  saveProfessionals, addNotification, onLogout 
+  user, 
+  setUser, 
+  services, 
+  saveServices, 
+  appointments, 
+  patients, 
+  professionals, 
+  notifications, 
+  saveAppointments, 
+  savePatients, 
+  saveProfessionals, 
+  addNotification, 
+  onLogout 
 }) {
   const [tab, setTab] = useState('hoy');
   const [editingApp, setEditingApp] = useState(null);
 
   const isAdmin = user.role === 'admin';
   const visibleApps = isAdmin ? appointments : appointments.filter(a => a.assignedTo === user.id);
+
+  // Función auxiliar para guardar con validación
   const handleSaveAppointments = async (newList) => {
-    await saveAppointments(newList, setAppointments, patients, professionals, services); // ← usa la nueva versión
+    await saveAppointments(newList, setAppointments, patients, professionals, services);
   };
 
   const confirmAppointment = async (appId) => {
     const app = appointments.find(a => a.id === appId);
     if (!app) return;
-    const updated = { ...app, status: 'asignada', assignedTo: user.id, assignedToName: user.name };
-    await saveAppointments([...appointments.map(a => a.id === appId ? updated : a)]);
+
+    // Validación antes de confirmar
+    const validatedApp = validateAndFixAppointment(app, patients, professionals, services, appointments);
+    if (validatedApp.validationIssues && validatedApp.validationIssues.length > 0) {
+      alert('⚠️ Problemas detectados antes de confirmar:\n• ' + validatedApp.validationIssues.join('\n• '));
+    }
+
+    const updated = { 
+      ...validatedApp, 
+      status: 'asignada', 
+      assignedTo: user.id, 
+      assignedToName: user.name 
+    };
+
+    const newList = appointments.map(a => a.id === appId ? updated : a);
+    await handleSaveAppointments(newList);
     await sendWhatsAppToAdmin(updated, 'confirmed', services);
   };
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* HEADER */}
       <header className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -822,26 +957,47 @@ function AdminPanel({
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* PESTAÑAS COMPLETAS */}
-        <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
+        {/* PESTAÑAS */}
+        <div className="flex gap-2 mb-8 overflow-x-auto pb-2 border-b">
           <TabButton active={tab === 'hoy'} onClick={() => setTab('hoy')} icon={Calendar}>Hoy</TabButton>
           <TabButton active={tab === 'calendario'} onClick={() => setTab('calendario')} icon={Calendar}>Calendario</TabButton>
           <TabButton active={tab === 'integridad'} onClick={() => setTab('integridad')} icon={Shield}>Integridad</TabButton>
           <TabButton active={tab === 'duplicados'} onClick={() => setTab('duplicados')} icon={Users}>Duplicados</TabButton>
         </div>
 
-        {/* CONTENIDO DE LAS PESTAÑAS */}
-        {tab === 'hoy' && <div className="text-center py-12 text-slate-400">Vista Hoy (en desarrollo)</div>}
+        {/* CONTENIDO SEGÚN PESTAÑA */}
+        {tab === 'hoy' && <div className="text-center py-12 text-slate-400">Vista "Hoy" (próximamente con lista de citas del día)</div>}
+        
         {tab === 'calendario' && <CalendarView appointments={visibleApps} onEdit={setEditingApp} />}
-        {tab === 'integridad' && <IntegrityDashboard appointments={appointments} patients={patients} professionals={professionals} services={services} currentUser={user} saveAppointments={saveAppointments} />}
-        {tab === 'duplicados' && <DuplicateMerger patients={patients} professionals={professionals} appointments={appointments} savePatients={savePatients} saveAppointments={saveAppointments} currentUser={user} />}
+        
+        {tab === 'integridad' && (
+          <IntegrityDashboard 
+            appointments={appointments} 
+            patients={patients} 
+            professionals={professionals} 
+            services={services} 
+            currentUser={user} 
+            saveAppointments={handleSaveAppointments} 
+          />
+        )}
+        
+        {tab === 'duplicados' && (
+          <DuplicateMerger 
+            patients={patients} 
+            professionals={professionals} 
+            appointments={appointments} 
+            savePatients={savePatients} 
+            saveAppointments={handleSaveAppointments} 
+            currentUser={user} 
+          />
+        )}
 
-        {/* MODAL DE EDICIÓN */}
+        {/* MODAL DE EDICIÓN DE CITA */}
         {editingApp && (
           <EditAppointmentModal 
             app={editingApp} 
             services={services} 
-            onSave={async (updates) => {                    // ← AQUÍ SE AGREGÓ "async"
+            onSave={async (updates) => {
               const newList = appointments.map(a => a.id === updates.id ? { ...a, ...updates } : a);
               await handleSaveAppointments(newList);
               setEditingApp(null);
@@ -1130,6 +1286,11 @@ export default function App() {
       setProfessionals(profs);
       setNotifications(notifs);
       setLoading(false);
+
+      if (user) {
+        const cleanup = setupRealtimeNotifications(user.id, addNotification);
+        return cleanup;
+      }
     })();
   }, []);
 
@@ -1161,6 +1322,9 @@ export default function App() {
         delete safe.password;
         setUser({ role: 'patient', ...safe });
         setView('patient');
+        requestPushPermission().then(granted => {
+          if (granted) console.log('✅ Notificaciones push habilitadas');
+        });
         return { ok: true };
       }
       const pat = patients.find(p => p.username.toLowerCase() === data.username.toLowerCase());
