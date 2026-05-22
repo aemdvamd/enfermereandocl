@@ -388,7 +388,14 @@ function CalendarView({ appointments, onEdit }) {
 }
 
 /* ============================== LOGIN VIEW  ============================================= */
-function LoginView({ onLogin, onBack, patients = [], professionals = [] }) {
+function LoginView({ 
+  onLogin, 
+  onBack, 
+  patients = [], 
+  professionals = [],
+  setPatients,
+  setProfessionals 
+}) {
   const [tab, setTab] = useState('login'); // login | register | recovery
   const [role, setRole] = useState('patient');
   const [email, setEmail] = useState('');
@@ -398,7 +405,6 @@ function LoginView({ onLogin, onBack, patients = [], professionals = [] }) {
   const [comuna, setComuna] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // ==================== VALIDACIÓN DE EMAIL ====================
   const isValidEmail = (em) => em && em.includes('@') && em.includes('.');
 
   // ==================== LOGIN ====================
@@ -407,9 +413,11 @@ function LoginView({ onLogin, onBack, patients = [], professionals = [] }) {
     let foundUser = null;
 
     if (role === 'patient') {
-      foundUser = patients.find(p => p.email === email && p.password === password);
+      foundUser = patients.find(p => p.email?.toLowerCase() === email.toLowerCase() && p.password === password);
     } else {
-      foundUser = professionals.find(p => (p.email === email || p.role === 'admin') && p.password === password);
+      foundUser = professionals.find(p => 
+        (p.email?.toLowerCase() === email.toLowerCase() || p.role === 'admin') && p.password === password
+      );
     }
 
     if (foundUser) {
@@ -420,7 +428,7 @@ function LoginView({ onLogin, onBack, patients = [], professionals = [] }) {
     setLoading(false);
   };
 
-  // ==================== CREACIÓN DE USUARIO CON VALIDACIÓN DE INTEGRIDAD ====================
+  // ==================== CREACIÓN DE USUARIO CON VALIDACIÓN DE DUPLICADOS ====================
   const handleRegister = async () => {
     if (!name || !email || !password || !phone) {
       return alert('❌ Todos los campos son obligatorios');
@@ -430,20 +438,18 @@ function LoginView({ onLogin, onBack, patients = [], professionals = [] }) {
       return alert('❌ Ingresa un correo electrónico válido');
     }
 
-    setLoading(true);
-
     const emailLower = email.trim().toLowerCase();
 
-    // === VALIDACIÓN DE INTEGRIDAD: EVITAR DUPLICADOS ===
-    const userExistsInPatients = patients.some(p => p.email?.toLowerCase() === emailLower);
-    const userExistsInProfessionals = professionals.some(p => p.email?.toLowerCase() === emailLower);
+    // Validación de integridad (no duplicados)
+    const existsInPatients = patients.some(p => p.email?.toLowerCase() === emailLower);
+    const existsInProfessionals = professionals.some(p => p.email?.toLowerCase() === emailLower);
 
-    if (userExistsInPatients || userExistsInProfessionals) {
-      setLoading(false);
-      return alert('❌ Ya existe un usuario registrado con ese correo electrónico.\n\nIntenta iniciar sesión o usa otro correo.');
+    if (existsInPatients || existsInProfessionals) {
+      return alert('❌ Ya existe un usuario con ese correo electrónico.\n\nIntenta iniciar sesión o usa otro correo.');
     }
 
-    // === CREAR USUARIO ===
+    setLoading(true);
+
     const newUser = {
       id: uid(),
       name: name.trim(),
@@ -456,23 +462,19 @@ function LoginView({ onLogin, onBack, patients = [], professionals = [] }) {
       createdAt: new Date().toISOString()
     };
 
-    let updatedList = [];
-
     if (role === 'patient') {
-      updatedList = [...patients, newUser];
-      await sset('enf:patients', updatedList);
+      const updatedPatients = [...patients, newUser];
+      await sset('enf:patients', updatedPatients);
+      setPatients(updatedPatients);           // ← Actualiza el estado en App()
     } else {
-      updatedList = [...professionals, newUser];
-      await sset('enf:professionals', updatedList);
+      const updatedProfessionals = [...professionals, newUser];
+      await sset('enf:professionals', updatedProfessionals);
+      setProfessionals(updatedProfessionals); // ← Actualiza el estado en App()
     }
 
-    alert(`✅ ¡Usuario creado correctamente!\n\n` +
-          `Nombre: ${newUser.name}\n` +
-          `Correo: ${newUser.email}\n` +
-          `Rol: ${role === 'patient' ? 'Paciente' : 'Profesional'}\n\n` +
-          (role === 'professional' ? 'Tu cuenta está pendiente de aprobación.' : 'Ya puedes iniciar sesión.'));
+    alert(`✅ ¡Usuario creado correctamente!\n\nNombre: ${newUser.name}\nCorreo: ${newUser.email}\nRol: ${role === 'patient' ? 'Paciente' : 'Profesional'}`);
 
-    // Limpiar formulario y volver a login
+    // Limpiar y volver a login
     setName('');
     setEmail('');
     setPassword('');
@@ -482,11 +484,10 @@ function LoginView({ onLogin, onBack, patients = [], professionals = [] }) {
     setLoading(false);
   };
 
-  // ==================== RECUPERACIÓN ====================
   const handleRecovery = async () => {
     if (!email || !isValidEmail(email)) return alert('❌ Ingresa un correo válido');
     setLoading(true);
-    alert(`✅ Se ha enviado un enlace de recuperación a ${email} (simulado)`);
+    alert(`✅ Enlace de recuperación enviado a ${email} (simulado en esta versión)`);
     setLoading(false);
     setTab('login');
   };
@@ -509,6 +510,7 @@ function LoginView({ onLogin, onBack, patients = [], professionals = [] }) {
         </div>
 
         <div className="p-8 space-y-6">
+          {/* LOGIN */}
           {tab === 'login' && (
             <>
               <div className="flex bg-slate-100 rounded-2xl p-1">
@@ -523,6 +525,7 @@ function LoginView({ onLogin, onBack, patients = [], professionals = [] }) {
             </>
           )}
 
+          {/* REGISTRO */}
           {tab === 'register' && (
             <div className="space-y-5">
               <div className="flex bg-slate-100 rounded-2xl p-1">
@@ -545,6 +548,7 @@ function LoginView({ onLogin, onBack, patients = [], professionals = [] }) {
             </div>
           )}
 
+          {/* RECUPERACIÓN */}
           {tab === 'recovery' && (
             <div className="space-y-6">
               <p className="text-slate-600">Ingresa tu correo para recuperar la contraseña.</p>
