@@ -1462,12 +1462,11 @@ function AppointmentCard({ a, services, onCancel }) {
   );
 }
 
-// ==================== ADMIN PANEL COMPLETO ====================
+// ==================== ADMINPANEL (CORREGIDO) ====================
 function AdminPanel({ 
   user, 
   setUser, 
   services, 
-  saveServices, 
   appointments, 
   patients, 
   professionals, 
@@ -1481,23 +1480,9 @@ function AdminPanel({
   const [tab, setTab] = useState('hoy');
   const [editingApp, setEditingApp] = useState(null);
 
-  {tab === 'integridad' && (
-    <IntegrityDashboard 
-      appointments={appointments} 
-      patients={patients} 
-      professionals={professionals} 
-      services={services} 
-      currentUser={user} 
-      saveAppointments={handleSaveAppointments} 
-    />
-  )}
-  {tab === 'duplicados' && <DuplicateMerger ... />}
-}
-
   const isAdmin = user.role === 'admin';
   const visibleApps = isAdmin ? appointments : appointments.filter(a => a.assignedTo === user.id);
 
-  // Función auxiliar para guardar con validación
   const handleSaveAppointments = async (newList) => {
     await saveAppointments(newList, setAppointments, patients, professionals, services);
   };
@@ -1506,12 +1491,7 @@ function AdminPanel({
     const app = appointments.find(a => a.id === appId);
     if (!app) return;
 
-    // Validación antes de confirmar
-    const validatedApp = validateAndFixAppointment(app, patients, professionals, services, appointments);
-    if (validatedApp.validationIssues && validatedApp.validationIssues.length > 0) {
-      alert('⚠️ Problemas detectados antes de confirmar:\n• ' + validatedApp.validationIssues.join('\n• '));
-    }
-
+    const validatedApp = validateAndFixAppointment(app, patients, professionals, services);
     const updated = { 
       ...validatedApp, 
       status: 'asignada', 
@@ -1526,7 +1506,6 @@ function AdminPanel({
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* HEADER */}
       <header className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -1547,7 +1526,6 @@ function AdminPanel({
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* PESTAÑAS */}
         <div className="flex gap-2 mb-8 overflow-x-auto pb-2 border-b">
           <TabButton active={tab === 'hoy'} onClick={() => setTab('hoy')} icon={Calendar}>Hoy</TabButton>
           <TabButton active={tab === 'calendario'} onClick={() => setTab('calendario')} icon={Calendar}>Calendario</TabButton>
@@ -1555,11 +1533,8 @@ function AdminPanel({
           <TabButton active={tab === 'duplicados'} onClick={() => setTab('duplicados')} icon={Users}>Duplicados</TabButton>
         </div>
 
-        {/* CONTENIDO SEGÚN PESTAÑA */}
         {tab === 'hoy' && <div className="text-center py-12 text-slate-400">Vista "Hoy" (próximamente con lista de citas del día)</div>}
-        
         {tab === 'calendario' && <CalendarView appointments={visibleApps} onEdit={setEditingApp} />}
-        
         {tab === 'integridad' && (
           <IntegrityDashboard 
             appointments={appointments} 
@@ -1570,7 +1545,6 @@ function AdminPanel({
             saveAppointments={handleSaveAppointments} 
           />
         )}
-        
         {tab === 'duplicados' && (
           <DuplicateMerger 
             patients={patients} 
@@ -1582,7 +1556,6 @@ function AdminPanel({
           />
         )}
 
-        {/* MODAL DE EDICIÓN DE CITA */}
         {editingApp && (
           <EditAppointmentModal 
             app={editingApp} 
@@ -1600,17 +1573,28 @@ function AdminPanel({
   );
 }
 
-// ==================== INTEGRITY DASHBOARD ACTUALIZADO (con validación referencial) ====================
-function IntegrityDashboard({ appointments, patients, professionals, services, currentUser, saveAppointments }) {
+// ==================== INTEGRITY DASHBOARD (CON INTEGRIDAD REFERENCIAL) ====================
+function IntegrityDashboard({ 
+  appointments, 
+  patients, 
+  professionals, 
+  services, 
+  currentUser, 
+  saveAppointments 
+}) {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const runFullIntegrityCheck = () => {
     setLoading(true);
 
+    // 1. Validación referencial completa
     const referential = validateReferentialIntegrity(appointments, patients, professionals, services);
+
+    // 2. Validación normal de cada cita
     const validatedApps = validateAllAppointments(appointments, patients, professionals, services);
 
+    // 3. Combinar todos los issues
     const issues = [
       ...referential.issues,
       ...validatedApps
@@ -1627,23 +1611,27 @@ function IntegrityDashboard({ appointments, patients, professionals, services, c
       totalIssues: issues.length,
       errors: issues.filter(i => i.type === 'error').length,
       warnings: issues.filter(i => i.type === 'warning').length,
-      referentialIssues: referential.issues,
-      issues
+      issues,
+      referentialIssues: referential.issues
     });
 
     setLoading(false);
   };
 
   const autoFixAll = async () => {
-    // 1. Validación referencial + corrección automática
+    setLoading(true);
+    
+    // Corrección automática de integridad referencial
     const { fixedAppointments } = validateReferentialIntegrity(appointments, patients, professionals, services);
     
-    // 2. Validación completa
+    // Validación completa final
     const fullyValidated = validateAllAppointments(fixedAppointments, patients, professionals, services);
     
     await saveAppointments(fullyValidated);
-    alert('✅ Integridad referencial y validación completa aplicada automáticamente.');
+    
+    alert('✅ Integridad referencial y validación completa aplicada automáticamente a todas las citas.');
     runFullIntegrityCheck();
+    setLoading(false);
   };
 
   return (
@@ -1656,9 +1644,13 @@ function IntegrityDashboard({ appointments, patients, professionals, services, c
         <button
           onClick={runFullIntegrityCheck}
           disabled={loading}
-          className="px-6 py-3 bg-teal-600 text-white rounded-2xl font-semibold flex items-center gap-2 hover:bg-teal-700 disabled:opacity-70"
+          className="px-6 py-3 bg-teal-600 text-white rounded-2xl font-semibold flex items-center gap-2 hover:bg-teal-700 disabled:opacity-70 transition-all"
         >
-          {loading ? 'Analizando...' : 'Ejecutar chequeo completo'}
+          {loading ? (
+            <>Analizando...</>
+          ) : (
+            <>Ejecutar chequeo completo</>
+          )}
         </button>
       </div>
 
@@ -1670,16 +1662,28 @@ function IntegrityDashboard({ appointments, patients, professionals, services, c
             <StatCard label="Total Issues" value={report.totalIssues} color="teal" />
           </div>
 
-          <div className="space-y-3 max-h-96 overflow-y-auto">
+          <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
             {report.issues.map((issue, i) => (
               <div
                 key={i}
-                className={`p-4 rounded-2xl flex gap-3 ${issue.type === 'error' ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}
+                className={`p-4 rounded-2xl flex gap-3 ${
+                  issue.type === 'error'
+                    ? 'bg-red-50 border border-red-200'
+                    : 'bg-amber-50 border border-amber-200'
+                }`}
               >
-                {issue.type === 'error' ? <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" /> : <Shield className="w-5 h-5 text-amber-600 mt-0.5" />}
-                <div className="flex-1">
-                  <div className="text-sm font-medium">{issue.message}</div>
-                  {issue.entity && <div className="text-xs text-slate-500 mt-1">Entidad: {issue.entity} • ID: {issue.id}</div>}
+                {issue.type === 'error' ? (
+                  <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <Shield className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                )}
+                <div className="flex-1 text-sm">
+                  <div className="font-medium">{issue.message}</div>
+                  {issue.entity && (
+                    <div className="text-xs text-slate-500 mt-1">
+                      Entidad: <span className="font-mono">{issue.entity}</span> • ID: {issue.id}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -1687,42 +1691,55 @@ function IntegrityDashboard({ appointments, patients, professionals, services, c
 
           <button
             onClick={autoFixAll}
-            className="mt-8 w-full py-4 bg-gradient-to-r from-teal-600 to-blue-600 text-white rounded-3xl font-semibold text-lg hover:shadow-lg transition"
+            disabled={loading}
+            className="mt-8 w-full py-4 bg-gradient-to-r from-teal-600 to-blue-600 text-white rounded-3xl font-semibold text-lg hover:shadow-lg transition-all disabled:opacity-70"
           >
-            Corregir todo automáticamente (Integridad Referencial)
+            {loading ? 'Corrigiendo...' : 'Corregir todo automáticamente'}
           </button>
         </>
       )}
 
       {!report && (
-        <div className="text-center py-12 text-slate-400">
-          Presiona "Ejecutar chequeo completo" para validar referencias entre citas, pacientes, profesionales y servicios
+        <div className="text-center py-16 text-slate-400">
+          <Shield className="w-12 h-12 mx-auto mb-4 opacity-30" />
+          <p className="text-lg">Presiona "Ejecutar chequeo completo" para validar</p>
+          <p className="text-sm mt-2">referencias entre citas, pacientes, profesionales y servicios</p>
         </div>
       )}
     </div>
   );
 }
 
-// ==================== DUPLICATE MERGER (COMPLETO) ====================
-function DuplicateMerger({ patients, professionals, appointments, savePatients, saveAppointments, currentUser }) {
+// ==================== DUPLICATEMERGER (COMPLETO Y FUNCIONAL) ====================
+function DuplicateMerger({ 
+  patients, 
+  professionals, 
+  appointments, 
+  savePatients, 
+  saveAppointments, 
+  currentUser 
+}) {
   const [activeTab, setActiveTab] = useState('patients');
-  const [selectedDuplicates, setSelectedDuplicates] = useState(null);
+  const [selectedGroup, setSelectedGroup] = useState(null);
 
   const patientDuplicates = findDuplicatePatients(patients);
   const proDuplicates = findDuplicateProfessionals(professionals);
 
   const mergePatients = async (group) => {
-    if (group.length < 2) return;
-    const master = group[0]; // El primero es el que se mantiene
+    if (!group || group.length < 2) return;
+    
+    const master = group[0];           // El que se mantiene
     const toDelete = group.slice(1);
 
     let updatedPatients = [...patients];
     let updatedAppointments = [...appointments];
 
     toDelete.forEach(dup => {
-      // Reasignar citas
-      updatedAppointments = updatedAppointments.map(app =>
-        app.patientId === dup.id ? { ...app, patientId: master.id, patientName: master.name } : app
+      // Reasignar todas las citas del duplicado al paciente maestro
+      updatedAppointments = updatedAppointments.map(app => 
+        app.patientId === dup.id 
+          ? { ...app, patientId: master.id, patientName: master.name }
+          : app
       );
       // Eliminar duplicado
       updatedPatients = updatedPatients.filter(p => p.id !== dup.id);
@@ -1730,12 +1747,14 @@ function DuplicateMerger({ patients, professionals, appointments, savePatients, 
 
     await savePatients(updatedPatients);
     await saveAppointments(updatedAppointments);
-    alert(`✅ ${toDelete.length} perfiles de pacientes fusionados correctamente`);
-    setSelectedDuplicates(null);
+    
+    alert(`✅ ${toDelete.length} perfiles de pacientes fusionados correctamente en "${master.name}"`);
+    setSelectedGroup(null);
   };
 
   const mergeProfessionals = async (group) => {
-    if (group.length < 2) return;
+    if (!group || group.length < 2) return;
+    
     const master = group[0];
     const toDelete = group.slice(1);
 
@@ -1743,79 +1762,125 @@ function DuplicateMerger({ patients, professionals, appointments, savePatients, 
     let updatedApps = [...appointments];
 
     toDelete.forEach(dup => {
-      updatedApps = updatedApps.map(app =>
-        app.assignedTo === dup.id ? { ...app, assignedTo: master.id, assignedToName: master.name } : app
+      updatedApps = updatedApps.map(app => 
+        app.assignedTo === dup.id 
+          ? { ...app, assignedTo: master.id, assignedToName: master.name }
+          : app
       );
       updatedPros = updatedPros.filter(p => p.id !== dup.id);
     });
 
     await saveProfessionals(updatedPros);
     await saveAppointments(updatedApps);
-    alert(`✅ ${toDelete.length} perfiles de profesionales fusionados correctamente`);
-    setSelectedDuplicates(null);
+    
+    alert(`✅ ${toDelete.length} perfiles de profesionales fusionados correctamente en "${master.name}"`);
+    setSelectedGroup(null);
   };
 
   return (
-    <div className="bg-white rounded-3xl p-8">
-      <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-        <Users className="w-7 h-7 text-teal-600" />
-        Fusión de Perfiles Duplicados
-      </h2>
+    <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold flex items-center gap-3">
+          <Users className="w-7 h-7 text-teal-600" />
+          Fusión de Perfiles Duplicados
+        </h2>
+        <div className="flex items-center gap-3 text-sm">
+          <span className="bg-teal-100 text-teal-700 px-4 py-1.5 rounded-3xl font-medium">
+            Pacientes: {patientDuplicates.length}
+          </span>
+          <span className="bg-blue-100 text-blue-700 px-4 py-1.5 rounded-3xl font-medium">
+            Profesionales: {proDuplicates.length}
+          </span>
+        </div>
+      </div>
 
-      <div className="flex border-b mb-6">
+      {/* Tabs */}
+      <div className="flex border-b mb-8">
         <button
-          onClick={() => setActiveTab('patients')}
-          className={`flex-1 py-3 font-semibold ${activeTab === 'patients' ? 'border-b-4 border-teal-600 text-teal-700' : 'text-slate-500'}`}
+          onClick={() => { setActiveTab('patients'); setSelectedGroup(null); }}
+          className={`flex-1 py-4 font-semibold text-lg transition-all border-b-4 ${activeTab === 'patients' 
+            ? 'border-teal-600 text-teal-700' 
+            : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Pacientes ({patientDuplicates.length})
         </button>
         <button
-          onClick={() => setActiveTab('professionals')}
-          className={`flex-1 py-3 font-semibold ${activeTab === 'professionals' ? 'border-b-4 border-teal-600 text-teal-700' : 'text-slate-500'}`}
+          onClick={() => { setActiveTab('professionals'); setSelectedGroup(null); }}
+          className={`flex-1 py-4 font-semibold text-lg transition-all border-b-4 ${activeTab === 'professionals' 
+            ? 'border-teal-600 text-teal-700' 
+            : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Profesionales ({proDuplicates.length})
         </button>
       </div>
 
+      {/* Contenido Pacientes */}
       {activeTab === 'patients' && (
-        <div className="space-y-4">
-          {patientDuplicates.map((group, idx) => (
-            <div key={idx} className="border border-slate-200 rounded-2xl p-5">
-              <div className="flex justify-between items-center">
-                <div>
-                  <span className="font-semibold">Grupo de duplicados:</span>
-                  <span className="ml-3 text-teal-600">{group.map(p => p.name).join(' • ')}</span>
+        <div className="space-y-6">
+          {patientDuplicates.length === 0 ? (
+            <EmptyState icon={Users} text="No se encontraron pacientes duplicados 👍" />
+          ) : (
+            patientDuplicates.map((group, idx) => {
+              const master = group[0];
+              return (
+                <div key={idx} className="border border-slate-200 rounded-3xl p-6 hover:border-teal-300 transition-all">
+                  <div className="flex justify-between items-center">
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-slate-500">Grupo de duplicados</div>
+                      <div className="font-semibold text-lg text-slate-900 mt-1">
+                        {group.map(p => p.name).join(' • ')}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-2">
+                        {group.length} registros • IDs: {group.map(p => p.id).join(', ')}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => mergePatients(group)}
+                      className="ml-6 px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl flex items-center gap-2 transition-all"
+                    >
+                      <CheckCircle className="w-5 h-5" />
+                      Fusionar en <span className="font-bold">{master.name}</span>
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => mergePatients(group)}
-                  className="px-6 py-2 bg-teal-600 text-white rounded-2xl text-sm font-semibold"
-                >
-                  Fusionar
-                </button>
-              </div>
-            </div>
-          ))}
+              );
+            })
+          )}
         </div>
       )}
 
+      {/* Contenido Profesionales */}
       {activeTab === 'professionals' && (
-        <div className="space-y-4">
-          {proDuplicates.map((group, idx) => (
-            <div key={idx} className="border border-slate-200 rounded-2xl p-5">
-              <div className="flex justify-between items-center">
-                <div>
-                  <span className="font-semibold">Grupo de duplicados:</span>
-                  <span className="ml-3 text-teal-600">{group.map(p => p.name).join(' • ')}</span>
+        <div className="space-y-6">
+          {proDuplicates.length === 0 ? (
+            <EmptyState icon={Users} text="No se encontraron profesionales duplicados 👍" />
+          ) : (
+            proDuplicates.map((group, idx) => {
+              const master = group[0];
+              return (
+                <div key={idx} className="border border-slate-200 rounded-3xl p-6 hover:border-teal-300 transition-all">
+                  <div className="flex justify-between items-center">
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-slate-500">Grupo de duplicados</div>
+                      <div className="font-semibold text-lg text-slate-900 mt-1">
+                        {group.map(p => p.name).join(' • ')}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-2">
+                        {group.length} registros
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => mergeProfessionals(group)}
+                      className="ml-6 px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl flex items-center gap-2 transition-all"
+                    >
+                      <CheckCircle className="w-5 h-5" />
+                      Fusionar en <span className="font-bold">{master.name}</span>
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => mergeProfessionals(group)}
-                  className="px-6 py-2 bg-teal-600 text-white rounded-2xl text-sm font-semibold"
-                >
-                  Fusionar
-                </button>
-              </div>
-            </div>
-          ))}
+              );
+            })
+          )}
         </div>
       )}
     </div>
