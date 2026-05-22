@@ -387,13 +387,11 @@ function CalendarView({ appointments, onEdit }) {
   );
 }
 
-/* =============================================
-   LOGIN VIEW - 
-   ============================================= */
-   function LoginView({ onLogin, onBack, patients, professionals }) {
+/* ============================== LOGIN VIEW  ============================================= */
+   function LoginView({ onLogin, onBack, patients = [], professionals = [] }) {
     const [tab, setTab] = useState('login');
-    const [role, setRole] = useState('professional'); // Por defecto profesional para que pruebes admin
-    const [email, setEmail] = useState('admin@enfermereando.cl');
+    const [role, setRole] = useState('professional'); // Por defecto en profesional/admin
+    const [email, setEmail] = useState('marielads.enfermera@gmail.com');
     const [password, setPassword] = useState('enfermera2026');
     const [loading, setLoading] = useState(false);
   
@@ -404,22 +402,23 @@ function CalendarView({ appointments, onEdit }) {
       let foundUser = null;
   
       if (role === 'patient') {
+        console.log(`[LOGIN] Buscando en patients (${patients.length} registros)`);
         foundUser = patients.find(p => p.email === email && p.password === password);
-        console.log('[LOGIN] Buscando en patients:', patients.length, 'resultados');
       } else {
+        console.log(`[LOGIN] Buscando en professionals (${professionals.length} registros)`);
         foundUser = professionals.find(p => 
-          (p.email === email || p.username === 'admin') && p.password === password
+          (p.email === email || p.role === 'admin') && p.password === password
         );
-        console.log('[LOGIN] Buscando en professionals:', professionals.length, 'resultados');
-        console.log('[LOGIN] Admin encontrado:', foundUser ? foundUser : 'NO ENCONTRADO');
       }
   
+      console.log('[LOGIN] Usuario encontrado:', foundUser);
+  
       if (foundUser) {
-        console.log('[LOGIN] ✅ Usuario encontrado:', foundUser);
+        console.log('[LOGIN] ✅ Login exitoso');
         onLogin({ ...foundUser, role });
       } else {
-        console.log('[LOGIN] ❌ No se encontró usuario');
-        alert('❌ Credenciales incorrectas.\n\nRevisa la consola (F12) para más detalles.');
+        console.log('[LOGIN] ❌ No se encontró el usuario');
+        alert('❌ Credenciales incorrectas.\n\nRevisa la consola (F12) para ver los detalles de la búsqueda.');
       }
       setLoading(false);
     };
@@ -437,8 +436,18 @@ function CalendarView({ appointments, onEdit }) {
   
           <div className="p-8 space-y-6">
             <div className="flex bg-slate-100 rounded-2xl p-1">
-              <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}>Paciente</button>
-              <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}>Profesional / Admin</button>
+              <button 
+                onClick={() => setRole('patient')} 
+                className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}
+              >
+                Paciente
+              </button>
+              <button 
+                onClick={() => setRole('professional')} 
+                className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}
+              >
+                Profesional / Admin
+              </button>
             </div>
   
             <input 
@@ -461,7 +470,7 @@ function CalendarView({ appointments, onEdit }) {
               disabled={loading} 
               className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg disabled:opacity-70"
             >
-              {loading ? 'Verificando...' : 'Iniciar Sesión'}
+              {loading ? 'Verificando credenciales...' : 'Iniciar Sesión'}
             </button>
           </div>
         </div>
@@ -1998,30 +2007,36 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ==================== LISTENER DE AUTENTICACIÓN REAL ====================
   useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        const u = {
-          id: session.user.id,
-          email: session.user.email,
-          name: session.user.user_metadata?.name || session.user.email,
-          role: session.user.user_metadata?.role || 'patient'
-        };
-        setUser(u);
-        setView(u.role === 'patient' ? 'patient' : u.role === 'admin' ? 'admin' : 'professional');
-      } else {
-        setUser(null);
-        setView('landing');
-      }
-    });
-
-    const loadData = async () => {
-      const svcs = await sget('enf:services', DEFAULT_SERVICES);
-      const apps = await sget('enf:appointments', []);
+    (async () => {
+      let svcs = await sget('enf:services', DEFAULT_SERVICES);
+      let apps = (await sget('enf:appointments', [])).map(normalizeApp || (x => x));
       const pats = await sget('enf:patients', []);
-      const profs = await sget('enf:professionals', []);
+      let profs = await sget('enf:professionals', []);
       const notifs = await sget('enf:notifications', []);
+
+      // ==================== ADMINISTRADOR CON NUEVO CORREO ====================
+      const adminEmail = 'marielads.enfermera@gmail.com';
+      const existingAdmin = profs.find(p => 
+        p.email === adminEmail || p.role === 'admin'
+      );
+
+      if (!existingAdmin) {
+        const defaultAdmin = {
+          id: 'admin-default',
+          name: PROFESSIONAL_NAME,
+          email: adminEmail,
+          password: 'enfermera2026',
+          phone: PHONE,
+          role: 'admin',
+          status: 'active',
+          createdAt: new Date().toISOString()
+        };
+
+        profs = [defaultAdmin, ...profs];
+        await sset('enf:professionals', profs);
+        console.log('✅ Administrador creado con nuevo correo:', defaultAdmin);
+      }
 
       setServices(svcs);
       setAppointments(apps);
@@ -2029,10 +2044,7 @@ export default function App() {
       setProfessionals(profs);
       setNotifications(notifs);
       setLoading(false);
-    };
-
-    loadData();
-    return () => listener.subscription.unsubscribe();
+    })();
   }, []);
 
   const saveAppointmentsLocal = async (list) => {
@@ -2040,8 +2052,16 @@ export default function App() {
     await sset('enf:appointments', list);
   };
 
-  const logout = async () => {
-    await supabase.auth.signOut();
+  const login = (loggedUser) => {
+    setUser(loggedUser);
+    if (loggedUser.role === 'patient') setView('patient');
+    else if (loggedUser.role === 'admin') setView('admin');
+    else setView('professional');
+  };
+
+  const logout = () => {
+    setUser(null);
+    setView('landing');
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-2xl">Cargando...</div>;
@@ -2049,10 +2069,10 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50">
       {view === 'landing' && <Landing services={services.filter(s => s.active)} onLogin={() => setView('login')} />}
-      {view === 'login' && <LoginView onLogin={setUser} onBack={() => setView('landing')} />}
-      {view === 'patient' && user && <PatientPortal user={user} services={services.filter(s => s.active)} appointments={appointments} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
-      {view === 'professional' && user && <ProfessionalDashboard user={user} services={services} appointments={appointments} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
-      {view === 'admin' && user && <AdminPanel user={user} services={services} appointments={appointments} patients={patients} professionals={professionals} notifications={notifications} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
+      {view === 'login' && <LoginView onLogin={login} onBack={() => setView('landing')} patients={patients} professionals={professionals} />}
+      {view === 'patient' && user && user.role === 'patient' && <PatientPortal user={user} services={services.filter(s => s.active)} appointments={appointments} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
+      {view === 'professional' && user && user.role === 'professional' && <ProfessionalDashboard user={user} services={services} appointments={appointments} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
+      {view === 'admin' && user && user.role === 'admin' && <AdminPanel user={user} services={services} appointments={appointments} patients={patients} professionals={professionals} notifications={notifications} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
     </div>
   );
 }
