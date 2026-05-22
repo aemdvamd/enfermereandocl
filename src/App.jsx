@@ -1638,7 +1638,7 @@ function AdminPanel({
   );
 }
 
-// ==================== KANBAN BOARD CORREGIDO (INTEGRIDAD MEJORADA) ====================
+// ==================== KANBAN BOARD - VERSIÓN ESTABLE (MODAL NO SE CIERRA) ====================
 function KanbanBoard({ 
   appointments, 
   patients, 
@@ -1654,46 +1654,41 @@ function KanbanBoard({
     : appointments.filter(a => a.assignedTo === currentUser.id);
 
   const COLUMNS = [
-    { id: 'pendiente',      title: 'Pendiente',     color: 'amber', icon: Clock },
-    { id: 'asignada',       title: 'Asignada',      color: 'blue',  icon: UserCog },
-    { id: 'confirmada',     title: 'Confirmada',    color: 'teal',  icon: CheckCircle },
-    { id: 'en_tratamiento', title: 'En tratamiento',color: 'purple',icon: Activity },
-    { id: 'completada',     title: 'Completada',    color: 'green', icon: Check },
-    { id: 'cancelada',      title: 'Cancelada',     color: 'red',   icon: X }
+    { id: 'pendiente', title: 'Pendiente', color: 'amber', icon: Clock },
+    { id: 'asignada', title: 'Asignada', color: 'blue', icon: UserCog },
+    { id: 'confirmada', title: 'Confirmada', color: 'teal', icon: CheckCircle },
+    { id: 'en_tratamiento', title: 'En tratamiento', color: 'purple', icon: Activity },
+    { id: 'completada', title: 'Completada', color: 'green', icon: Check },
+    { id: 'cancelada', title: 'Cancelada', color: 'red', icon: X }
   ];
 
   const grouped = {};
-  COLUMNS.forEach(col => { grouped[col.id] = []; });
+  COLUMNS.forEach(col => grouped[col.id] = []);
 
   visibleApps.forEach(app => {
     let status = app.status || 'pendiente';
-
     if (app.seriesId && app.beneficiaries) {
-      let totalDoses = 0;
-      let completedDoses = 0;
-      app.beneficiaries.forEach(ben => {
-        ben.services.forEach(item => {
-          totalDoses += (item.doses || 1);
-          completedDoses += (item.completedDoses || 0);
-        });
-      });
-      if (completedDoses > 0 && completedDoses < totalDoses) status = 'en_tratamiento';
-      else if (completedDoses === totalDoses && totalDoses > 0) status = 'completada';
+      let total = 0, done = 0;
+      app.beneficiaries.forEach(b => b.services.forEach(s => {
+        total += (s.doses || 1);
+        done += (s.completedDoses || 0);
+      }));
+      if (done > 0 && done < total) status = 'en_tratamiento';
+      else if (done === total && total > 0) status = 'completada';
     }
-
-    if (grouped[status]) grouped[status].push(app);
+    grouped[status].push(app);
   });
 
-  const markDoseCompleted = async (appId, serviceId, increment = 1) => {
+  const markDoseCompleted = async (appId, serviceId) => {
     const updated = appointments.map(app => {
       if (app.id !== appId) return app;
       return {
         ...app,
         beneficiaries: app.beneficiaries.map(ben => ({
           ...ben,
-          services: ben.services.map(item => 
-            item.serviceId === serviceId 
-              ? { ...item, completedDoses: Math.min((item.completedDoses || 0) + increment, item.doses || 1) }
+          services: ben.services.map(item =>
+            item.serviceId === serviceId
+              ? { ...item, completedDoses: Math.min((item.completedDoses || 0) + 1, item.doses || 1) }
               : item
           )
         }))
@@ -1703,7 +1698,7 @@ function KanbanBoard({
   };
 
   const changeStatus = async (appId, newStatus) => {
-    const updated = appointments.map(app => 
+    const updated = appointments.map(app =>
       app.id === appId ? { ...app, status: newStatus } : app
     );
     await saveAppointments(updated);
@@ -1716,9 +1711,6 @@ function KanbanBoard({
           <Route className="w-7 h-7 text-teal-600" />
           Seguimiento de Solicitudes
         </h2>
-        <div className="text-sm text-slate-500">
-          {visibleApps.length} citas • {isAdmin ? 'Todos' : 'Mis asignadas'}
-        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -1731,24 +1723,19 @@ function KanbanBoard({
               <div className={`px-4 py-3 rounded-2xl mb-4 flex items-center gap-2 bg-white shadow-sm border border-${column.color}-200`}>
                 <Icon className={`w-5 h-5 text-${column.color}-600`} />
                 <span className="font-semibold">{column.title}</span>
-                <span className="ml-auto bg-slate-100 px-3 py-1 rounded-2xl text-xs font-medium">
-                  {appsInColumn.length}
-                </span>
+                <span className="ml-auto bg-slate-100 px-3 py-1 rounded-2xl text-xs font-medium">{appsInColumn.length}</span>
               </div>
 
               <div className="flex-1 space-y-3 overflow-y-auto">
                 {appsInColumn.map(app => {
                   const net = app.beneficiaries ? appNetPrice(app, services) : 0;
                   const isSeries = !!app.seriesId;
-
                   let totalDoses = 0, completedDoses = 0;
                   if (isSeries && app.beneficiaries) {
-                    app.beneficiaries.forEach(ben => {
-                      ben.services.forEach(item => {
-                        totalDoses += item.doses || 1;
-                        completedDoses += item.completedDoses || 0;
-                      });
-                    });
+                    app.beneficiaries.forEach(b => b.services.forEach(s => {
+                      totalDoses += s.doses || 1;
+                      completedDoses += s.completedDoses || 0;
+                    }));
                   }
 
                   return (
@@ -1761,24 +1748,24 @@ function KanbanBoard({
                       onDrop={e => {
                         e.preventDefault();
                         const draggedId = e.dataTransfer.getData('text/plain');
-                        if (draggedId && draggedId !== app.id) {
-                          changeStatus(draggedId, column.id);
-                        }
+                        if (draggedId && draggedId !== app.id) changeStatus(draggedId, column.id);
                       }}
                     >
-                      {/* Botón Editar explícito */}
+                      {/* Botón Editar explícito y aislado */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onEdit(app);
                         }}
-                        className="absolute top-3 right-3 text-teal-600 hover:text-teal-700 text-xs font-medium px-3 py-1 bg-teal-50 hover:bg-teal-100 rounded-2xl transition-all"
+                        className="absolute top-3 right-3 text-xs font-medium bg-teal-50 hover:bg-teal-100 text-teal-600 px-3 py-1 rounded-2xl transition-all z-10"
                       >
                         Editar
                       </button>
 
                       <div className="font-medium text-slate-900 pr-16">{app.patientName}</div>
-                      <div className="text-xs text-slate-500">{new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}
+                      </div>
 
                       {/* Tracker de dosis */}
                       {isSeries && totalDoses > 1 && (
@@ -1797,12 +1784,10 @@ function KanbanBoard({
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const serviceId = app.beneficiaries?.[0]?.services?.[0]?.serviceId;
-                                    if (serviceId) markDoseCompleted(app.id, serviceId, 1);
+                                    if (serviceId) markDoseCompleted(app.id, serviceId);
                                   }}
                                   className={`w-7 h-7 flex items-center justify-center text-xs font-medium rounded-2xl border transition-all ${
-                                    isCompleted 
-                                      ? 'bg-teal-500 text-white border-teal-500' 
-                                      : 'bg-white border-slate-300 hover:border-teal-400'
+                                    isCompleted ? 'bg-teal-500 text-white border-teal-500' : 'bg-white border-slate-300 hover:border-teal-400'
                                   }`}
                                 >
                                   {doseNum}
@@ -1814,17 +1799,15 @@ function KanbanBoard({
                       )}
 
                       <div className="mt-3 text-xs text-slate-600 line-clamp-2">
-                        {app.beneficiaries?.flatMap(b => 
-                          b.services.map(s => {
-                            const svc = services.find(svc => svc.id === s.serviceId);
-                            return svc ? svc.title : '';
-                          })
-                        ).join(' • ')}
+                        {app.beneficiaries?.flatMap(b => b.services.map(s => {
+                          const svc = services.find(svc => svc.id === s.serviceId);
+                          return svc ? svc.title : '';
+                        })).join(' • ')}
                       </div>
 
-                      <div className="mt-4 flex justify-between items-center">
+                      <div className="mt-4 flex justify-between items-center text-xs">
                         <div className="font-semibold text-teal-600">{fmtCLP(net)}</div>
-                        {isSeries && <span className="text-[10px] bg-purple-100 text-purple-700 px-3 py-0.5 rounded-2xl">Serie</span>}
+                        {isSeries && <span className="text-purple-600 text-[10px] font-medium">Serie</span>}
                       </div>
                     </div>
                   );
