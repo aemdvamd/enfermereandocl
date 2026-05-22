@@ -2128,8 +2128,7 @@ function ServicesManager({ services, saveServices }) {
     );
   }
 
-// ==================== APP PRINCIPAL - VERSIÓN COMPLETA ====================
-// ==================== APP PRINCIPAL - CON ADMIN CREADO ====================
+// ==================== APP PRINCIPAL ====================
 export default function App() {
   const [view, setView] = useState('landing');
   const [user, setUser] = useState(null);
@@ -2148,23 +2147,30 @@ export default function App() {
       let profs = await sget('enf:professionals', []);
       const notifs = await sget('enf:notifications', []);
 
-      // ==================== CREACIÓN DEL ADMINISTRADOR ====================
-      const adminExists = profs.some(p => p.role === 'admin' || p.email === 'admin@enfermereando.cl');
-      
-      if (!adminExists) {
+      // ==================== CREACIÓN FORZADA DEL ADMINISTRADOR ====================
+      const adminEmail = 'admin@enfermereando.cl';
+      const existingAdmin = profs.find(p => 
+        p.email === adminEmail || p.username === 'admin' || p.role === 'admin'
+      );
+
+      if (!existingAdmin || !existingAdmin.email) {
+        // Eliminar cualquier admin antiguo sin email
+        profs = profs.filter(p => p.role !== 'admin' && p.username !== 'admin');
+
         const defaultAdmin = {
           id: 'admin-default',
           name: PROFESSIONAL_NAME,
-          email: 'admin@enfermereando.cl',
+          email: adminEmail,
           password: 'enfermera2026',
           phone: PHONE,
           role: 'admin',
           status: 'active',
           createdAt: new Date().toISOString()
         };
+
         profs = [defaultAdmin, ...profs];
         await sset('enf:professionals', profs);
-        console.log('✅ Administrador creado automáticamente:', defaultAdmin);
+        console.log('✅ Administrador creado/forzado con email:', defaultAdmin);
       }
 
       setServices(svcs);
@@ -2193,7 +2199,9 @@ export default function App() {
     setView('landing');
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-2xl">Cargando...</div>;
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-2xl text-slate-400">Cargando...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50">
