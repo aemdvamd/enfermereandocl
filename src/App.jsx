@@ -303,20 +303,54 @@ const saveAppointments = async (list, setAppointments, patients, professionals, 
 };
 
 // ==================== PERSISTENCIA ====================
-const sget = async (k, def) => {
+const sget = async (key, defaultValue = null) => {
   try {
-    const { data } = await supabase.from('app_storage').select('value').eq('key', k).single();
-    return data ? data.value : def;
-  } catch {
-    return def;
+    console.log(`[sget] Intentando leer clave: ${key}`);
+    const { data, error } = await supabase
+      .from('app_storage')
+      .select('value')
+      .eq('key', key)
+      .single();
+
+    if (error) {
+      console.error(`[sget] Error al leer ${key}:`, error);
+      return defaultValue;
+    }
+
+    console.log(`[sget] ✅ Leído correctamente ${key}:`, data?.value ? 'existe' : 'no existe');
+    return data ? data.value : defaultValue;
+  } catch (err) {
+    console.error(`[sget] Excepción al leer ${key}:`, err);
+    return defaultValue;
   }
 };
 
-const sset = async (k, v) => {
+const sset = async (key, value) => {
   try {
-    await supabase.from('app_storage').upsert({ key: k, value: v });
-  } catch (e) {
-    console.error(e);
+    console.log(`[sset] Intentando guardar clave: ${key}`);
+    console.log(`[sset] Valor a guardar:`, value);
+
+    const { error } = await supabase
+      .from('app_storage')
+      .upsert({ 
+        key: key, 
+        value: value 
+      }, { 
+        onConflict: 'key' 
+      });
+
+    if (error) {
+      console.error(`[sset] ❌ Error al guardar ${key}:`, error);
+      alert(`Error al guardar en Supabase: ${error.message}`);
+      return false;
+    }
+
+    console.log(`[sset] ✅ Guardado correctamente: ${key}`);
+    return true;
+  } catch (err) {
+    console.error(`[sset] Excepción al guardar ${key}:`, err);
+    alert(`Excepción al guardar: ${err.message}`);
+    return false;
   }
 };
 
