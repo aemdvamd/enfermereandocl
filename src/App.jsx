@@ -174,54 +174,6 @@ const sendWhatsAppToAdmin = async (data, type = 'new_appointment', services = []
 
 // ==================== UTILIDADES ====================
 // ==================== HELPERS PARA SERIES DE CITAS ====================
-const getFrequencyLabel = (freqId) => FREQUENCIES.find(f => f.id === freqId)?.label || 'Una sola vez';
-
-const addDays = (dateStr, days) => {
-  if (!dateStr || days <= 0) return dateStr;
-  const date = new Date(dateStr);
-  date.setDate(date.getDate() + days);
-  return date.toISOString().split('T')[0];
-};
-
-const generateAppointmentSeries = (baseApp, services) => {
-  const seriesId = baseApp.seriesId || uid();
-  const generated = [];
-
-  baseApp.beneficiaries.forEach(ben => {
-    ben.services.forEach(item => {
-      const svc = services.find(s => s.id === item.serviceId);
-      if (!svc) return;
-
-      const doses = Math.max(1, item.doses || 1);
-      const freq = FREQUENCIES.find(f => f.id === (item.frequency || 'once')) || FREQUENCIES[0];
-      let currentDate = baseApp.date;
-
-      for (let i = 0; i < doses; i++) {
-        const appointment = {
-          ...baseApp,
-          id: i === 0 ? baseApp.id : uid(),
-          seriesId,
-          doseNumber: i + 1,
-          date: currentDate,
-          time: baseApp.time,
-          beneficiaries: [{
-            ...ben,
-            services: [{ ...item, completedDoses: 0 }]
-          }],
-          status: 'pendiente',
-          createdAt: Date.now()
-        };
-        generated.push(appointment);
-
-        if (freq.days > 0 && i < doses - 1) {
-          currentDate = addDays(currentDate, freq.days);
-        }
-      }
-    });
-  });
-
-  return generated;
-};
 
 const fmtCLP = (n) => '$' + Math.round(n).toLocaleString('es-CL');
 const fmtTime = (t) => {
@@ -261,15 +213,6 @@ const validateUserIntegrity = (username, patients, professionals, role) => {
     return { ok: true };
   }
   return { ok: true };
-};
-
-const appNetPrice = (a, services) => {
-  const gross = a.beneficiaries.reduce((sum, b) => sum + b.services.reduce((s, item) => {
-    const svc = services.find(s => s.id === item.serviceId);
-    return s + (svc ? svc.price * (item.doses || 1) : 0);
-  }, 0), 0);
-  const discount = a.beneficiaries.length >= 4 ? 0.15 : a.beneficiaries.length === 3 ? 0.10 : a.beneficiaries.length === 2 ? 0.05 : 0;
-  return Math.round(gross * (1 - discount));
 };
 
 // ==================== NOTIFICACIONES PUSH ====================
