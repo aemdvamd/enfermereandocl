@@ -1914,6 +1914,176 @@ function DuplicateMerger({
   );
 }
 
+// ==================== KANBAN BOARD (NUEVO MÓDULO DE SEGUIMIENTO) ====================
+function KanbanBoard({ 
+  appointments, 
+  patients, 
+  professionals, 
+  services, 
+  currentUser, 
+  saveAppointments,
+  onEdit 
+}) {
+  const isAdmin = currentUser.role === 'admin';
+  const visibleApps = isAdmin 
+    ? appointments 
+    : appointments.filter(a => a.assignedTo === currentUser.id);
+
+  // Estados del flujo de atención
+  const COLUMNS = [
+    { id: 'pendiente',     title: 'Pendiente',     color: 'amber', icon: Clock },
+    { id: 'asignada',      title: 'Asignada',      color: 'blue',  icon: UserCog },
+    { id: 'confirmada',    title: 'Confirmada',    color: 'teal',  icon: CheckCircle },
+    { id: 'en_tratamiento',title: 'En tratamiento',color: 'purple',icon: Activity },
+    { id: 'completada',    title: 'Completada',    color: 'green', icon: Check },
+    { id: 'cancelada',     title: 'Cancelada',     color: 'red',   icon: X }
+  ];
+
+  // Agrupar citas por estado
+  const grouped = {};
+  COLUMNS.forEach(col => { grouped[col.id] = []; });
+
+  visibleApps.forEach(app => {
+    let status = app.status || 'pendiente';
+    
+    // LÓGICA ESPECIAL PARA "EN TRATAMIENTO"
+    if (app.seriesId && app.beneficiaries) {
+      let totalDoses = 0;
+      let completedDoses = 0;
+      
+      app.beneficiaries.forEach(ben => {
+        ben.services.forEach(item => {
+          totalDoses += (item.doses || 1);
+          completedDoses += (item.completedDoses || 0);
+        });
+      });
+
+      if (completedDoses > 0 && completedDoses < totalDoses) {
+        status = 'en_tratamiento';
+      } else if (completedDoses === totalDoses && totalDoses > 0) {
+        status = 'completada';
+      }
+    }
+    
+    if (grouped[status]) grouped[status].push(app);
+  });
+
+  // Cambiar estado (drag & drop o click)
+  const changeStatus = async (appId, newStatus) => {
+    const updated = appointments.map(app => {
+      if (app.id === appId) {
+        return { ...app, status: newStatus };
+      }
+      return app;
+    });
+    await saveAppointments(updated);
+  };
+
+  return (
+    <div className="bg-white rounded-3xl p-6 border border-slate-200">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold flex items-center gap-3">
+          <Route className="w-7 h-7 text-teal-600" />
+          Seguimiento de Solicitudes
+        </h2>
+        <div className="text-sm text-slate-500">
+          {visibleApps.length} citas • {isAdmin ? 'Todos' : 'Mis asignadas'}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {COLUMNS.map(column => {
+          const Icon = column.icon;
+          const appsInColumn = grouped[column.id] || [];
+          
+          return (
+            <div key={column.id} className="bg-slate-50 rounded-3xl p-4 min-h-[500px] flex flex-col">
+              {/* Header de columna */}
+              <div className={`px-4 py-3 rounded-2xl mb-4 flex items-center gap-2 bg-white shadow-sm border border-${column.color}-200`}>
+                <Icon className={`w-5 h-5 text-${column.color}-600`} />
+                <span className="font-semibold text-slate-900">{column.title}</span>
+                <span className="ml-auto bg-slate-100 text-slate-600 text-xs font-medium px-2.5 py-0.5 rounded-xl">
+                  {appsInColumn.length}
+                </span>
+              </div>
+
+              {/* Cards */}
+              <div className="flex-1 space-y-3 overflow-y-auto">
+                {appsInColumn.map(app => {
+                  const net = app.beneficiaries ? appNetPrice(app, services) : 0;
+                  const isSeries = !!app.seriesId;
+                  
+                  // Calcular progreso de dosis para series
+                  let progress = null;
+                  if (isSeries && app.beneficiaries) {
+                    let total = 0, done = 0;
+                    app.beneficiaries.forEach(b => {
+                      b.services.forEach(s => {
+                        total += (s.doses || 1);
+                        done += (s.completedDoses || 0);
+                      });
+                    });
+                    progress = total > 0 ? Math.round((done / total) * 100) : 0;
+                  }
+
+                  return (
+                    <div
+                      key={app.id}
+                      onClick={() => onEdit(app)}
+                      className="bg-white border border-slate-200 rounded-2xl p-4 cursor-pointer hover:shadow-md transition-all hover:border-teal-300"
+                      draggable
+                      onDragStart={e => e.dataTransfer.setData('text/plain', app.id)}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => {
+                        e.preventDefault();
+                        const draggedId = e.dataTransfer.getData('text/plain');
+                        if (draggedId !== app.id) changeStatus(draggedId, column.id);
+                      }}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="font-medium text-slate-900 text-sm">{app.patientName}</div>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-xl font-medium ${column.color === 'amber' ? 'bg-amber-100 text-amber-700' : ''}`}>
+                          {fmtTime(app.time)}
+                        </span>
+                      </div>
+                      
+                      <div className="text-xs text-slate-500 mt-1">{new Date(app.date).toLocaleDateString('es-CL')}</div>
+                      
+                      {isSeries && progress !== null && (
+                        <div className="mt-3 bg-slate-100 rounded-2xl p-2">
+                          <div className="flex justify-between text-[10px] mb-1">
+                            <span>Dosis</span>
+                            <span>{progress}%</span>
+                          </div>
+                          <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                            <div className="h-1.5 bg-teal-500 rounded-full" style={{ width: `${progress}%` }}></div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-3 text-xs text-slate-600 line-clamp-2">
+                        {app.beneficiaries?.flatMap(b => b.services.map(s => {
+                          const svc = services.find(svc => svc.id === s.serviceId);
+                          return svc ? svc.title : '';
+                        })).join(' • ')}
+                      </div>
+
+                      <div className="mt-4 flex justify-between items-center text-xs">
+                        <div className="font-semibold text-teal-600">{fmtCLP(net)}</div>
+                        {app.seriesId && <span className="text-purple-600 text-[10px] font-medium">Serie</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ==================== EDIT APPOINTMENT MODAL (NUEVO - COMPLETO) ====================
 function EditAppointmentModal({ app, services, onSave, onClose }) {
   const [form, setForm] = useState({
