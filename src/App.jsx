@@ -666,10 +666,11 @@ function PatientPortal({ user, services, appointments, saveAppointments, onLogou
         {/* CONTENIDO - SOLO SE MUESTRA UNA SECCIÓN */}
         {showRequestForm ? (
           <RequestForm 
-            services={services} 
-            onSubmit={handleNewAppointment} 
-            onCancel={() => setShowRequestForm(false)} 
-          />
+          services={services} 
+          onSubmit={handleNewAppointment} 
+          onCancel={() => setShowRequestForm(false)} 
+          user={user}          // ← Agregar esta línea
+        />
         ) : tab === 'inicio' ? (
           <div>
             <h2 className="text-3xl font-bold mb-6">Próximas Atenciones</h2>
@@ -736,340 +737,236 @@ function PatientPortal({ user, services, appointments, saveAppointments, onLogou
 }
 
 /* ==================== REQUEST FORM ============================================= */
-   function RequestForm({ services, onSubmit, onCancel }) {
-    const [beneficiaries, setBeneficiaries] = useState([{
+function RequestForm({ services, onSubmit, onCancel, user }) {
+  const [beneficiaries, setBeneficiaries] = useState([{
+    id: uid(),
+    name: user?.name || '',           // ← Prellenado con el usuario logueado
+    services: [{ serviceId: '', doses: 1, frequency: 'once' }]
+  }]);
+
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+  const [comuna, setComuna] = useState('');
+  const [notes, setNotes] = useState('');
+
+  // ==================== AGREGAR / ELIMINAR BENEFICIARIO ====================
+  const addBeneficiary = () => {
+    setBeneficiaries([...beneficiaries, {
       id: uid(),
       name: '',
       services: [{ serviceId: '', doses: 1, frequency: 'once' }]
     }]);
-  
-    const [date, setDate] = useState('');
-    const [time, setTime] = useState('');
-    const [comuna, setComuna] = useState('');
-    const [notes, setNotes] = useState('');
-  
-    // ==================== MANEJADORES DE BENEFICIARIOS ====================
-    const addBeneficiary = () => {
-      setBeneficiaries([
-        ...beneficiaries,
-        {
-          id: uid(),
-          name: '',
-          services: [{ serviceId: '', doses: 1, frequency: 'once' }]
-        }
-      ]);
-    };
-  
-    const removeBeneficiary = (benId) => {
-      if (beneficiaries.length > 1) {
-        setBeneficiaries(beneficiaries.filter(b => b.id !== benId));
-      }
-    };
-  
-    const updateBeneficiaryName = (benId, value) => {
-      setBeneficiaries(beneficiaries.map(b => 
-        b.id === benId ? { ...b, name: value } : b
-      ));
-    };
-  
-    // ==================== MANEJADORES DE SERVICIOS POR BENEFICIARIO ====================
-    const addServiceToBeneficiary = (benId) => {
-      setBeneficiaries(beneficiaries.map(ben => {
-        if (ben.id !== benId) return ben;
-        return {
-          ...ben,
-          services: [...ben.services, { serviceId: '', doses: 1, frequency: 'once' }]
-        };
-      }));
-    };
-  
-    const removeServiceFromBeneficiary = (benId, serviceIndex) => {
-      setBeneficiaries(beneficiaries.map(ben => {
-        if (ben.id !== benId) return ben;
-        const newServices = ben.services.filter((_, i) => i !== serviceIndex);
-        return {
-          ...ben,
-          services: newServices.length ? newServices : [{ serviceId: '', doses: 1, frequency: 'once' }]
-        };
-      }));
-    };
-  
-    const updateServiceField = (benId, serviceIndex, field, value) => {
-      setBeneficiaries(beneficiaries.map(ben => {
-        if (ben.id !== benId) return ben;
-        const newServices = [...ben.services];
-        newServices[serviceIndex] = { ...newServices[serviceIndex], [field]: value };
-        return { ...ben, services: newServices };
-      }));
-    };
-  
-    // ==================== GENERACIÓN DE SERIE (auto-reserva) ====================
-    const generateAppointmentSeries = (baseApp, servicesList) => {
-      const seriesId = uid();
-      const allAppointments = [];
-  
-      beneficiaries.forEach((ben, benIndex) => {
-        ben.services.forEach((svcItem) => {
-          const service = servicesList.find(s => s.id === svcItem.serviceId);
-          if (!service) return;
-  
-          const totalDoses = parseInt(svcItem.doses) || 1;
-          const frequency = FREQUENCIES.find(f => f.id === svcItem.frequency);
-          const daysStep = frequency ? frequency.days : 0;
-  
-          for (let i = 0; i < totalDoses; i++) {
-            const newDate = new Date(baseApp.date);
-            newDate.setDate(newDate.getDate() + i * daysStep);
-  
-            const seriesApp = {
-              ...baseApp,
-              id: uid(),
-              date: newDate.toISOString().split('T')[0],
-              seriesId: seriesId,
-              doseNumber: i + 1,
-              totalDoses: totalDoses,
-              patientName: ben.name || baseApp.patientName,
-              beneficiaries: [{
-                id: ben.id,
-                name: ben.name,
-                services: [{
-                  serviceId: svcItem.serviceId,
-                  doses: totalDoses,
-                  frequency: svcItem.frequency,
-                  completedDoses: 0
-                }]
-              }]
-            };
-            allAppointments.push(seriesApp);
-          }
-        });
-      });
-  
-      return allAppointments.length > 0 ? allAppointments : [baseApp];
-    };
-  
-    // ==================== SUBMIT ====================
-    const handleSubmit = async (e) => {
-      e.preventDefault();
-  
-      if (!date || !time || !comuna) {
-        alert('❌ Por favor completa fecha, hora y comuna');
-        return;
-      }
-  
-      // Cita base
-      const baseAppointment = {
-        id: uid(),
-        patientName: beneficiaries[0]?.name || 'Paciente',
-        date,
-        time,
-        comuna,
-        notes: notes || '',
-        status: 'pendiente',
-        assignedTo: null,
-        beneficiaries: beneficiaries.map(b => ({
-          id: b.id,
-          name: b.name,
-          services: b.services.map(s => ({
-            serviceId: s.serviceId,
-            doses: parseInt(s.doses) || 1,
-            frequency: s.frequency,
-            completedDoses: 0
-          }))
-        }))
+  };
+
+  const removeBeneficiary = (benId) => {
+    if (beneficiaries.length > 1) {
+      setBeneficiaries(beneficiaries.filter(b => b.id !== benId));
+    }
+  };
+
+  const updateBeneficiaryName = (benId, value) => {
+    setBeneficiaries(beneficiaries.map(b => 
+      b.id === benId ? { ...b, name: value } : b
+    ));
+  };
+
+  // ==================== SERVICIOS POR BENEFICIARIO ====================
+  const addServiceToBeneficiary = (benId) => {
+    setBeneficiaries(beneficiaries.map(ben => {
+      if (ben.id !== benId) return ben;
+      return {
+        ...ben,
+        services: [...ben.services, { serviceId: '', doses: 1, frequency: 'once' }]
       };
-  
-      // Generar serie si corresponde
-      const finalAppointments = generateAppointmentSeries(baseAppointment, services);
-  
-      // Notificar por WhatsApp
-      await sendWhatsAppToAdmin(baseAppointment, 'new', services);
-  
-      // Enviar al padre
-      onSubmit(finalAppointments);
-  
-      alert(`✅ Solicitud enviada correctamente.\nSe generaron ${finalAppointments.length} cita(s) y se notificó por WhatsApp.`);
-  
-      // Limpiar formulario
-      onCancel();
+    }));
+  };
+
+  const removeServiceFromBeneficiary = (benId, serviceIndex) => {
+    setBeneficiaries(beneficiaries.map(ben => {
+      if (ben.id !== benId) return ben;
+      const newServices = ben.services.filter((_, i) => i !== serviceIndex);
+      return {
+        ...ben,
+        services: newServices.length ? newServices : [{ serviceId: '', doses: 1, frequency: 'once' }]
+      };
+    }));
+  };
+
+  const updateServiceField = (benId, serviceIndex, field, value) => {
+    setBeneficiaries(beneficiaries.map(ben => {
+      if (ben.id !== benId) return ben;
+      const newServices = [...ben.services];
+      newServices[serviceIndex] = { ...newServices[serviceIndex], [field]: value };
+      return { ...ben, services: newServices };
+    }));
+  };
+
+  // ==================== SUBMIT ====================
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!date || !time || !comuna) {
+      return alert('❌ Por favor completa fecha, hora y comuna');
+    }
+
+    const baseAppointment = {
+      id: uid(),
+      patientName: beneficiaries[0].name,
+      date,
+      time,
+      comuna,
+      notes: notes || '',
+      status: 'pendiente',
+      assignedTo: null,
+      beneficiaries: beneficiaries.map(b => ({
+        id: b.id,
+        name: b.name,
+        services: b.services.map(s => ({
+          serviceId: s.serviceId,
+          doses: parseInt(s.doses) || 1,
+          frequency: s.frequency,
+          completedDoses: 0
+        }))
+      }))
     };
-  
-    return (
-      <div className="max-w-5xl mx-auto bg-white rounded-3xl shadow-xl p-8">
-        <h2 className="text-3xl font-bold text-center mb-8 text-slate-800">Nueva Solicitud de Atención</h2>
-  
-        <form onSubmit={handleSubmit} className="space-y-10">
-          
-          {/* Beneficiarios */}
-          {beneficiaries.map((ben, benIndex) => (
-            <div key={ben.id} className="border border-slate-200 rounded-3xl p-6 bg-slate-50">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-lg">Beneficiario {benIndex + 1}</h3>
-                {beneficiaries.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeBeneficiary(ben.id)}
-                    className="text-red-500 hover:text-red-600 text-sm flex items-center gap-1"
-                  >
-                    <Trash2 className="w-4 h-4" /> Eliminar
-                  </button>
-                )}
-              </div>
-  
-              <input
-                type="text"
-                placeholder="Nombre completo del beneficiario"
-                value={ben.name}
-                onChange={(e) => updateBeneficiaryName(ben.id, e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 mb-6"
-                required
-              />
-  
-              {/* Servicios del beneficiario */}
-              {ben.services.map((svc, svcIndex) => (
-                <div key={svcIndex} className="flex gap-4 items-end mb-4 bg-white p-4 rounded-2xl border">
-                  {/* Selector de servicio */}
-                  <div className="flex-1">
-                    <label className="block text-xs text-slate-500 mb-1">Servicio</label>
-                    <select
-                      value={svc.serviceId}
-                      onChange={(e) => updateServiceField(ben.id, svcIndex, 'serviceId', e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
-                      required
-                    >
-                      <option value="">Seleccionar servicio...</option>
-                      {services.filter(s => s.active).map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.title} - {fmtCLP(s.price)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-  
-                  {/* Dosis */}
-                  <div className="w-28">
-                    <label className="block text-xs text-slate-500 mb-1">Dosis</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={svc.doses}
-                      onChange={(e) => updateServiceField(ben.id, svcIndex, 'doses', e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 text-center"
-                    />
-                  </div>
-  
-                  {/* Frecuencia */}
-                  <div className="flex-1">
-                    <label className="block text-xs text-slate-500 mb-1">Frecuencia</label>
-                    <select
-                      value={svc.frequency}
-                      onChange={(e) => updateServiceField(ben.id, svcIndex, 'frequency', e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
-                    >
-                      {FREQUENCIES.map(f => (
-                        <option key={f.id} value={f.id}>{f.label}</option>
-                      ))}
-                    </select>
-                  </div>
-  
-                  <button
-                    type="button"
-                    onClick={() => removeServiceFromBeneficiary(ben.id, svcIndex)}
-                    className="text-red-500 hover:text-red-600 px-3 py-3"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                </div>
-              ))}
-  
-              <button
-                type="button"
-                onClick={() => addServiceToBeneficiary(ben.id)}
-                className="text-teal-600 hover:text-teal-700 text-sm flex items-center gap-2 mt-2"
-              >
-                <Plus className="w-4 h-4" /> Agregar otro servicio
-              </button>
+
+    const finalAppointments = generateAppointmentSeries ? generateAppointmentSeries(baseAppointment, services) : [baseAppointment];
+
+    await sendWhatsAppToAdmin(baseAppointment, 'new', services);
+    onSubmit(finalAppointments);
+
+    alert(`✅ Solicitud enviada correctamente.\nSe generaron ${finalAppointments.length} cita(s).`);
+    onCancel();
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto bg-white rounded-3xl shadow-xl p-8">
+      <h2 className="text-3xl font-bold text-center mb-8">Nueva Solicitud de Atención</h2>
+
+      <form onSubmit={handleSubmit} className="space-y-10">
+
+        {beneficiaries.map((ben, index) => (
+          <div key={ben.id} className="border border-slate-200 rounded-3xl p-6 bg-slate-50">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold text-lg">
+                Beneficiario {index + 1} {index === 0 && <span className="text-teal-600">(Tú)</span>}
+              </h3>
+              {beneficiaries.length > 1 && (
+                <button type="button" onClick={() => removeBeneficiary(ben.id)} className="text-red-500 hover:text-red-600 text-sm flex items-center gap-1">
+                  <Trash2 className="w-4 h-4" /> Eliminar
+                </button>
+              )}
             </div>
-          ))}
-  
-          <button
-            type="button"
-            onClick={addBeneficiary}
-            className="w-full py-4 border-2 border-dashed border-teal-300 text-teal-600 rounded-3xl hover:bg-teal-50 font-medium flex items-center justify-center gap-2"
-          >
-            <UserPlus className="w-5 h-5" />
-            Agregar otro beneficiario
-          </button>
-  
-          {/* Fecha, Hora y Comuna */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-2">Fecha</label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-2">Hora</label>
-              <input
-                type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-2">Comuna</label>
-              <select
-                value={comuna}
-                onChange={(e) => setComuna(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
-                required
-              >
-                <option value="">Seleccionar comuna...</option>
-                {COMUNAS.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
-  
-          {/* Notas */}
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-2">Notas / Observaciones</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={4}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
-              placeholder="Detalles adicionales sobre la atención..."
+
+            {/* Nombre del beneficiario - El primero está prellenado y deshabilitado */}
+            <input
+              type="text"
+              placeholder="Nombre completo del beneficiario"
+              value={ben.name}
+              onChange={(e) => updateBeneficiaryName(ben.id, e.target.value)}
+              disabled={index === 0}   // ← Solo el primer beneficiario está bloqueado
+              className={`w-full px-4 py-3 rounded-2xl border border-slate-300 mb-6 ${index === 0 ? 'bg-slate-100 cursor-not-allowed' : ''}`}
+              required
             />
-          </div>
-  
-          {/* Botones */}
-          <div className="flex justify-end gap-4 pt-6 border-t">
+
+            {/* Servicios */}
+            {ben.services.map((svc, svcIndex) => (
+              <div key={svcIndex} className="flex gap-4 items-end mb-4 bg-white p-4 rounded-2xl border">
+                <div className="flex-1">
+                  <label className="block text-xs text-slate-500 mb-1">Servicio</label>
+                  <select
+                    value={svc.serviceId}
+                    onChange={(e) => updateServiceField(ben.id, svcIndex, 'serviceId', e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                    required
+                  >
+                    <option value="">Seleccionar servicio...</option>
+                    {services.filter(s => s.active).map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.title} - {fmtCLP(s.price)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="w-28">
+                  <label className="block text-xs text-slate-500 mb-1">Dosis</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={svc.doses}
+                    onChange={(e) => updateServiceField(ben.id, svcIndex, 'doses', e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500 text-center"
+                  />
+                </div>
+
+                <div className="flex-1">
+                  <label className="block text-xs text-slate-500 mb-1">Frecuencia</label>
+                  <select
+                    value={svc.frequency}
+                    onChange={(e) => updateServiceField(ben.id, svcIndex, 'frequency', e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                  >
+                    {FREQUENCIES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                  </select>
+                </div>
+
+                <button type="button" onClick={() => removeServiceFromBeneficiary(ben.id, svcIndex)} className="text-red-500 hover:text-red-600">
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
+            ))}
+
             <button
               type="button"
-              onClick={onCancel}
-              className="px-10 py-4 text-slate-600 hover:bg-slate-100 rounded-2xl font-medium transition-colors"
+              onClick={() => addServiceToBeneficiary(ben.id)}
+              className="text-teal-600 hover:text-teal-700 text-sm flex items-center gap-2"
             >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-10 py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-semibold transition-colors flex items-center gap-2"
-            >
-              <MessageCircle className="w-5 h-5" />
-              Enviar Solicitud + Notificar por WhatsApp
+              <Plus className="w-4 h-4" /> Agregar otro servicio
             </button>
           </div>
-        </form>
-      </div>
-    );
-  }
+        ))}
+
+        <button
+          type="button"
+          onClick={addBeneficiary}
+          className="w-full py-4 border-2 border-dashed border-teal-300 text-teal-600 rounded-3xl hover:bg-teal-50 font-medium flex items-center justify-center gap-2"
+        >
+          <UserPlus className="w-5 h-5" />
+          Agregar otro beneficiario
+        </button>
+
+        {/* Fecha, Hora y Comuna */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-2">Fecha</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-2">Hora</label>
+            <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-2">Comuna</label>
+            <select value={comuna} onChange={e => setComuna(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required>
+              <option value="">Seleccionar comuna...</option>
+              {COMUNAS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-2">Notas / Observaciones</label>
+          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" placeholder="Detalles adicionales..." />
+        </div>
+
+        <div className="flex justify-end gap-4 pt-6 border-t">
+          <button type="button" onClick={onCancel} className="px-10 py-4 text-slate-600 hover:bg-slate-100 rounded-2xl font-medium">Cancelar</button>
+          <button type="submit" className="px-10 py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-semibold">Enviar Solicitud + Notificar por WhatsApp</button>
+        </div>
+      </form>
+    </div>
+  );
+}
 
 /* ============================ APPOINTMENT CARD ====================================== */
    function AppointmentCard({ app, services, onEdit, onCancel, saveAppointments }) {
