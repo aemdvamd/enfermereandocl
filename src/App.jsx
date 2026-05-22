@@ -1489,14 +1489,13 @@ function AppointmentCard({ a, services, onCancel }) {
   );
 }
 
-// ==================== ADMINPANEL (CORREGIDO) ====================
-// ==================== ADMINPANEL (ACTUALIZADO CON KANBAN) ====================
+// ==================== ADMINPANEL FINAL (LIMPIO - SIN DUPLICADOS NI INTEGRIDAD) ====================
 function AdminPanel({ 
-  user, setUser, services, appointments, patients, professionals, 
+  user, setUser, services, setServices, appointments, patients, professionals, 
   notifications, saveAppointments, savePatients, saveProfessionals, 
   addNotification, onLogout 
 }) {
-  const [tab, setTab] = useState('hoy');
+  const [tab, setTab] = useState('seguimiento');
   const [editingApp, setEditingApp] = useState(null);
 
   const isAdmin = user.role === 'admin';
@@ -1504,23 +1503,6 @@ function AdminPanel({
 
   const handleSaveAppointments = async (newList) => {
     await saveAppointments(newList, setAppointments, patients, professionals, services);
-  };
-
-  const confirmAppointment = async (appId) => {
-    const app = appointments.find(a => a.id === appId);
-    if (!app) return;
-
-    const validatedApp = validateAndFixAppointment(app, patients, professionals, services);
-    const updated = { 
-      ...validatedApp, 
-      status: 'asignada', 
-      assignedTo: user.id, 
-      assignedToName: user.name 
-    };
-
-    const newList = appointments.map(a => a.id === appId ? updated : a);
-    await handleSaveAppointments(newList);
-    await sendWhatsAppToAdmin(updated, 'confirmed', services);
   };
 
   return (
@@ -1545,20 +1527,15 @@ function AdminPanel({
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* PESTAÑAS ACTUALIZADAS */}
         <div className="flex gap-2 mb-8 overflow-x-auto pb-2 border-b">
           <TabButton active={tab === 'hoy'} onClick={() => setTab('hoy')} icon={Calendar}>Hoy</TabButton>
           <TabButton active={tab === 'calendario'} onClick={() => setTab('calendario')} icon={Calendar}>Calendario</TabButton>
           <TabButton active={tab === 'seguimiento'} onClick={() => setTab('seguimiento')} icon={Route}>Seguimiento</TabButton>
-          <TabButton active={tab === 'integridad'} onClick={() => setTab('integridad')} icon={Shield}>Integridad</TabButton>
-          <TabButton active={tab === 'duplicados'} onClick={() => setTab('duplicados')} icon={Users}>Duplicados</TabButton>
+          <TabButton active={tab === 'servicios'} onClick={() => setTab('servicios')} icon={Package}>Servicios</TabButton>
         </div>
 
-        {/* CONTENIDO */}
         {tab === 'hoy' && <div className="text-center py-12 text-slate-400">Vista "Hoy" (próximamente)</div>}
         {tab === 'calendario' && <CalendarView appointments={visibleApps} onEdit={setEditingApp} />}
-        
-        {/* NUEVO KANBAN */}
         {tab === 'seguimiento' && (
           <KanbanBoard 
             appointments={appointments}
@@ -1571,14 +1548,16 @@ function AdminPanel({
           />
         )}
 
-        {tab === 'integridad' && <IntegrityDashboard ... />}
-        {tab === 'duplicados' && <DuplicateMerger ... />}
-
-        {editingApp && <EditAppointmentModal app={editingApp} services={services} onSave={...} onClose={() => setEditingApp(null)} />}
-      </div>
-    </div>
-  );
-}
+        {/* NUEVA PESTAÑA */}
+        {tab === 'servicios' && (
+          <ServicesManager 
+            services={services} 
+            saveServices={async (list) => {
+              setServices(list);
+              await sset('enf:services', list);
+            }} 
+          />
+      )}
 
         {editingApp && (
           <EditAppointmentModal 
@@ -1593,320 +1572,6 @@ function AdminPanel({
           />
         )}
       </div>
-    </div>
-  );
-}
-
-// ==================== INTEGRITY DASHBOARD (CON INTEGRIDAD REFERENCIAL) ====================
-function IntegrityDashboard({ 
-  appointments, 
-  patients, 
-  professionals, 
-  services, 
-  currentUser, 
-  saveAppointments 
-}) {
-  const [report, setReport] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  const runFullIntegrityCheck = () => {
-    setLoading(true);
-
-    // 1. Validación referencial completa
-    const referential = validateReferentialIntegrity(appointments, patients, professionals, services);
-
-    // 2. Validación normal de cada cita
-    const validatedApps = validateAllAppointments(appointments, patients, professionals, services);
-
-    // 3. Combinar todos los issues
-    const issues = [
-      ...referential.issues,
-      ...validatedApps
-        .filter(a => a.validationIssues && a.validationIssues.length > 0)
-        .flatMap(a => a.validationIssues.map(msg => ({
-          type: 'warning',
-          entity: 'appointment',
-          id: a.id,
-          message: msg
-        })))
-    ];
-
-    setReport({
-      totalIssues: issues.length,
-      errors: issues.filter(i => i.type === 'error').length,
-      warnings: issues.filter(i => i.type === 'warning').length,
-      issues,
-      referentialIssues: referential.issues
-    });
-
-    setLoading(false);
-  };
-
-  const autoFixAll = async () => {
-    setLoading(true);
-    
-    // Corrección automática de integridad referencial
-    const { fixedAppointments } = validateReferentialIntegrity(appointments, patients, professionals, services);
-    
-    // Validación completa final
-    const fullyValidated = validateAllAppointments(fixedAppointments, patients, professionals, services);
-    
-    await saveAppointments(fullyValidated);
-    
-    alert('✅ Integridad referencial y validación completa aplicada automáticamente a todas las citas.');
-    runFullIntegrityCheck();
-    setLoading(false);
-  };
-
-  return (
-    <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold flex items-center gap-3">
-          <Shield className="w-7 h-7 text-teal-600" />
-          Panel de Integridad Referencial
-        </h2>
-        <button
-          onClick={runFullIntegrityCheck}
-          disabled={loading}
-          className="px-6 py-3 bg-teal-600 text-white rounded-2xl font-semibold flex items-center gap-2 hover:bg-teal-700 disabled:opacity-70 transition-all"
-        >
-          {loading ? (
-            <>Analizando...</>
-          ) : (
-            <>Ejecutar chequeo completo</>
-          )}
-        </button>
-      </div>
-
-      {report && (
-        <>
-          <div className="grid grid-cols-3 gap-4 mb-8">
-            <StatCard label="Errores" value={report.errors} color="red" />
-            <StatCard label="Advertencias" value={report.warnings} color="amber" />
-            <StatCard label="Total Issues" value={report.totalIssues} color="teal" />
-          </div>
-
-          <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-            {report.issues.map((issue, i) => (
-              <div
-                key={i}
-                className={`p-4 rounded-2xl flex gap-3 ${
-                  issue.type === 'error'
-                    ? 'bg-red-50 border border-red-200'
-                    : 'bg-amber-50 border border-amber-200'
-                }`}
-              >
-                {issue.type === 'error' ? (
-                  <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
-                ) : (
-                  <Shield className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                )}
-                <div className="flex-1 text-sm">
-                  <div className="font-medium">{issue.message}</div>
-                  {issue.entity && (
-                    <div className="text-xs text-slate-500 mt-1">
-                      Entidad: <span className="font-mono">{issue.entity}</span> • ID: {issue.id}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <button
-            onClick={autoFixAll}
-            disabled={loading}
-            className="mt-8 w-full py-4 bg-gradient-to-r from-teal-600 to-blue-600 text-white rounded-3xl font-semibold text-lg hover:shadow-lg transition-all disabled:opacity-70"
-          >
-            {loading ? 'Corrigiendo...' : 'Corregir todo automáticamente'}
-          </button>
-        </>
-      )}
-
-      {!report && (
-        <div className="text-center py-16 text-slate-400">
-          <Shield className="w-12 h-12 mx-auto mb-4 opacity-30" />
-          <p className="text-lg">Presiona "Ejecutar chequeo completo" para validar</p>
-          <p className="text-sm mt-2">referencias entre citas, pacientes, profesionales y servicios</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ==================== DUPLICATEMERGER (COMPLETO Y FUNCIONAL) ====================
-function DuplicateMerger({ 
-  patients, 
-  professionals, 
-  appointments, 
-  savePatients, 
-  saveAppointments, 
-  currentUser 
-}) {
-  const [activeTab, setActiveTab] = useState('patients');
-  const [selectedGroup, setSelectedGroup] = useState(null);
-
-  const patientDuplicates = findDuplicatePatients(patients);
-  const proDuplicates = findDuplicateProfessionals(professionals);
-
-  const mergePatients = async (group) => {
-    if (!group || group.length < 2) return;
-    
-    const master = group[0];           // El que se mantiene
-    const toDelete = group.slice(1);
-
-    let updatedPatients = [...patients];
-    let updatedAppointments = [...appointments];
-
-    toDelete.forEach(dup => {
-      // Reasignar todas las citas del duplicado al paciente maestro
-      updatedAppointments = updatedAppointments.map(app => 
-        app.patientId === dup.id 
-          ? { ...app, patientId: master.id, patientName: master.name }
-          : app
-      );
-      // Eliminar duplicado
-      updatedPatients = updatedPatients.filter(p => p.id !== dup.id);
-    });
-
-    await savePatients(updatedPatients);
-    await saveAppointments(updatedAppointments);
-    
-    alert(`✅ ${toDelete.length} perfiles de pacientes fusionados correctamente en "${master.name}"`);
-    setSelectedGroup(null);
-  };
-
-  const mergeProfessionals = async (group) => {
-    if (!group || group.length < 2) return;
-    
-    const master = group[0];
-    const toDelete = group.slice(1);
-
-    let updatedPros = [...professionals];
-    let updatedApps = [...appointments];
-
-    toDelete.forEach(dup => {
-      updatedApps = updatedApps.map(app => 
-        app.assignedTo === dup.id 
-          ? { ...app, assignedTo: master.id, assignedToName: master.name }
-          : app
-      );
-      updatedPros = updatedPros.filter(p => p.id !== dup.id);
-    });
-
-    await saveProfessionals(updatedPros);
-    await saveAppointments(updatedApps);
-    
-    alert(`✅ ${toDelete.length} perfiles de profesionales fusionados correctamente en "${master.name}"`);
-    setSelectedGroup(null);
-  };
-
-  return (
-    <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold flex items-center gap-3">
-          <Users className="w-7 h-7 text-teal-600" />
-          Fusión de Perfiles Duplicados
-        </h2>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="bg-teal-100 text-teal-700 px-4 py-1.5 rounded-3xl font-medium">
-            Pacientes: {patientDuplicates.length}
-          </span>
-          <span className="bg-blue-100 text-blue-700 px-4 py-1.5 rounded-3xl font-medium">
-            Profesionales: {proDuplicates.length}
-          </span>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex border-b mb-8">
-        <button
-          onClick={() => { setActiveTab('patients'); setSelectedGroup(null); }}
-          className={`flex-1 py-4 font-semibold text-lg transition-all border-b-4 ${activeTab === 'patients' 
-            ? 'border-teal-600 text-teal-700' 
-            : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-        >
-          Pacientes ({patientDuplicates.length})
-        </button>
-        <button
-          onClick={() => { setActiveTab('professionals'); setSelectedGroup(null); }}
-          className={`flex-1 py-4 font-semibold text-lg transition-all border-b-4 ${activeTab === 'professionals' 
-            ? 'border-teal-600 text-teal-700' 
-            : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-        >
-          Profesionales ({proDuplicates.length})
-        </button>
-      </div>
-
-      {/* Contenido Pacientes */}
-      {activeTab === 'patients' && (
-        <div className="space-y-6">
-          {patientDuplicates.length === 0 ? (
-            <EmptyState icon={Users} text="No se encontraron pacientes duplicados 👍" />
-          ) : (
-            patientDuplicates.map((group, idx) => {
-              const master = group[0];
-              return (
-                <div key={idx} className="border border-slate-200 rounded-3xl p-6 hover:border-teal-300 transition-all">
-                  <div className="flex justify-between items-center">
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-slate-500">Grupo de duplicados</div>
-                      <div className="font-semibold text-lg text-slate-900 mt-1">
-                        {group.map(p => p.name).join(' • ')}
-                      </div>
-                      <div className="text-xs text-slate-500 mt-2">
-                        {group.length} registros • IDs: {group.map(p => p.id).join(', ')}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => mergePatients(group)}
-                      className="ml-6 px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl flex items-center gap-2 transition-all"
-                    >
-                      <CheckCircle className="w-5 h-5" />
-                      Fusionar en <span className="font-bold">{master.name}</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      )}
-
-      {/* Contenido Profesionales */}
-      {activeTab === 'professionals' && (
-        <div className="space-y-6">
-          {proDuplicates.length === 0 ? (
-            <EmptyState icon={Users} text="No se encontraron profesionales duplicados 👍" />
-          ) : (
-            proDuplicates.map((group, idx) => {
-              const master = group[0];
-              return (
-                <div key={idx} className="border border-slate-200 rounded-3xl p-6 hover:border-teal-300 transition-all">
-                  <div className="flex justify-between items-center">
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-slate-500">Grupo de duplicados</div>
-                      <div className="font-semibold text-lg text-slate-900 mt-1">
-                        {group.map(p => p.name).join(' • ')}
-                      </div>
-                      <div className="text-xs text-slate-500 mt-2">
-                        {group.length} registros
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => mergeProfessionals(group)}
-                      className="ml-6 px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl flex items-center gap-2 transition-all"
-                    >
-                      <CheckCircle className="w-5 h-5" />
-                      Fusionar en <span className="font-bold">{master.name}</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -2088,6 +1753,214 @@ function KanbanBoard({
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ==================== SERVICES MANAGER (NUEVO MÓDULO) ====================
+function ServicesManager({ services, saveServices }) {
+  const [localServices, setLocalServices] = useState(services);
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [newService, setNewService] = useState({
+    id: '',
+    iconId: 'syringe',
+    title: '',
+    desc: '',
+    price: 15000,
+    allowDoses: false,
+    active: true
+  });
+
+  // Sincronizar cuando cambien los servicios desde fuera
+  useEffect(() => {
+    setLocalServices(services);
+  }, [services]);
+
+  const updateService = (id, updates) => {
+    const updatedList = localServices.map(s => 
+      s.id === id ? { ...s, ...updates } : s
+    );
+    setLocalServices(updatedList);
+    saveServices(updatedList); // Guarda en Supabase y actualiza estado global
+  };
+
+  const toggleActive = (id) => {
+    const svc = localServices.find(s => s.id === id);
+    if (svc) updateService(id, { active: !svc.active });
+  };
+
+  const handlePriceChange = (id, value) => {
+    const price = parseInt(value) || 0;
+    updateService(id, { price });
+  };
+
+  const deleteService = (id) => {
+    if (!confirm('¿Eliminar este servicio permanentemente? Esta acción no se puede deshacer.')) return;
+    const updatedList = localServices.filter(s => s.id !== id);
+    setLocalServices(updatedList);
+    saveServices(updatedList);
+  };
+
+  const addNewService = () => {
+    if (!newService.title || !newService.desc) {
+      alert('Título y descripción son obligatorios');
+      return;
+    }
+    const serviceToAdd = {
+      ...newService,
+      id: newService.id || 'svc-' + Date.now().toString(36)
+    };
+    const updatedList = [...localServices, serviceToAdd];
+    setLocalServices(updatedList);
+    saveServices(updatedList);
+    setShowNewForm(false);
+    setNewService({ id: '', iconId: 'syringe', title: '', desc: '', price: 15000, allowDoses: false, active: true });
+  };
+
+  return (
+    <div className="bg-white rounded-3xl p-6 border border-slate-200">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold flex items-center gap-3">
+          <Package className="w-7 h-7 text-teal-600" />
+          Gestión de Servicios
+        </h2>
+        <button
+          onClick={() => setShowNewForm(!showNewForm)}
+          className="px-5 py-2 bg-teal-600 text-white rounded-3xl font-medium flex items-center gap-2 hover:bg-teal-700 transition-all"
+        >
+          <Plus className="w-4 h-4" />
+          Nuevo servicio
+        </button>
+      </div>
+
+      {/* Formulario para nuevo servicio */}
+      {showNewForm && (
+        <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 mb-8">
+          <h3 className="font-semibold mb-4">Agregar nuevo servicio</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium mb-1">Título</label>
+              <input
+                type="text"
+                value={newService.title}
+                onChange={e => setNewService(prev => ({ ...prev, title: e.target.value }))}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-300"
+                placeholder="Nombre del servicio"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Precio</label>
+              <input
+                type="number"
+                value={newService.price}
+                onChange={e => setNewService(prev => ({ ...prev, price: parseInt(e.target.value) || 0 }))}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-300"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium mb-1">Descripción</label>
+              <textarea
+                value={newService.desc}
+                onChange={e => setNewService(prev => ({ ...prev, desc: e.target.value }))}
+                rows={2}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-300"
+                placeholder="Breve descripción del servicio"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Icono</label>
+              <select
+                value={newService.iconId}
+                onChange={e => setNewService(prev => ({ ...prev, iconId: e.target.value }))}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-300"
+              >
+                {ICON_OPTIONS.map(opt => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newService.allowDoses}
+                  onChange={e => setNewService(prev => ({ ...prev, allowDoses: e.target.checked }))}
+                />
+                <span className="text-sm">Permitir paquetes de dosis</span>
+              </label>
+            </div>
+          </div>
+          <div className="flex gap-3 mt-6">
+            <button
+              onClick={() => setShowNewForm(false)}
+              className="flex-1 py-3 border border-slate-300 rounded-3xl font-medium"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={addNewService}
+              className="flex-1 py-3 bg-teal-600 text-white rounded-3xl font-medium"
+            >
+              Agregar servicio
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Lista de servicios */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {localServices.map(svc => {
+          const Icon = getIconComponent(svc.iconId);
+          return (
+            <div key={svc.id} className="bg-white border border-slate-200 rounded-3xl p-5 hover:shadow-md transition-all">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 bg-teal-100 text-teal-600 rounded-2xl flex items-center justify-center flex-shrink-0">
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex justify-between">
+                    <h4 className="font-semibold text-slate-900">{svc.title}</h4>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={svc.active}
+                        onChange={() => toggleActive(svc.id)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-600"></div>
+                    </label>
+                  </div>
+                  <p className="text-xs text-slate-500 line-clamp-2 mt-1">{svc.desc}</p>
+
+                  <div className="mt-4 flex items-center gap-3">
+                    <div className="flex-1">
+                      <label className="text-xs text-slate-500 block mb-1">Precio</label>
+                      <input
+                        type="number"
+                        value={svc.price}
+                        onChange={(e) => handlePriceChange(svc.id, e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-2xl text-lg font-semibold focus:border-teal-500"
+                      />
+                    </div>
+                    <button
+                      onClick={() => deleteService(svc.id)}
+                      className="text-red-500 hover:text-red-600 mt-5"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {svc.allowDoses && (
+                    <span className="inline-flex items-center gap-1 text-[10px] mt-3 px-3 py-1 bg-amber-100 text-amber-700 rounded-2xl">
+                      <Package className="w-3 h-3" /> Paquetes de dosis
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           );
