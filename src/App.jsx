@@ -64,7 +64,7 @@ const TEMPLATES = {
 
 const RELATIONSHIPS = ['Titular','Cónyuge','Hijo/a','Padre','Madre','Abuelo/a','Hermano/a','Otro familiar','Otro'];
 
-// ==================== WHATSAPP CALLMEBOT ====================
+// ==================== WHATSAPP ====================
 const sendWhatsAppToAdmin = async (data, type = 'new_appointment', services = []) => {
   try {
     const adminPhone = (import.meta.env.VITE_ADMIN_WHATSAPP || WHATSAPP).replace(/\D/g, '');
@@ -161,6 +161,50 @@ function StatCard({ label, value, color = "teal" }) {
 
 function EmptyState({ icon: Icon, text }) {
   return <div className="bg-white rounded-2xl p-12 text-center border border-slate-200"><Icon className="w-12 h-12 mx-auto text-slate-300 mb-3" /><p className="text-slate-500">{text}</p></div>;
+}
+
+// ==================== LANDING (COMPLETO) ====================
+function Landing({ services, onLogin }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [openFaq, setOpenFaq] = useState(null);
+
+  const scrollTo = (id) => {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    setMenuOpen(false);
+  };
+
+  return (
+    <>
+      <nav className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-teal-100 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center">
+              <Stethoscope className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <div className="font-bold text-teal-900">Enfermereando</div>
+              <div className="text-xs text-teal-600 hidden sm:block">Salud en tu hogar</div>
+            </div>
+          </div>
+          <button onClick={onLogin} className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-semibold">Acceder</button>
+        </div>
+      </nav>
+
+      <section className="relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 py-12 md:py-20 grid md:grid-cols-2 gap-10 items-center">
+          <div>
+            <h1 className="text-4xl md:text-5xl font-bold text-slate-900 leading-tight mb-4">Cuidado profesional <span className="text-teal-600">en la comodidad de tu hogar</span></h1>
+            <p className="text-lg text-slate-600 mb-8">Atención de enfermería a domicilio en la Región Metropolitana con <strong>{PROFESSIONAL_NAME}</strong>.</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button onClick={onLogin} className="px-6 py-3 rounded-xl bg-gradient-to-r from-teal-600 to-blue-600 text-white font-semibold shadow-lg">Reservar atención</button>
+              <a href={'https://wa.me/' + WHATSAPP} target="_blank" rel="noopener noreferrer" className="px-6 py-3 rounded-xl bg-green-500 text-white font-semibold">WhatsApp</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
+  );
 }
 
 // ==================== CALENDAR VIEW ====================
@@ -666,7 +710,7 @@ export default function App() {
     setUser({ ...safe });
     setView('admin');
     return { ok: true };
-      console.log('Login:', data);
+    console.log('Login:', data);
     return { ok: true };
   };
 
