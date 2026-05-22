@@ -62,6 +62,21 @@ const TEMPLATES = {
   'cur-adv': 'Tipo de herida:\nDimensiones:\nExudado:\nTratamiento aplicado:'
 };
 
+const TESTIMONIALS = [
+  { name: 'María Fernanda C.', comuna: 'Providencia', text: 'Mi madre tiene una úlcera por presión y la atención ha sido impecable.', stars: 5 },
+  { name: 'Roberto Silva', comuna: 'Las Condes', text: 'Necesitaba inyecciones diarias y el servicio fue siempre puntual.', stars: 5 },
+  { name: 'Patricia Vega', comuna: 'Ñuñoa', text: 'Excelente manejo del pie diabético de mi padre.', stars: 5 }
+];
+
+const FAQ_ITEMS = [
+  { q: '¿Cuáles son los horarios de atención?', a: 'Atendemos en dos franjas horarias: mañana de ' + HOURS_LABEL_MORNING + ' y tarde de ' + HOURS_LABEL_AFTERNOON + '.' },
+  { q: '¿Puedo programar dosis múltiples?', a: 'Sí. Puedes elegir un paquete con varias dosis y la frecuencia que necesites. Cada dosis se agenda como visita independiente.' },
+  { q: '¿Cuál es el tiempo de respuesta?', a: 'Respondemos en menos de 30 minutos en horario hábil.' },
+  { q: '¿Puedo agendar para varios miembros de mi familia?', a: 'Sí. Aplicamos descuento automático por grupo familiar: 5% desde 2 personas, 10% desde 3 y 15% desde 4.' },
+  { q: '¿Cómo se realiza el pago?', a: 'Aceptamos transferencia bancaria, efectivo y tarjetas.' },
+  { q: '¿Atienden urgencias?', a: 'Sí, atendemos urgencias con disponibilidad inmediata sujeta a agenda.' }
+];
+
 const RELATIONSHIPS = ['Titular','Cónyuge','Hijo/a','Padre','Madre','Abuelo/a','Hermano/a','Otro familiar','Otro'];
 
 // ==================== WHATSAPP ====================
@@ -163,46 +178,137 @@ function EmptyState({ icon: Icon, text }) {
   return <div className="bg-white rounded-2xl p-12 text-center border border-slate-200"><Icon className="w-12 h-12 mx-auto text-slate-300 mb-3" /><p className="text-slate-500">{text}</p></div>;
 }
 
-// ==================== LANDING (COMPLETO) ====================
+
+// LANDING PAGE COMPLETO //
 function Landing({ services, onLogin }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
-
-  const scrollTo = (id) => {
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-    setMenuOpen(false);
-  };
+  const scrollTo = (id) => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }); setMenuOpen(false); };
 
   return (
     <>
       <nav className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-teal-100 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center">
-              <Stethoscope className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <div className="font-bold text-teal-900">Enfermereando</div>
-              <div className="text-xs text-teal-600 hidden sm:block">Salud en tu hogar</div>
-            </div>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center"><Stethoscope className="w-6 h-6 text-white" /></div>
+            <div><div className="font-bold text-teal-900">Enfermereando</div><div className="text-xs text-teal-600 hidden sm:block">Salud en tu hogar</div></div>
           </div>
-          <button onClick={onLogin} className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-semibold">Acceder</button>
+          <div className="hidden md:flex items-center gap-6">
+            <button onClick={() => scrollTo('servicios')} className="text-sm font-medium text-slate-700 hover:text-teal-600">Servicios</button>
+            <button onClick={() => scrollTo('como-funciona')} className="text-sm font-medium text-slate-700 hover:text-teal-600">Cómo funciona</button>
+            <button onClick={() => scrollTo('cobertura')} className="text-sm font-medium text-slate-700 hover:text-teal-600">Cobertura</button>
+            <button onClick={() => scrollTo('faq')} className="text-sm font-medium text-slate-700 hover:text-teal-600">FAQ</button>
+            <button onClick={onLogin} className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition">Acceder</button>
+          </div>
+          <button className="md:hidden text-slate-700" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</button>
         </div>
+        {menuOpen && (
+          <div className="md:hidden border-t border-teal-100 bg-white px-4 py-3 flex flex-col gap-3">
+            <button onClick={() => scrollTo('servicios')} className="text-left text-slate-700">Servicios</button>
+            <button onClick={() => scrollTo('como-funciona')} className="text-left text-slate-700">Cómo funciona</button>
+            <button onClick={() => scrollTo('cobertura')} className="text-left text-slate-700">Cobertura</button>
+            <button onClick={() => scrollTo('faq')} className="text-left text-slate-700">FAQ</button>
+            <button onClick={onLogin} className="px-4 py-2 rounded-lg bg-teal-600 text-white font-semibold">Acceder</button>
+          </div>
+        )}
       </nav>
 
       <section className="relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 py-12 md:py-20 grid md:grid-cols-2 gap-10 items-center">
           <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-100 text-teal-700 text-xs font-semibold mb-4"><Shield className="w-4 h-4" /> Enfermera registrada en Superintendencia de Salud</div>
             <h1 className="text-4xl md:text-5xl font-bold text-slate-900 leading-tight mb-4">Cuidado profesional <span className="text-teal-600">en la comodidad de tu hogar</span></h1>
-            <p className="text-lg text-slate-600 mb-8">Atención de enfermería a domicilio en la Región Metropolitana con <strong>{PROFESSIONAL_NAME}</strong>.</p>
+            <p className="text-lg text-slate-600 mb-3">Atención de enfermería a domicilio en la Región Metropolitana con <strong>{PROFESSIONAL_NAME}</strong>.</p>
+            <p className="text-sm text-teal-700 font-semibold mb-1 flex items-center gap-1"><Users className="w-4 h-4" /> Hasta 15% de descuento al atender a tu grupo familiar</p>
+            <p className="text-sm text-slate-600 mb-8 flex items-center gap-1"><Clock className="w-4 h-4 text-teal-600" /> {HOURS_LABEL_FULL}</p>
             <div className="flex flex-col sm:flex-row gap-3">
-              <button onClick={onLogin} className="px-6 py-3 rounded-xl bg-gradient-to-r from-teal-600 to-blue-600 text-white font-semibold shadow-lg">Reservar atención</button>
-              <a href={'https://wa.me/' + WHATSAPP} target="_blank" rel="noopener noreferrer" className="px-6 py-3 rounded-xl bg-green-500 text-white font-semibold">WhatsApp</a>
+              <button onClick={onLogin} className="px-6 py-3 rounded-xl bg-gradient-to-r from-teal-600 to-blue-600 text-white font-semibold shadow-lg flex items-center justify-center gap-2"><Calendar className="w-5 h-5" /> Reservar atención</button>
+              <a href={'https://wa.me/' + WHATSAPP} target="_blank" rel="noopener noreferrer" className="px-6 py-3 rounded-xl bg-green-500 text-white font-semibold flex items-center justify-center gap-2"><MessageCircle className="w-5 h-5" /> WhatsApp</a>
             </div>
+          </div>
+          <div className="relative">
+            <div className="aspect-square rounded-3xl bg-gradient-to-br from-teal-400 to-blue-500 p-1 shadow-2xl"><div className="w-full h-full rounded-3xl bg-white flex items-center justify-center"><div className="text-center p-8"><div className="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-teal-100 to-blue-100 flex items-center justify-center mb-4"><Stethoscope className="w-16 h-16 text-teal-600" /></div><div className="text-2xl font-bold text-slate-900">Atención certificada</div><div className="text-slate-500 mt-2">Profesional universitaria</div></div></div></div>
           </div>
         </div>
       </section>
+
+      <section id="servicios" className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="text-center mb-12"><h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">Nuestros servicios</h2></div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {services.map(s => {
+              const Icon = getIconComponent(s.iconId);
+              return (
+                <div key={s.id} className="bg-gradient-to-br from-white to-teal-50/30 rounded-2xl p-6 border border-teal-100 hover:shadow-lg transition-all">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center mb-4"><Icon className="w-6 h-6 text-white" /></div>
+                  <div className="flex items-center gap-2 mb-2 flex-wrap"><h3 className="font-bold text-lg text-slate-900">{s.title}</h3>{s.allowDoses && <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold uppercase flex items-center gap-1"><Package className="w-3 h-3" /> Paquete</span>}</div>
+                  <p className="text-sm text-slate-600 mb-4">{s.desc}</p>
+                  <div className="flex items-center justify-between"><div className="text-teal-600 font-bold">Desde {fmtCLP(s.price)}</div><button onClick={onLogin} className="text-sm font-semibold text-teal-700 flex items-center gap-1">Reservar <ArrowRight className="w-4 h-4" /></button></div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section id="como-funciona" className="py-16 bg-gradient-to-br from-teal-50 to-blue-50">
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="text-center mb-12"><h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">¿Cómo funciona?</h2></div>
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="bg-white rounded-2xl p-6 shadow-sm"><div className="flex items-center gap-3 mb-4"><div className="w-10 h-10 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center">1</div><Calendar className="w-6 h-6 text-teal-600" /></div><h3 className="font-bold text-lg text-slate-900 mb-2">Solicita tu hora</h3><p className="text-sm text-slate-600">Reserva online. Agrega familiares y configura paquetes de dosis.</p></div>
+            <div className="bg-white rounded-2xl p-6 shadow-sm"><div className="flex items-center gap-3 mb-4"><div className="w-10 h-10 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center">2</div><CheckCircle className="w-6 h-6 text-teal-600" /></div><h3 className="font-bold text-lg text-slate-900 mb-2">Confirmamos contigo</h3><p className="text-sm text-slate-600">Un profesional asignado confirmará el horario.</p></div>
+            <div className="bg-white rounded-2xl p-6 shadow-sm"><div className="flex items-center gap-3 mb-4"><div className="w-10 h-10 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center">3</div><HomeIcon className="w-6 h-6 text-teal-600" /></div><h3 className="font-bold text-lg text-slate-900 mb-2">Atención en casa</h3><p className="text-sm text-slate-600">Llegamos puntuales con materiales.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-16 bg-white">
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="text-center mb-12"><h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">Lo que dicen nuestros pacientes</h2></div>
+          <div className="grid md:grid-cols-3 gap-5">
+            {TESTIMONIALS.map((t, i) => (
+              <div key={i} className="bg-gradient-to-br from-amber-50 to-white rounded-2xl p-6 border border-amber-100">
+                <div className="flex gap-1 mb-3">{Array.from({length: t.stars}).map((_, j) => <Star key={j} className="w-4 h-4 text-amber-500 fill-amber-500" />)}</div>
+                <p className="text-slate-700 mb-4 italic">"{t.text}"</p>
+                <div className="font-semibold text-slate-900">{t.name}</div>
+                <div className="text-sm text-slate-500">{t.comuna}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="cobertura" className="py-16 bg-gradient-to-br from-blue-50 to-teal-50">
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="text-center mb-10"><h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">Cobertura en la RM</h2></div>
+          <div className="bg-white rounded-2xl p-8 shadow-sm"><div className="flex flex-wrap gap-2 justify-center">{COMUNAS.map(c => <span key={c} className="px-4 py-2 rounded-full bg-teal-50 text-teal-700 text-sm font-medium border border-teal-100 flex items-center gap-1"><MapPin className="w-3 h-3" /> {c}</span>)}</div></div>
+        </div>
+      </section>
+
+      <section id="faq" className="py-16 bg-white">
+        <div className="max-w-3xl mx-auto px-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-8 text-center">Preguntas frecuentes</h2>
+          <div className="space-y-3">
+            {FAQ_ITEMS.map((f, i) => (
+              <div key={i} className="border border-slate-200 rounded-xl overflow-hidden">
+                <button onClick={() => setOpenFaq(openFaq === i ? null : i)} className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 transition text-left"><span className="font-semibold text-slate-900">{f.q}</span><ChevronDown className={'w-5 h-5 text-slate-500 transition-transform ' + (openFaq === i ? 'rotate-180' : '')} /></button>
+                {openFaq === i && <div className="px-5 pb-4 text-slate-600 text-sm">{f.a}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <footer className="bg-slate-900 text-slate-300 py-10">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="grid md:grid-cols-3 gap-8">
+            <div><div className="flex items-center gap-2 mb-3"><div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-500 to-blue-600 flex items-center justify-center"><Stethoscope className="w-5 h-5 text-white" /></div><span className="font-bold text-white">Enfermereando</span></div><p className="text-sm">Atención de enfermería profesional a domicilio.</p></div>
+            <div><h3 className="font-semibold text-white mb-3">Contacto</h3><div className="space-y-2 text-sm"><div className="flex items-center gap-2"><Phone className="w-4 h-4" /> {PHONE}</div><div className="flex items-center gap-2"><MessageCircle className="w-4 h-4" /> WhatsApp 24/7</div></div></div>
+            <div><h3 className="font-semibold text-white mb-3 flex items-center gap-1"><Clock className="w-4 h-4" /> Horarios</h3><div className="space-y-1 text-sm"><div>Mañana: {HOURS_LABEL_MORNING}</div><div>Tarde: {HOURS_LABEL_AFTERNOON}</div></div></div>
+          </div>
+          <div className="border-t border-slate-700 mt-8 pt-6 text-center text-sm">© 2026 Enfermereando. enfermereando.cl</div>
+        </div>
+      </footer>
     </>
   );
 }
