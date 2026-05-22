@@ -361,21 +361,6 @@ const saveProfessionals = async (list, setProfessionals) => {
   await sset('enf:professionals', list);
 };
 
-// ==================== NORMALIZACIÓN Y VALIDACIÓN ====================
-const normalizeApp = (a) => {
-  let app = { ...a };
-  if (!app.beneficiaries || !Array.isArray(app.beneficiaries)) {
-    app.beneficiaries = [{ id: 'b0', name: app.patientName || 'Paciente', relationship: 'Titular', services: app.serviceId ? [{ serviceId: app.serviceId }] : [] }];
-  }
-  app.beneficiaries = app.beneficiaries.map(b => ({
-    ...b,
-    services: (b.services || []).map(item => typeof item === 'string' ? { serviceId: item, doses: 1, frequency: 'once', completedDoses: 0 } : item)
-  }));
-  return app;
-};
-
-const validateAllAppointments = (apps) => apps.map(normalizeApp);
-
 // ==================== COMPONENTES AUXILIARES ====================
 function RoleBadge({ role }) {
   return role === 'admin' 
@@ -1227,32 +1212,6 @@ function DuplicateMerger({ patients, professionals, appointments, savePatients, 
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-// COMPONENTES EXTRAS //
-
-function IntegrityDashboard({ appointments, patients, professionals, services, currentUser, saveAppointments }) {
-  return (
-    <div className="bg-white rounded-3xl p-8">
-      <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-        <Shield className="w-6 h-6 text-teal-600" /> Panel de Integridad de Datos
-      </h2>
-      <p className="text-slate-600">Aquí se mostrarán alertas de integridad, duplicados y validaciones.</p>
-      {/* Puedes expandir más tarde */}
-    </div>
-  );
-}
-
-function DuplicateMerger({ patients, professionals, appointments, savePatients, saveAppointments, currentUser }) {
-  return (
-    <div className="bg-white rounded-3xl p-8">
-      <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-        <Users className="w-6 h-6 text-teal-600" /> Fusión de Duplicados
-      </h2>
-      <p className="text-slate-600">Herramienta para fusionar perfiles duplicados de pacientes y profesionales.</p>
-      {/* Puedes expandir más tarde */}
     </div>
   );
 }
