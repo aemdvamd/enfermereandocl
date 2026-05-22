@@ -105,39 +105,14 @@ const appNetPrice = (a, services) => {
 
 /* === INTEGRACIÓN CALLMEBOT WHATSAPP === */
 const sendWhatsAppToAdmin = async (app, action = 'new', services = []) => {
-    try {
+  try {
     let msg = `🔔 *Enfermereando - ${PROFESSIONAL_NAME}*\n\n`;
-
-    if (action === 'new') {
-      msg += `📌 *NUEVA SOLICITUD DE ATENCIÓN*\n`;
-    } else if (action === 'cancelled') {
-      msg += isSeriesCancel 
-        ? `❌ *SERIE COMPLETA CANCELADA*\n` 
-        : `❌ *ATENCIÓN CANCELADA*\n`;
-    } else if (action === 'status_change') {
-      msg += `🔄 *Cambio de estado*\n`;
-    }
-
-    msg += `Paciente: ${app.patientName}\n`;
-    msg += `Fecha: ${new Date(app.date).toLocaleDateString('es-CL')}\n`;
-    msg += `Hora: ${fmtTime(app.time)}\n`;
-    msg += `Comuna: ${app.comuna || 'No especificada'}\n`;
-
-    if (app.beneficiaries && app.beneficiaries.length > 0) {
-      msg += `Beneficiarios: ${app.beneficiaries.length}\n`;
-    }
-
+    if (action === 'new') msg += `📌 *NUEVA SOLICITUD*\n`;
+    else if (action === 'cancelled') msg += `❌ *ATENCIÓN CANCELADA*\n`;
+    msg += `Paciente: ${app.patientName}\nFecha: ${new Date(app.date).toLocaleDateString('es-CL')}\nHora: ${fmtTime(app.time)}`;
     const url = `https://api.callmebot.com/whatsapp.php?phone=${WHATSAPP}&text=${encodeURIComponent(msg)}`;
-    const res = await fetch(url, { method: 'GET' });
-    
-    if (res.ok) {
-      console.log('✅ WhatsApp enviado vía CallMeBot');
-    } else {
-      console.warn('⚠️ CallMeBot respondió con error');
-    }
-  } catch (error) {
-    console.error('❌ Error enviando WhatsApp:', error);
-  }
+    await fetch(url, { method: 'GET' });
+  } catch (e) { console.error(e); }
 };
 
 // ==================== NOTIFICACIONES PUSH ====================
@@ -305,51 +280,23 @@ const saveAppointments = async (list, setAppointments, patients, professionals, 
 // ==================== PERSISTENCIA ====================
 const sget = async (key, defaultValue = null) => {
   try {
-    console.log(`[sget] Intentando leer clave: ${key}`);
-    const { data, error } = await supabase
-      .from('app_storage')
-      .select('value')
-      .eq('key', key)
-      .single();
-
-    if (error) {
-      console.error(`[sget] Error al leer ${key}:`, error);
-      return defaultValue;
-    }
-
-    console.log(`[sget] ✅ Leído correctamente ${key}:`, data?.value ? 'existe' : 'no existe');
+    const { data, error } = await supabase.from('app_storage').select('value').eq('key', key).single();
+    if (error) console.error(`[sget] Error ${key}:`, error);
     return data ? data.value : defaultValue;
   } catch (err) {
-    console.error(`[sget] Excepción al leer ${key}:`, err);
+    console.error(`[sget] Excepción ${key}:`, err);
     return defaultValue;
   }
 };
 
 const sset = async (key, value) => {
   try {
-    console.log(`[sset] Intentando guardar clave: ${key}`);
-    console.log(`[sset] Valor a guardar:`, value);
-
-    const { error } = await supabase
-      .from('app_storage')
-      .upsert({ 
-        key: key, 
-        value: value 
-      }, { 
-        onConflict: 'key' 
-      });
-
-    if (error) {
-      console.error(`[sset] ❌ Error al guardar ${key}:`, error);
-      alert(`Error al guardar en Supabase: ${error.message}`);
-      return false;
-    }
-
-    console.log(`[sset] ✅ Guardado correctamente: ${key}`);
-    return true;
+    const { error } = await supabase.from('app_storage').upsert({ key, value }, { onConflict: 'key' });
+    if (error) console.error(`[sset] Error ${key}:`, error);
+    else console.log(`[sset] ✅ Guardado: ${key}`);
+    return !error;
   } catch (err) {
-    console.error(`[sset] Excepción al guardar ${key}:`, err);
-    alert(`Excepción al guardar: ${err.message}`);
+    console.error(`[sset] Excepción ${key}:`, err);
     return false;
   }
 };
@@ -444,8 +391,8 @@ function CalendarView({ appointments, onEdit }) {
    LOGIN VIEW - SUPABASE AUTH REAL
    ============================================= */
    function LoginView({ onLogin, onBack }) {
-    const [tab, setTab] = useState('login'); // login | register | recovery
-    const [role, setRole] = useState('patient'); // patient | professional
+    const [tab, setTab] = useState('login');
+    const [role, setRole] = useState('patient');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
@@ -453,72 +400,32 @@ function CalendarView({ appointments, onEdit }) {
   
     // ==================== INICIAR SESIÓN ====================
     const handleLogin = async () => {
-      if (!email || !password) return alert('Ingresa correo y contraseña');
       setLoading(true);
-  
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-  
-      if (error) {
-        alert('❌ Credenciales incorrectas o cuenta no confirmada.\n\n' + error.message);
-      } else if (data.user) {
-        // Obtener rol desde metadata
-        const userRole = data.user.user_metadata?.role || 'patient';
-        onLogin({
-          id: data.user.id,
-          name: data.user.user_metadata?.name || data.user.email,
-          email: data.user.email,
-          role: userRole
-        });
-      }
+      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+      if (error) alert('❌ ' + error.message);
+      else if (data.user) onLogin({ id: data.user.id, email: data.user.email, name: data.user.user_metadata?.name, role: data.user.user_metadata?.role || 'patient' });
       setLoading(false);
     };
   
     // ==================== REGISTRARSE ====================
     const handleRegister = async () => {
-      if (!name || !email || !password) {
-        return alert('❌ Completa nombre, correo y contraseña');
-      }
-  
       setLoading(true);
-  
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
-        options: {
-          data: {
-            name: name.trim(),
-            role: role
-          }
-        }
+        options: { data: { name: name.trim(), role } }
       });
-  
-      if (error) {
-        alert('❌ Error al registrar: ' + error.message);
-      } else {
-        alert(`✅ Cuenta creada correctamente.\n\nRevisa tu correo (${email}) para confirmar la cuenta.`);
-        setTab('login');
-      }
+      if (error) alert('❌ ' + error.message);
+      else alert('✅ Cuenta creada. Revisa tu correo para confirmar.');
       setLoading(false);
     };
   
     // ==================== RECUPERAR CONTRASEÑA ====================
     const handleRecovery = async () => {
-      if (!email) return alert('Ingresa tu correo');
-  
       setLoading(true);
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-        redirectTo: window.location.origin + '/login'
-      });
-  
-      if (error) {
-        alert('❌ Error: ' + error.message);
-      } else {
-        alert(`✅ Se envió un enlace de recuperación a ${email}`);
-        setTab('login');
-      }
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase());
+      if (error) alert('❌ ' + error.message);
+      else alert('✅ Enlace de recuperación enviado a tu correo.');
       setLoading(false);
     };
   
@@ -2119,24 +2026,22 @@ export default function App() {
 
   // ==================== LISTENER DE AUTENTICACIÓN REAL ====================
   useEffect(() => {
-    // Escuchar cambios de sesión
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
-        const userData = {
+        const u = {
           id: session.user.id,
           email: session.user.email,
           name: session.user.user_metadata?.name || session.user.email,
           role: session.user.user_metadata?.role || 'patient'
         };
-        setUser(userData);
-        setView(userData.role === 'patient' ? 'patient' : userData.role === 'admin' ? 'admin' : 'professional');
+        setUser(u);
+        setView(u.role === 'patient' ? 'patient' : u.role === 'admin' ? 'admin' : 'professional');
       } else {
         setUser(null);
         setView('landing');
       }
     });
 
-    // Cargar datos iniciales
     const loadData = async () => {
       const svcs = await sget('enf:services', DEFAULT_SERVICES);
       const apps = await sget('enf:appointments', []);
@@ -2153,8 +2058,7 @@ export default function App() {
     };
 
     loadData();
-
-    return () => authListener.subscription.unsubscribe();
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   const saveAppointmentsLocal = async (list) => {
