@@ -571,23 +571,20 @@ function PatientPortal({ user, services, appointments, saveAppointments, onLogou
   const [tab, setTab] = useState('inicio');
   const [showRequestForm, setShowRequestForm] = useState(false);
 
-  // Filtrar solo las atenciones del paciente actual
+  // Solo las atenciones del paciente actual
   const myAppointments = appointments.filter(app => 
     app.patientName === user.name || 
     (app.beneficiaries && app.beneficiaries.some(b => b.name === user.name))
   );
 
-  // Próximas atenciones (Inicio)
   const upcoming = myAppointments
     .filter(a => a.status !== 'cancelada' && new Date(a.date) >= new Date())
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-  // Historial
   const history = myAppointments
     .filter(a => a.status === 'cancelada' || new Date(a.date) < new Date())
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  // ==================== CANCELACIÓN EN SERIE + WHATSAPP ====================
   const cancelAppointment = async (app) => {
     if (!confirm(`¿Cancelar la atención del ${new Date(app.date).toLocaleDateString('es-CL')}?`)) return;
 
@@ -615,7 +612,6 @@ function PatientPortal({ user, services, appointments, saveAppointments, onLogou
     );
   };
 
-  // ==================== NUEVA SOLICITUD ====================
   const handleNewAppointment = async (newAppointmentsArray) => {
     const updated = [...appointments, ...newAppointmentsArray];
     await saveAppointments(updated);
@@ -637,12 +633,8 @@ function PatientPortal({ user, services, appointments, saveAppointments, onLogou
               <div className="font-semibold text-lg">Hola, {user.name}</div>
               <div className="text-teal-600 text-sm">Paciente</div>
             </div>
-            <button 
-              onClick={onLogout}
-              className="flex items-center gap-2 px-5 py-2.5 hover:bg-slate-100 rounded-2xl text-slate-700 transition-colors"
-            >
-              <LogOut className="w-5 h-5" />
-              Salir
+            <button onClick={onLogout} className="flex items-center gap-2 px-5 py-2.5 hover:bg-slate-100 rounded-2xl text-slate-700">
+              <LogOut className="w-5 h-5" /> Salir
             </button>
           </div>
         </div>
@@ -652,35 +644,41 @@ function PatientPortal({ user, services, appointments, saveAppointments, onLogou
         {/* TABS */}
         <div className="flex border-b mb-8">
           <button
-            onClick={() => setTab('inicio')}
-            className={`flex-1 md:flex-none px-8 py-4 text-lg font-medium border-b-4 transition-all ${tab === 'inicio' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500'}`}
+            onClick={() => { setTab('inicio'); setShowRequestForm(false); }}
+            className={`flex-1 md:flex-none px-8 py-4 text-lg font-medium border-b-4 transition-all ${tab === 'inicio' && !showRequestForm ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500'}`}
           >
             Inicio
           </button>
           <button
             onClick={() => setShowRequestForm(true)}
-            className={`flex-1 md:flex-none px-8 py-4 text-lg font-medium border-b-4 transition-all ${tab === 'solicitar' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500'}`}
+            className={`flex-1 md:flex-none px-8 py-4 text-lg font-medium border-b-4 transition-all ${showRequestForm ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500'}`}
           >
             Solicitar Atención
           </button>
           <button
-            onClick={() => setTab('historial')}
-            className={`flex-1 md:flex-none px-8 py-4 text-lg font-medium border-b-4 transition-all ${tab === 'historial' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500'}`}
+            onClick={() => { setTab('historial'); setShowRequestForm(false); }}
+            className={`flex-1 md:flex-none px-8 py-4 text-lg font-medium border-b-4 transition-all ${tab === 'historial' && !showRequestForm ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500'}`}
           >
             Historial
           </button>
         </div>
 
-        {/* PESTAÑA INICIO */}
-        {tab === 'inicio' && (
+        {/* CONTENIDO - SOLO SE MUESTRA UNA SECCIÓN */}
+        {showRequestForm ? (
+          <RequestForm 
+            services={services} 
+            onSubmit={handleNewAppointment} 
+            onCancel={() => setShowRequestForm(false)} 
+          />
+        ) : tab === 'inicio' ? (
           <div>
             <h2 className="text-3xl font-bold mb-6">Próximas Atenciones</h2>
             {upcoming.length === 0 ? (
               <div className="bg-white rounded-3xl p-16 text-center text-slate-400 text-xl">
-                No tienes atenciones próximas<br />
+                No tienes atenciones próximas
                 <button 
                   onClick={() => setShowRequestForm(true)}
-                  className="mt-6 px-8 py-4 bg-teal-600 text-white rounded-2xl font-medium"
+                  className="mt-6 block mx-auto px-8 py-4 bg-teal-600 text-white rounded-2xl font-medium"
                 >
                   Solicitar nueva atención
                 </button>
@@ -688,40 +686,25 @@ function PatientPortal({ user, services, appointments, saveAppointments, onLogou
             ) : (
               <div className="space-y-6">
                 {upcoming.map(app => (
-                  <div key={app.id} className="bg-white rounded-3xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border border-slate-200">
+                  <div key={app.id} className="bg-white rounded-3xl p-6 flex justify-between items-center border border-slate-200">
                     <div>
                       <div className="font-semibold text-xl">{app.patientName}</div>
                       <div className="text-slate-500 mt-1">
                         {new Date(app.date).toLocaleDateString('es-CL', { weekday: 'long', month: 'long', day: 'numeric' })} • {fmtTime(app.time)}
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <span className="px-6 py-2 bg-teal-100 text-teal-700 rounded-2xl text-sm font-medium">Pendiente</span>
-                      <button
-                        onClick={() => cancelAppointment(app)}
-                        className="text-red-500 hover:text-red-600 text-sm flex items-center gap-1"
-                      >
-                        <Trash2 className="w-4 h-4" /> Cancelar
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => cancelAppointment(app)}
+                      className="text-red-500 hover:text-red-600 text-sm flex items-center gap-1"
+                    >
+                      <Trash2 className="w-4 h-4" /> Cancelar
+                    </button>
                   </div>
                 ))}
               </div>
             )}
           </div>
-        )}
-
-        {/* PESTAÑA SOLICITAR */}
-        {showRequestForm && (
-          <RequestForm 
-            services={services} 
-            onSubmit={handleNewAppointment} 
-            onCancel={() => setShowRequestForm(false)} 
-          />
-        )}
-
-        {/* PESTAÑA HISTORIAL */}
-        {tab === 'historial' && (
+        ) : tab === 'historial' && (
           <div>
             <h2 className="text-3xl font-bold mb-6">Historial de Atenciones</h2>
             {history.length === 0 ? (
@@ -729,7 +712,7 @@ function PatientPortal({ user, services, appointments, saveAppointments, onLogou
             ) : (
               <div className="space-y-4">
                 {history.map(app => (
-                  <div key={app.id} className="bg-white rounded-3xl p-6 opacity-75">
+                  <div key={app.id} className="bg-white rounded-3xl p-6">
                     <div className="flex justify-between">
                       <div>
                         <div className="font-medium">{app.patientName}</div>
