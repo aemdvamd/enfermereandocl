@@ -1678,7 +1678,7 @@ function AdminPanel({
   );
 }
 
-// ==================== MONITORING PANEL - FLUJO SIMPLIFICADO ====================
+// ==================== MONITORING PANEL - VERSIÓN ESTABLE (SIN ERRORES DE EVENTOS) ====================
 function MonitoringPanel({ 
   appointments, 
   patients, 
@@ -1699,8 +1699,7 @@ function MonitoringPanel({
     ? myAppointments 
     : myAppointments.filter(a => a.status === filterStatus);
 
-  // ==================== ACCIONES ====================
-  const takeTask = async (appId) => {   // Pendiente → Asignada
+  const takeTask = async (appId) => {
     const updated = appointments.map(app =>
       app.id === appId ? { 
         ...app, 
@@ -1734,7 +1733,6 @@ function MonitoringPanel({
       };
     });
 
-    // Validación automática de completitud
     const app = updated.find(a => a.id === appId);
     if (app && isTaskComplete(app)) {
       updated = updated.map(a => 
@@ -1754,7 +1752,7 @@ function MonitoringPanel({
     return app.beneficiaries.every(ben =>
       ben.services.every(service => {
         const checklist = service.checklist || SERVICE_CHECKLISTS[service.serviceId] || [];
-        return checklist.length === 0 || checklist.every(item => item.completed === true);
+        return checklist.every(item => item.completed === true);
       })
     );
   };
@@ -1798,59 +1796,47 @@ function MonitoringPanel({
                   </div>
                   <button 
                     onClick={() => onEdit(app)}
-                    className="text-teal-600 hover:text-teal-700 font-medium"
+                    className="text-teal-600 hover:text-teal-700 font-medium text-sm"
                   >
                     Ver detalle →
                   </button>
                 </div>
 
-                {/* BOTÓN TOMAR TAREA */}
+                {/* Tomar tarea */}
                 {app.status === 'pendiente' && isAssignedToMe && (
                   <button
                     onClick={() => takeTask(app.id)}
-                    className="w-full py-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl mb-6 text-lg"
+                    className="w-full py-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl mb-6"
                   >
                     Tomar esta tarea
                   </button>
                 )}
 
-                {/* CHECKLIST - Solo visible cuando está Asignada o En tratamiento */}
+                {/* Checklist */}
                 {['asignada', 'en_tratamiento'].includes(app.status) && isAssignedToMe && app.beneficiaries && (
-                  <div className="mt-2">
-                    <h4 className="font-semibold mb-4 text-slate-900">Seguimiento clínico</h4>
+                  <div className="mt-4">
+                    <h4 className="font-semibold mb-4">Seguimiento del servicio</h4>
                     {app.beneficiaries.map((ben, idx) => (
                       <div key={idx} className="mb-6 bg-slate-50 rounded-2xl p-5">
-                        <div className="font-medium mb-4 text-slate-800 border-b pb-2">{ben.name}</div>
+                        <div className="font-medium mb-4">{ben.name}</div>
                         {ben.services.map(service => {
                           const svc = services.find(s => s.id === service.serviceId);
                           const checklist = service.checklist || SERVICE_CHECKLISTS[service.serviceId] || [];
                           return (
-                            <div key={service.serviceId} className="mb-5 last:mb-0">
-                              <div className="font-medium text-teal-700 mb-3">{svc?.title}</div>
+                            <div key={service.serviceId} className="mb-5">
+                              <div className="font-medium mb-3 text-teal-700">{svc?.title}</div>
                               {checklist.map(item => (
                                 <button
                                   key={item.id}
                                   onClick={() => toggleChecklistItem(app.id, service.serviceId, item.id)}
-                                  className="flex w-full items-center gap-4 py-4 px-5 hover:bg-white rounded-2xl text-left mb-2 border border-transparent hover:border-slate-100 transition-all"
+                                  className="flex w-full items-center gap-4 py-4 px-5 hover:bg-white rounded-2xl text-left border border-transparent hover:border-slate-100 mb-2"
                                 >
-                                  <div className={`w-8 h-8 flex items-center justify-center rounded-2xl border-2 text-xl font-medium flex-shrink-0 transition-all ${
-                                    item.completed 
-                                      ? 'bg-teal-500 text-white border-teal-500' 
-                                      : 'border-slate-300'
+                                  <div className={`w-8 h-8 flex items-center justify-center rounded-2xl border-2 text-xl flex-shrink-0 ${
+                                    item.completed ? 'bg-teal-500 text-white border-teal-500' : 'border-slate-300'
                                   }`}>
                                     {item.completed ? '✓' : ''}
                                   </div>
-                                  <div className="flex-1">
-                                    <div className="text-sm">{item.label}</div>
-                                    {item.completedAt && (
-                                      <div className="text-xs text-slate-400 mt-1">
-                                        {new Date(item.completedAt).toLocaleString('es-CL', { 
-                                          dateStyle: 'short', 
-                                          timeStyle: 'short' 
-                                        })}
-                                      </div>
-                                    )}
-                                  </div>
+                                  <span className="flex-1 text-sm">{item.label}</span>
                                 </button>
                               ))}
                             </div>
