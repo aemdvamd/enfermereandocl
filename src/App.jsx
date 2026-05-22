@@ -1687,7 +1687,7 @@ function AdminPanel({
   );
 }
 
-// ==================== KANBAN BOARD CON VALIDACIÓN DE COMPLETITUD ====================
+// ==================== KANBAN BOARD - BOTONES FIJOS ====================
 function KanbanBoard({ 
   appointments, 
   patients, 
@@ -1728,45 +1728,21 @@ function KanbanBoard({
     grouped[status].push(app);
   });
 
-  // === VALIDACIÓN DE COMPLETITUD ===
-  const isTaskComplete = (app) => {
-    if (!app.beneficiaries) return false;
-    return app.beneficiaries.every(ben =>
-      ben.services.every(service => {
-        const checklist = service.checklist || SERVICE_CHECKLISTS[service.serviceId] || [];
-        return checklist.length === 0 || checklist.every(item => item.completed === true);
-      })
-    );
-  };
-
-  const markDoseCompleted = async (appId, serviceId) => {
-    const updated = appointments.map(app => {
-      if (app.id !== appId) return app;
-      return {
-        ...app,
-        beneficiaries: app.beneficiaries.map(ben => ({
-          ...ben,
-          services: ben.services.map(item =>
-            item.serviceId === serviceId
-              ? { ...item, completedDoses: Math.min((item.completedDoses || 0) + 1, item.doses || 1) }
-              : item
-          )
-        }))
-      };
-    });
-    await saveAppointments(updated);
-  };
-
-  const takeTask = async (appId) => {
+  const takeTask = async (appId, e) => {
+    if (e) e.stopPropagation();
     const updated = appointments.map(app =>
-      app.id === appId 
-        ? { ...app, status: 'en_tratamiento', takenAt: Date.now(), takenBy: currentUser.id }
-        : app
+      app.id === appId ? { 
+        ...app, 
+        status: 'en_tratamiento', 
+        takenAt: Date.now(), 
+        takenBy: currentUser.id 
+      } : app
     );
     await saveAppointments(updated);
   };
 
-  const toggleChecklistItem = async (appId, serviceId, itemId) => {
+  const toggleChecklistItem = async (appId, serviceId, itemId, e) => {
+    if (e) e.stopPropagation();
     let updated = appointments.map(app => {
       if (app.id !== appId) return app;
       return {
@@ -1787,7 +1763,7 @@ function KanbanBoard({
       };
     });
 
-    // Validación de completitud automática
+    // Validación de completitud
     const app = updated.find(a => a.id === appId);
     if (app && isTaskComplete(app)) {
       updated = updated.map(a => 
@@ -1798,11 +1774,14 @@ function KanbanBoard({
     await saveAppointments(updated);
   };
 
-  const updateNotes = async (appId, notes) => {
-    const updated = appointments.map(app =>
-      app.id === appId ? { ...app, notes } : app
+  const isTaskComplete = (app) => {
+    if (!app.beneficiaries) return false;
+    return app.beneficiaries.every(ben =>
+      ben.services.every(service => {
+        const checklist = service.checklist || SERVICE_CHECKLISTS[service.serviceId] || [];
+        return checklist.every(item => item.completed === true);
+      })
     );
-    await saveAppointments(updated);
   };
 
   return (
@@ -1830,18 +1809,21 @@ function KanbanBoard({
               <div className="flex-1 space-y-3 overflow-y-auto">
                 {appsInColumn.map(app => {
                   const net = app.beneficiaries ? appNetPrice(app, services) : 0;
-                  const isSeries = !!app.seriesId;
                   const isAssignedToMe = app.assignedTo === currentUser.id;
                   const isTaken = !!app.takenAt;
 
                   return (
                     <div
                       key={app.id}
-                      className="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-md transition-all hover:border-teal-300 relative"
+                      className="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-md transition-all relative"
                     >
+                      {/* Botón Editar */}
                       <button
-                        onClick={(e) => { e.stopPropagation(); onEdit(app); }}
-                        className="absolute top-3 right-3 text-xs font-medium bg-teal-50 hover:bg-teal-100 text-teal-600 px-3 py-1 rounded-2xl z-10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(app);
+                        }}
+                        className="absolute top-3 right-3 text-xs font-medium bg-teal-50 hover:bg-teal-100 text-teal-600 px-3 py-1 rounded-2xl z-20"
                       >
                         Editar
                       </button>
@@ -1851,17 +1833,17 @@ function KanbanBoard({
                         {new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}
                       </div>
 
-                      {/* Tomar tarea */}
-                      {isAssignedToMe && !isTaken && (app.status === 'asignada' || app.status === 'confirmada') && (
+                      {/* TOMAR TAREA */}
+                      {isAssignedToMe && !isTaken && ['asignada', 'confirmada'].includes(app.status) && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); takeTask(app.id); }}
-                          className="mt-4 w-full py-3 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-2xl transition-all"
+                          onClick={(e) => takeTask(app.id, e)}
+                          className="mt-4 w-full py-3 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-2xl transition-all active:scale-95"
                         >
                           Tomar tarea
                         </button>
                       )}
 
-                      {/* Checklist */}
+                      {/* CHECKLIST */}
                       {isTaken && isAssignedToMe && app.beneficiaries && (
                         <div className="mt-4 space-y-4">
                           {app.beneficiaries.flatMap(ben =>
@@ -1874,27 +1856,23 @@ function KanbanBoard({
                                 <div key={service.serviceId} className="border border-slate-100 rounded-2xl p-3">
                                   <div className="font-medium text-sm mb-2">{svc.title}</div>
                                   {checklistItems.map(item => (
-                                    <div key={item.id} className="flex items-center gap-3 py-1">
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          toggleChecklistItem(app.id, service.serviceId, item.id);
-                                        }}
-                                        className={`w-6 h-6 flex items-center justify-center rounded-xl border text-xs font-medium transition-all ${
-                                          item.completed 
-                                            ? 'bg-teal-500 text-white border-teal-500' 
-                                            : 'bg-white border-slate-300 hover:border-teal-400'
-                                        }`}
-                                      >
+                                    <button
+                                      key={item.id}
+                                      onClick={(e) => toggleChecklistItem(app.id, service.serviceId, item.id, e)}
+                                      className="flex w-full items-center gap-3 py-2 px-2 hover:bg-slate-50 rounded-xl text-left"
+                                    >
+                                      <div className={`w-6 h-6 flex items-center justify-center rounded-xl border text-xs font-medium transition-all flex-shrink-0 ${
+                                        item.completed ? 'bg-teal-500 text-white border-teal-500' : 'bg-white border-slate-300'
+                                      }`}>
                                         {item.completed ? '✓' : ''}
-                                      </button>
+                                      </div>
                                       <span className="text-sm flex-1">{item.label}</span>
                                       {item.completedAt && (
-                                        <span className="text-[10px] text-slate-400">
+                                        <span className="text-[10px] text-slate-400 whitespace-nowrap">
                                           {new Date(item.completedAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
                                         </span>
                                       )}
-                                    </div>
+                                    </button>
                                   ))}
                                 </div>
                               );
@@ -1908,7 +1886,10 @@ function KanbanBoard({
                         <textarea
                           placeholder="Notas / Observaciones..."
                           value={app.notes || ''}
-                          onChange={(e) => updateNotes(app.id, e.target.value)}
+                          onChange={(e) => {
+                            const updated = appointments.map(a => a.id === app.id ? { ...a, notes: e.target.value } : a);
+                            saveAppointments(updated);
+                          }}
                           onClick={e => e.stopPropagation()}
                           className="w-full mt-4 text-sm border border-slate-200 rounded-2xl p-3 focus:border-teal-400"
                           rows={2}
@@ -1917,7 +1898,6 @@ function KanbanBoard({
 
                       <div className="mt-4 flex justify-between items-center text-xs">
                         <div className="font-semibold text-teal-600">{fmtCLP(net)}</div>
-                        {isSeries && <span className="text-purple-600 text-[10px] font-medium">Serie</span>}
                       </div>
                     </div>
                   );
