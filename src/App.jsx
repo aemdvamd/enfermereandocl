@@ -1678,7 +1678,7 @@ function AdminPanel({
   );
 }
 
-// ==================== MONITORING PANEL - VERSIÓN SIMPLIFICADA (SIN CHECKLIST) ====================
+// ==================== MONITORING PANEL - VERSIÓN FORMULARIO SIMPLE ====================
 function MonitoringPanel({ 
   appointments, 
   patients, 
@@ -1699,37 +1699,9 @@ function MonitoringPanel({
     ? myAppointments 
     : myAppointments.filter(a => a.status === filterStatus);
 
-  const takeTask = async (appId) => {
-    const updated = appointments.map(app =>
-      app.id === appId ? { 
-        ...app, 
-        status: 'asignada', 
-        assignedTo: currentUser.id,
-        assignedToName: currentUser.name,
-        takenAt: Date.now() 
-      } : app
-    );
-    await saveAppointments(updated);
-  };
-
-  const startTreatment = async (appId) => {
-    const updated = appointments.map(app =>
-      app.id === appId ? { 
-        ...app, 
-        status: 'en_tratamiento',
-        startedAt: Date.now()
-      } : app
-    );
-    await saveAppointments(updated);
-  };
-
-  const markAsCompleted = async (appId) => {
-    const updated = appointments.map(app =>
-      app.id === appId ? { 
-        ...app, 
-        status: 'completada', 
-        completedAt: Date.now() 
-      } : app
+  const updateAppointment = async (appId, updates) => {
+    const updated = appointments.map(app => 
+      app.id === appId ? { ...app, ...updates } : app
     );
     await saveAppointments(updated);
   };
@@ -1755,17 +1727,17 @@ function MonitoringPanel({
         ))}
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         {filteredApps.length === 0 ? (
           <div className="text-center py-16 text-slate-400">No hay atenciones para mostrar</div>
         ) : (
           filteredApps.map(app => {
             const net = app.beneficiaries ? appNetPrice(app, services) : 0;
-            const isAssignedToMe = app.assignedTo === currentUser.id;
+            const isMine = app.assignedTo === currentUser.id;
 
             return (
-              <div key={app.id} className="border border-slate-200 rounded-3xl p-6 hover:shadow-md transition-all">
-                <div className="flex justify-between items-start mb-4">
+              <div key={app.id} className="border border-slate-200 rounded-3xl p-6">
+                <div className="flex justify-between items-start mb-5">
                   <div>
                     <div className="font-semibold text-lg">{app.patientName}</div>
                     <div className="text-sm text-slate-500">
@@ -1780,36 +1752,64 @@ function MonitoringPanel({
                   </button>
                 </div>
 
-                {/* Acciones según estado */}
-                {app.status === 'pendiente' && isAssignedToMe && (
-                  <button
-                    onClick={() => takeTask(app.id)}
-                    className="w-full py-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl mb-4"
-                  >
-                    Tomar esta tarea
-                  </button>
-                )}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Estado */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Estado</label>
+                    <select
+                      value={app.status || 'pendiente'}
+                      onChange={(e) => updateAppointment(app.id, { status: e.target.value })}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                    >
+                      <option value="pendiente">Pendiente</option>
+                      <option value="asignada">Asignada</option>
+                      <option value="en_tratamiento">En tratamiento</option>
+                      <option value="completada">Completada</option>
+                    </select>
+                  </div>
 
-                {app.status === 'asignada' && isAssignedToMe && (
-                  <button
-                    onClick={() => startTreatment(app.id)}
-                    className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-3xl mb-4"
-                  >
-                    Iniciar atención
-                  </button>
-                )}
+                  {/* Progreso de dosis (si es serie) */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Dosis completadas</label>
+                    <input
+                      type="number"
+                      value={app.beneficiaries?.[0]?.services?.[0]?.completedDoses || 0}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 0;
+                        const updated = appointments.map(a => {
+                          if (a.id !== app.id) return a;
+                          return {
+                            ...a,
+                            beneficiaries: a.beneficiaries.map(ben => ({
+                              ...ben,
+                              services: ben.services.map(s => ({
+                                ...s,
+                                completedDoses: value
+                              }))
+                            }))
+                          };
+                        });
+                        saveAppointments(updated);
+                      }}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                    />
+                  </div>
 
-                {app.status === 'en_tratamiento' && isAssignedToMe && (
-                  <button
-                    onClick={() => markAsCompleted(app.id)}
-                    className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-3xl"
-                  >
-                    Marcar como completada
-                  </button>
-                )}
+                  {/* Notas */}
+                  <div className="md:col-span-3">
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Notas / Observaciones</label>
+                    <textarea
+                      value={app.notes || ''}
+                      onChange={(e) => updateAppointment(app.id, { notes: e.target.value })}
+                      rows={3}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                      placeholder="Escribe aquí el avance, observaciones o incidencias..."
+                    />
+                  </div>
+                </div>
 
-                <div className="text-xs text-slate-500 mt-6 pt-4 border-t">
-                  Estado: <span className="font-medium capitalize">{app.status || 'pendiente'}</span>
+                <div className="text-xs text-slate-500 mt-4">
+                  Total estimado: <span className="font-medium text-teal-600">{fmtCLP(net)}</span>
                 </div>
               </div>
             );
