@@ -388,44 +388,39 @@ function CalendarView({ appointments, onEdit }) {
 }
 
 /* =============================================
-   LOGIN VIEW - SUPABASE AUTH REAL
+   LOGIN VIEW - 
    ============================================= */
-   function LoginView({ onLogin, onBack }) {
+   function LoginView({ onLogin, onBack, patients, professionals }) {
     const [tab, setTab] = useState('login');
-    const [role, setRole] = useState('patient');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [name, setName] = useState('');
+    const [role, setRole] = useState('professional'); // Por defecto profesional para que pruebes admin
+    const [email, setEmail] = useState('admin@enfermereando.cl');
+    const [password, setPassword] = useState('enfermera2026');
     const [loading, setLoading] = useState(false);
   
-    // ==================== INICIAR SESIÓN ====================
     const handleLogin = async () => {
       setLoading(true);
-      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
-      if (error) alert('❌ ' + error.message);
-      else if (data.user) onLogin({ id: data.user.id, email: data.user.email, name: data.user.user_metadata?.name, role: data.user.user_metadata?.role || 'patient' });
-      setLoading(false);
-    };
+      console.log(`[LOGIN] Intentando login como ${role} | Email: ${email} | Password: ${password}`);
   
-    // ==================== REGISTRARSE ====================
-    const handleRegister = async () => {
-      setLoading(true);
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password,
-        options: { data: { name: name.trim(), role } }
-      });
-      if (error) alert('❌ ' + error.message);
-      else alert('✅ Cuenta creada. Revisa tu correo para confirmar.');
-      setLoading(false);
-    };
+      let foundUser = null;
   
-    // ==================== RECUPERAR CONTRASEÑA ====================
-    const handleRecovery = async () => {
-      setLoading(true);
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase());
-      if (error) alert('❌ ' + error.message);
-      else alert('✅ Enlace de recuperación enviado a tu correo.');
+      if (role === 'patient') {
+        foundUser = patients.find(p => p.email === email && p.password === password);
+        console.log('[LOGIN] Buscando en patients:', patients.length, 'resultados');
+      } else {
+        foundUser = professionals.find(p => 
+          (p.email === email || p.username === 'admin') && p.password === password
+        );
+        console.log('[LOGIN] Buscando en professionals:', professionals.length, 'resultados');
+        console.log('[LOGIN] Admin encontrado:', foundUser ? foundUser : 'NO ENCONTRADO');
+      }
+  
+      if (foundUser) {
+        console.log('[LOGIN] ✅ Usuario encontrado:', foundUser);
+        onLogin({ ...foundUser, role });
+      } else {
+        console.log('[LOGIN] ❌ No se encontró usuario');
+        alert('❌ Credenciales incorrectas.\n\nRevisa la consola (F12) para más detalles.');
+      }
       setLoading(false);
     };
   
@@ -440,55 +435,34 @@ function CalendarView({ appointments, onEdit }) {
             <button onClick={onBack} className="text-slate-400 hover:text-slate-600">← Volver</button>
           </div>
   
-          <div className="flex border-b text-sm">
-            <button onClick={() => setTab('login')} className={`flex-1 py-5 ${tab === 'login' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Iniciar Sesión</button>
-            <button onClick={() => setTab('register')} className={`flex-1 py-5 ${tab === 'register' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Registrarse</button>
-            <button onClick={() => setTab('recovery')} className={`flex-1 py-5 ${tab === 'recovery' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Recuperar</button>
-          </div>
-  
           <div className="p-8 space-y-6">
-            {tab === 'login' && (
-              <>
-                <div className="flex bg-slate-100 rounded-2xl p-1">
-                  <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}>Paciente</button>
-                  <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}>Profesional</button>
-                </div>
+            <div className="flex bg-slate-100 rounded-2xl p-1">
+              <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}>Paciente</button>
+              <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}>Profesional / Admin</button>
+            </div>
   
-                <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-                <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+            <input 
+              type="email" 
+              placeholder="Correo electrónico" 
+              value={email} 
+              onChange={e => setEmail(e.target.value)} 
+              className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" 
+            />
+            <input 
+              type="password" 
+              placeholder="Contraseña" 
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
+              className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" 
+            />
   
-                <button onClick={handleLogin} disabled={loading} className="w-full py-5 bg-teal-600 text-white font-semibold rounded-3xl text-lg disabled:opacity-70">
-                  {loading ? 'Ingresando...' : 'Iniciar Sesión'}
-                </button>
-              </>
-            )}
-  
-            {tab === 'register' && (
-              <div className="space-y-5">
-                <div className="flex bg-slate-100 rounded-2xl p-1">
-                  <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}>Paciente</button>
-                  <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}>Profesional</button>
-                </div>
-  
-                <input type="text" placeholder="Nombre completo" value={name} onChange={e => setName(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-                <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-                <input type="password" placeholder="Contraseña (mínimo 6 caracteres)" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-  
-                <button onClick={handleRegister} disabled={loading} className="w-full py-5 bg-teal-600 text-white font-semibold rounded-3xl text-lg disabled:opacity-70">
-                  {loading ? 'Creando cuenta...' : 'Crear Cuenta'}
-                </button>
-              </div>
-            )}
-  
-            {tab === 'recovery' && (
-              <div>
-                <p className="text-slate-600 mb-4">Ingresa tu correo y te enviaremos un enlace para restablecer la contraseña.</p>
-                <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-                <button onClick={handleRecovery} disabled={loading} className="w-full py-5 bg-amber-600 text-white font-semibold rounded-3xl text-lg mt-6 disabled:opacity-70">
-                  {loading ? 'Enviando enlace...' : 'Enviar enlace de recuperación'}
-                </button>
-              </div>
-            )}
+            <button 
+              onClick={handleLogin} 
+              disabled={loading} 
+              className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg disabled:opacity-70"
+            >
+              {loading ? 'Verificando...' : 'Iniciar Sesión'}
+            </button>
           </div>
         </div>
       </div>
