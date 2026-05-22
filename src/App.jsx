@@ -81,8 +81,9 @@ const FAQ_ITEMS = [
 
 const RELATIONSHIPS = ['Titular','Cónyuge','Hijo/a','Padre','Madre','Abuelo/a','Hermano/a','Otro familiar','Otro'];
 
-// ==================== UTILIDADES ====================
+// ==================== UTILIDADES (definidas UNA sola vez) ====================
 const fmtCLP = (n) => '$' + Math.round(n).toLocaleString('es-CL');
+
 const fmtTime = (t) => {
   if (!t) return '';
   const [h, m] = t.split(':').map(Number);
@@ -90,6 +91,7 @@ const fmtTime = (t) => {
   const hour12 = h % 12 || 12;
   return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
 };
+
 const uid = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
 const appNetPrice = (a, services) => {
@@ -133,49 +135,6 @@ const sendWhatsAppToAdmin = async (data, type = 'new_appointment', services = []
     console.error(e);
     return false;
   }
-};
-
-// ==================== UTILIDADES ====================
-// ==================== HELPERS PARA SERIES DE CITAS ====================
-
-const fmtCLP = (n) => '$' + Math.round(n).toLocaleString('es-CL');
-const fmtTime = (t) => {
-  if (!t) return '';
-  const [h, m] = t.split(':').map(Number);
-  const period = h >= 12 ? 'PM' : 'AM';
-  const hour12 = h % 12 || 12;
-  return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
-};
-const uid = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-const todayISO = () => new Date().toISOString().split('T')[0];
-const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
-const appNetPrice = (a, services) => {
-  const gross = a.beneficiaries.reduce((sum, b) => sum + b.services.reduce((s, item) => {
-    const svc = services.find(s => s.id === item.serviceId);
-    return s + (svc ? svc.price * (item.doses || 1) : 0);
-  }, 0), 0);
-  const discount = a.beneficiaries.length >= 4 ? 0.15 : a.beneficiaries.length === 3 ? 0.10 : a.beneficiaries.length === 2 ? 0.05 : 0;
-  return Math.round(gross * (1 - discount));
-};
-
-// Nueva utilidad para validación de integridad en creación de usuarios
-const validateUserIntegrity = (username, patients, professionals, role) => {
-  const lowerUsername = username.toLowerCase().trim();
-  if (lowerUsername.length < 4) return { ok: false, error: 'El nombre de usuario debe tener al menos 4 caracteres' };
-  
-  const existingPatient = patients.some(p => p.username.toLowerCase() === lowerUsername);
-  const existingPro = professionals.some(p => p.username.toLowerCase() === lowerUsername);
-  
-  if (existingPatient || existingPro) {
-    return { ok: false, error: 'Este nombre de usuario ya está en uso' };
-  }
-  
-  // Validación adicional de integridad (duplicados por nombre + teléfono para pacientes)
-  if (role === 'patient') {
-    return { ok: true };
-  }
-  return { ok: true };
 };
 
 // ==================== NOTIFICACIONES PUSH ====================
@@ -373,18 +332,41 @@ function TabButton({ active, onClick, children, icon: Icon }) {
   );
 }
 
-function StatCard({ label, value, color = "teal" }) {
-  const colors = { teal: "bg-teal-100 text-teal-700", amber: "bg-amber-100 text-amber-700", blue: "bg-blue-100 text-blue-700", green: "bg-green-100 text-green-700" };
+function NotificationBell({ userId, notifications }) {
+  const [open, setOpen] = useState(false);
+  const myNotifs = notifications.filter(n => n.userId === userId).slice(0, 20);
+  const unreadCount = myNotifs.filter(n => !n.read).length;
+
   return (
-    <div className="bg-white rounded-xl p-4 border border-slate-200 flex items-center gap-3">
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${colors[color]}`}></div>
-      <div><div className="text-xs text-slate-500">{label}</div><div className="text-2xl font-bold text-slate-900">{value}</div></div>
+    <div className="relative">
+      <button onClick={() => setOpen(!open)} className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors">
+        <Bell className="w-5 h-5 text-slate-600" />
+        {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">{unreadCount}</span>}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-12 z-40 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b flex justify-between items-center">
+              <div className="font-semibold">Notificaciones</div>
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {myNotifs.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-sm">No hay notificaciones</div>
+              ) : (
+                myNotifs.map(notif => (
+                  <div key={notif.id} className="px-4 py-3 border-b hover:bg-slate-50">
+                    <div className="font-medium text-sm">{notif.title}</div>
+                    <div className="text-xs text-slate-600 mt-1">{notif.body}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
-}
-
-function EmptyState({ icon: Icon, text }) {
-  return <div className="bg-white rounded-2xl p-12 text-center border border-slate-200"><Icon className="w-12 h-12 mx-auto text-slate-300 mb-3" /><p className="text-slate-500">{text}</p></div>;
 }
 
 
@@ -522,7 +504,7 @@ function Landing({ services, onLogin }) {
   );
 }
 
-// ==================== CALENDAR VIEW - LÓGICA COMPLETA ====================
+// ==================== CALENDAR VIEW ====================
 function CalendarView({ appointments, onEdit }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const year = currentMonth.getFullYear();
@@ -552,25 +534,14 @@ function CalendarView({ appointments, onEdit }) {
     setCurrentMonth(newM);
   };
 
-  const goToToday = () => setCurrentMonth(new Date());
-
   return (
     <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
       <div className="p-5 border-b flex items-center justify-between bg-slate-50">
-        <button onClick={() => navigateMonth(-1)} className="p-3 hover:bg-slate-100 rounded-xl">
-          ←
-        </button>
-        <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-bold text-slate-900">
-            {currentMonth.toLocaleString('es-CL', { month: 'long', year: 'numeric' })}
-          </h2>
-          <button onClick={goToToday} className="text-sm px-4 py-1 bg-white border border-slate-300 rounded-2xl hover:bg-slate-50">
-            Hoy
-          </button>
-        </div>
-        <button onClick={() => navigateMonth(1)} className="p-3 hover:bg-slate-100 rounded-xl">
-          →
-        </button>
+        <button onClick={() => navigateMonth(-1)} className="p-3 hover:bg-slate-100 rounded-xl">←</button>
+        <h2 className="text-2xl font-bold text-slate-900">
+          {currentMonth.toLocaleString('es-CL', { month: 'long', year: 'numeric' })}
+        </h2>
+        <button onClick={() => navigateMonth(1)} className="p-3 hover:bg-slate-100 rounded-xl">→</button>
       </div>
 
       <div className="grid grid-cols-7 text-center text-xs font-medium text-slate-500 border-b py-3 bg-white">
@@ -581,38 +552,20 @@ function CalendarView({ appointments, onEdit }) {
         {days.map((day, i) => {
           const dateKey = day.toISOString().split('T')[0];
           const dayApps = appointmentsByDate[dateKey] || [];
-          const isCurrentMonth = day.getMonth() === month;
-          const isToday = day.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
-
           return (
-            <div
-              key={i}
-              className={`min-h-[110px] bg-white p-2 hover:bg-teal-50 transition-colors cursor-pointer ${
-                !isCurrentMonth ? 'opacity-40' : ''
-              }`}
-            >
-              <div className={`text-right text-sm font-medium ${isToday ? 'text-teal-600 font-bold' : ''}`}>
-                {day.getDate()}
-              </div>
+            <div key={i} className="min-h-[110px] bg-white p-2 hover:bg-teal-50">
+              <div className="text-right text-sm font-medium">{day.getDate()}</div>
               <div className="mt-2 space-y-1">
                 {dayApps.slice(0, 3).map(app => (
                   <div
                     key={app.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit(app);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); onEdit(app); }}
                     className="text-[10px] px-2 py-1 bg-teal-100 text-teal-800 rounded flex items-center gap-1 cursor-pointer hover:bg-teal-200"
                   >
-                    <span className="font-mono text-teal-600">{app.time?.slice(0,5)}</span>
+                    <span className="font-mono">{app.time?.slice(0,5)}</span>
                     <span className="truncate">{app.patientName}</span>
                   </div>
                 ))}
-                {dayApps.length > 3 && (
-                  <div className="text-[10px] text-slate-400 text-center">
-                    +{dayApps.length - 3} más
-                  </div>
-                )}
               </div>
             </div>
           );
@@ -1540,7 +1493,7 @@ function MonitoringPanel({
                       {new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}
                     </div>
                   </div>
-                  <button onClick={() => onEdit(app)} className="text-teal-600 hover:text-teal-700 font-medium">
+                  <button onClick={() => onEdit(app)} className="text-teal-600 hover:text-teal-700">
                     Ver detalle →
                   </button>
                 </div>
