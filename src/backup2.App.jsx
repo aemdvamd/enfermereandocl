@@ -5,7 +5,8 @@ import {
   Phone, MapPin, CheckCircle, Star, Shield, Calendar, User, UserPlus,
   LogOut, Plus, MessageCircle, Menu, X, FileText, Users, Trash2,
   Edit, Stethoscope, Award, Search, ArrowRight, Check, AlertCircle,
-  ChevronDown, Tag, UserCog, Clock, Package, Bell, Route
+  ChevronDown, Tag, UserCog, Clock, Package, ToggleLeft, ToggleRight,
+  Bell, Route, Navigation
 } from 'lucide-react';
 
 const WHATSAPP = '56920489639';
@@ -81,24 +82,145 @@ const FAQ_ITEMS = [
 
 const RELATIONSHIPS = ['Titular','Cónyuge','Hijo/a','Padre','Madre','Abuelo/a','Hermano/a','Otro familiar','Otro'];
 
-// ==================== UTILIDADES ====================
-const fmtCLP = (n) => '$' + Math.round(n).toLocaleString('es-CL');
-const fmtTime = (t) => {
-  if (!t) return '';
-  const [h, m] = t.split(':').map(Number);
-  const period = h >= 12 ? 'PM' : 'AM';
-  const hour12 = h % 12 || 12;
-  return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
-};
-const uid = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+// ==================== VALIDACIÓN DE INTEGRIDAD REFERENCIAL (NUEVO) ====================
+const validateReferentialIntegrity = (appointments, patients, professionals, services) => {
+  const issues = [];
+  const fixedAppointments = [...appointments];
 
-const appNetPrice = (a, services) => {
-  const gross = a.beneficiaries.reduce((sum, b) => sum + b.services.reduce((s, item) => {
-    const svc = services.find(s => s.id === item.serviceId);
-    return s + (svc ? svc.price * (item.doses || 1) : 0);
-  }, 0), 0);
-  const discount = a.beneficiaries.length >= 4 ? 0.15 : a.beneficiaries.length === 3 ? 0.10 : a.beneficiaries.length === 2 ? 0.05 : 0;
-  return Math.round(gross * (1 - discount));
+  // 1. Citas con patientId inexistente (huérfanas)
+  fixedAppointments.forEach((app, index) => {
+    if (!app.patientId || !patients.some(p => p.id === app.patientId)) {
+      const possiblePatient = patients.find(p => p.name === app.patientName);
+      if (possiblePatient) {
+        fixedAppointments[index] = { ...app, patientId: possiblePatient.id };
+        issues.push({
+          type: 'warning',
+          entity: 'appointment',
+          id: app.id,
+          message: `Paciente reasignado automáticamente (cita ${app.id})`
+        });
+      } else {
+        issues.push({
+          type: 'error',
+          entity: 'appointment',
+          id: app.id,
+          message: `Cita huérfana - paciente inexistente (ID: ${app.patientId || 'sin ID'})`
+        });
+      }
+    }
+  });
+
+  // 2. Citas con assignedTo (profesional) inexistente
+  fixedAppointments.forEach((app, index) => {
+    if (app.assignedTo && !professionals.some(p => p.id === app.assignedTo)) {
+      fixedAppointments[index] = { ...app, assignedTo: null, assignedToName: null };
+      issues.push({
+        type: 'warning',
+        entity: 'appointment',
+        id: app.id,
+        message: `Profesional asignado inexistente → asignación removida (cita ${app.id})`
+      });
+    }
+  });
+
+  // 3. Servicios referenciados inexistentes
+  fixedAppointments.forEach((app, index) => {
+    if (!app.beneficiaries) return;
+    let hasChanges = false;
+    const newBeneficiaries = app.beneficiaries.map(ben => {
+      const validServices = ben.services.filter(item => {
+        const exists = services.some(s => s.id === item.serviceId);
+        if (!exists) {
+          hasChanges = true;
+          issues.push({
+            type: 'warning',
+            entity: 'appointment',
+            id: app.id,
+            message: `Servicio ${item.serviceId} inexistente → eliminado de cita ${app.id}`
+          });
+          return false;
+        }
+        return true;
+      });
+      return { ...ben, services: validServices };
+    }).filter(ben => ben.services.length > 0);
+
+    if (hasChanges || newBeneficiaries.length !== app.beneficiaries.length) {
+      fixedAppointments[index] = { ...app, beneficiaries: newBeneficiaries };
+    }
+  });
+
+  // 4. Series inconsistentes (citas con seriesId pero sin otras citas en la serie)
+  const seriesMap = {};
+  fixedAppointments.forEach(app => {
+    if (app.seriesId) {
+      if (!seriesMap[app.seriesId]) seriesMap[app.seriesId] = [];
+      seriesMap[app.seriesId].push(app);
+    }
+  });
+  Object.keys(seriesMap).forEach(seriesId => {
+    const series = seriesMap[seriesId];
+    if (series.length === 1) {
+      issues.push({
+        type: 'warning',
+        entity: 'series',
+        id: seriesId,
+        message: `Serie ${seriesId} con una sola cita (posible serie incompleta)`
+      });
+    }
+  });
+
+  return { issues, fixedAppointments };
+};
+
+// ==================== HELPERS PARA SERIES ====================
+const getFrequencyLabel = (freqId) => FREQUENCIES.find(f => f.id === freqId)?.label || 'Una sola vez';
+
+const addDays = (dateStr, days) => {
+  if (!dateStr || days <= 0) return dateStr;
+  const date = new Date(dateStr);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().split('T')[0];
+};
+
+const generateAppointmentSeries = (baseApp, services) => {
+  const seriesId = baseApp.seriesId || uid();
+  const generated = [];
+
+  baseApp.beneficiaries.forEach(ben => {
+    ben.services.forEach(item => {
+      const svc = services.find(s => s.id === item.serviceId);
+      if (!svc) return;
+
+      const doses = Math.max(1, item.doses || 1);
+      const freq = FREQUENCIES.find(f => f.id === (item.frequency || 'once')) || FREQUENCIES[0];
+      let currentDate = baseApp.date;
+
+      for (let i = 0; i < doses; i++) {
+        const appointment = {
+          ...baseApp,
+          id: i === 0 ? baseApp.id : uid(),
+          seriesId,
+          doseNumber: i + 1,
+          date: currentDate,
+          time: baseApp.time,
+          beneficiaries: [{
+            ...ben,
+            services: [{ ...item, completedDoses: 0 }]
+          }],
+          status: 'pendiente',
+          createdAt: Date.now()
+        };
+        generated.push(appointment);
+
+        if (freq.days > 0 && i < doses - 1) {
+          currentDate = addDays(currentDate, freq.days);
+        }
+      }
+    });
+  });
+
+  return generated;
 };
 
 // ==================== WHATSAPP ====================
@@ -232,6 +354,51 @@ function NotificationBell({ userId, notifications, markNotifRead, markAllNotifsR
   );
 }
 
+// ==================== VALIDACIÓN CENTRALIZADA DE INTEGRIDAD (BACKEND-LIKE) ====================
+const validateDataIntegrity = (type, data, patients, professionals, services, appointments = []) => {
+  const issues = [];
+
+  if (type === 'appointments' || type === 'all') {
+    const referential = validateReferentialIntegrity(data, patients, professionals, services);
+    issues.push(...referential.issues);
+  }
+
+  if (type === 'patients' || type === 'all') {
+    // Unicidad de username
+    const usernames = new Set(patients.map(p => p.username?.toLowerCase().trim()).filter(Boolean));
+    data.forEach(p => {
+      if (usernames.has(p.username?.toLowerCase().trim()) && !patients.some(existing => existing.id === p.id)) {
+        issues.push({ type: 'error', entity: 'patient', message: `Usuario "${p.username}" ya existe` });
+      }
+    });
+  }
+
+  if (type === 'professionals' || type === 'all') {
+    const usernames = new Set(professionals.map(p => p.username?.toLowerCase().trim()).filter(Boolean));
+    data.forEach(p => {
+      if (usernames.has(p.username?.toLowerCase().trim()) && !professionals.some(existing => existing.id === p.id)) {
+        issues.push({ type: 'error', entity: 'professional', message: `Usuario profesional "${p.username}" ya existe` });
+      }
+    });
+  }
+
+  if (type === 'services' || type === 'all') {
+    // Servicios deben tener ID único y precio válido
+    data.forEach(s => {
+      if (!s.id || !s.title || s.price <= 0) {
+        issues.push({ type: 'error', entity: 'service', message: `Servicio inválido: ${s.title || 'sin título'}` });
+      }
+    });
+  }
+
+  if (issues.some(i => i.type === 'error')) {
+    console.error('❌ Validación de integridad falló:', issues);
+    throw new Error(issues.map(i => i.message).join('\n'));
+  }
+
+  return { ok: true, issues: issues.filter(i => i.type === 'warning') };
+};
+
 // ==================== INTEGRACIÓN CON SUPABASE REALTIME ====================
 const setupRealtimeNotifications = (userId, addNotification) => {
   if (!userId) return;
@@ -340,22 +507,47 @@ const saveAppointments = async (list, setAppointments, patients, professionals, 
   return validated;
 };
 
-// ==================== PERSISTENCIA ====================
+// ==================== FUNCIONES DE PERSISTENCIA ====================
 const sget = async (k, def) => {
   try {
     const { data } = await supabase.from('app_storage').select('value').eq('key', k).single();
     return data ? data.value : def;
-  } catch {
+  } catch (e) {
+    console.error('Supabase read error:', e);
     return def;
   }
 };
 
 const sset = async (k, v) => {
   try {
-    await supabase.from('app_storage').upsert({ key: k, value: v });
+    await supabase.from('app_storage').upsert({ key: k, value: v }, { onConflict: 'key' });
   } catch (e) {
-    console.error(e);
+    console.error('Supabase write error:', e);
   }
+};
+
+const savePatients = async (list, setPatients) => {
+  const { ok } = validateDataIntegrity('patients', list, list, [], []);
+  if (!ok) throw new Error('Validación fallida');
+
+  setPatients(list);
+  await sset('enf:patients', list);
+};
+
+const saveProfessionals = async (list, setProfessionals) => {
+  const { ok } = validateDataIntegrity('professionals', list, [], list, []);
+  if (!ok) throw new Error('Validación fallida');
+
+  setProfessionals(list);
+  await sset('enf:professionals', list);
+};
+
+const saveServices = async (list, setServices) => {
+  const { ok } = validateDataIntegrity('services', list, [], [], list);
+  if (!ok) throw new Error('Validación fallida');
+
+  setServices(list);
+  await sset('enf:services', list);
 };
 
 // ==================== COMPONENTES AUXILIARES ====================
@@ -522,12 +714,11 @@ function Landing({ services, onLogin }) {
   );
 }
 
-// ==================== CALENDAR VIEW - LÓGICA COMPLETA ====================
+// ==================== CALENDAR VIEW ====================
 function CalendarView({ appointments, onEdit }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
-
   const startOfMonth = new Date(year, month, 1);
   const startDate = new Date(startOfMonth);
   startDate.setDate(startDate.getDate() - startDate.getDay());
@@ -552,67 +743,31 @@ function CalendarView({ appointments, onEdit }) {
     setCurrentMonth(newM);
   };
 
-  const goToToday = () => setCurrentMonth(new Date());
-
   return (
-    <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
       <div className="p-5 border-b flex items-center justify-between bg-slate-50">
-        <button onClick={() => navigateMonth(-1)} className="p-3 hover:bg-slate-100 rounded-xl">
-          ←
-        </button>
-        <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-bold text-slate-900">
-            {currentMonth.toLocaleString('es-CL', { month: 'long', year: 'numeric' })}
-          </h2>
-          <button onClick={goToToday} className="text-sm px-4 py-1 bg-white border border-slate-300 rounded-2xl hover:bg-slate-50">
-            Hoy
-          </button>
-        </div>
-        <button onClick={() => navigateMonth(1)} className="p-3 hover:bg-slate-100 rounded-xl">
-          →
-        </button>
+        <button onClick={() => navigateMonth(-1)} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronDown className="w-5 h-5 rotate-90" /></button>
+        <h2 className="text-2xl font-bold text-slate-900">{currentMonth.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' })}</h2>
+        <button onClick={() => navigateMonth(1)} className="p-2 hover:bg-slate-100 rounded-lg"><ChevronDown className="w-5 h-5 -rotate-90" /></button>
       </div>
-
+      {/* Grid del calendario */}
       <div className="grid grid-cols-7 text-center text-xs font-medium text-slate-500 border-b py-3 bg-white">
         {['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].map(d => <div key={d}>{d}</div>)}
       </div>
-
-      <div className="grid grid-cols-7 gap-px bg-slate-200 p-px">
+      <div className="grid grid-cols-7 gap-px bg-slate-200">
         {days.map((day, i) => {
           const dateKey = day.toISOString().split('T')[0];
           const dayApps = appointmentsByDate[dateKey] || [];
-          const isCurrentMonth = day.getMonth() === month;
-          const isToday = day.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
-
           return (
-            <div
-              key={i}
-              className={`min-h-[110px] bg-white p-2 hover:bg-teal-50 transition-colors cursor-pointer ${
-                !isCurrentMonth ? 'opacity-40' : ''
-              }`}
-            >
-              <div className={`text-right text-sm font-medium ${isToday ? 'text-teal-600 font-bold' : ''}`}>
-                {day.getDate()}
-              </div>
-              <div className="mt-2 space-y-1">
+            <div key={i} className="min-h-[118px] bg-white p-2 hover:bg-teal-50">
+              <div className="text-right text-sm font-medium">{day.getDate()}</div>
+              <div className="space-y-1 mt-1">
                 {dayApps.slice(0, 3).map(app => (
-                  <div
-                    key={app.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit(app);
-                    }}
-                    className="text-[10px] px-2 py-1 bg-teal-100 text-teal-800 rounded flex items-center gap-1 cursor-pointer hover:bg-teal-200"
-                  >
-                    <span className="font-mono text-teal-600">{app.time?.slice(0,5)}</span>
+                  <div key={app.id} onClick={(e) => { e.stopPropagation(); onEdit(app); }} className="text-[10px] px-2 py-1 bg-teal-100 text-teal-800 rounded flex items-center gap-1 truncate">
+                    <span className="font-mono">{app.time?.slice(0,5)}</span>
                     <span className="truncate">{app.patientName}</span>
                   </div>
                 ))}
-                {dayApps.length > 3 && (
-                  <div className="text-[10px] text-slate-400 text-center">
-                    +{dayApps.length - 3} más
-                  </div>
-                )}
               </div>
             </div>
           );
@@ -977,8 +1132,7 @@ function LoginView({ onLogin, onBack, patients, professionals }) {
   );
 }
 
-// ==================== PATIENT PORTAL + REQUEST FORM + APPOINTMENT CARD ====================
-// ==================== PATIENT PORTAL + CANCELACIÓN EN SERIE ====================
+// ==================== PATIENT PORTAL + REQUEST FORM + APPOINTMENT CARD + CANCELACIÓN EN SERIE ====================
 function PatientPortal({ user, services, appointments, notifications, saveAppointments, addNotification, onLogout }) {
   const [tab, setTab] = useState('inicio');
   const myApps = appointments
@@ -1390,19 +1544,21 @@ function AppointmentCard({ a, services, onCancel }) {
   );
 }
 
-// ==================== ADMINPANEL ====================
+// ==================== ADMINPANEL FINAL (LIMPIO - SIN DUPLICADOS NI INTEGRIDAD) ====================
 function AdminPanel({ 
-  user, 
-  services, 
-  appointments, 
-  patients, 
-  professionals, 
-  notifications, 
-  saveAppointments, 
-  onLogout 
+  user, setUser, services, setServices, appointments, patients, professionals, 
+  notifications, saveAppointments, savePatients, saveProfessionals, 
+  addNotification, onLogout 
 }) {
-  const [tab, setTab] = useState('monitoreo');
+  const [tab, setTab] = useState('seguimiento');
   const [editingApp, setEditingApp] = useState(null);
+
+  const isAdmin = user.role === 'admin';
+  const visibleApps = isAdmin ? appointments : appointments.filter(a => a.assignedTo === user.id);
+
+  const handleSaveAppointments = async (newList) => {
+    await saveAppointments(newList, setAppointments, patients, professionals, services);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -1427,21 +1583,36 @@ function AdminPanel({
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex gap-2 mb-8 overflow-x-auto pb-2 border-b">
-          <TabButton active={tab === 'monitoreo'} onClick={() => setTab('monitoreo')} icon={Route}>Monitoreo</TabButton>
+          <TabButton active={tab === 'hoy'} onClick={() => setTab('hoy')} icon={Calendar}>Hoy</TabButton>
           <TabButton active={tab === 'calendario'} onClick={() => setTab('calendario')} icon={Calendar}>Calendario</TabButton>
+          <TabButton active={tab === 'seguimiento'} onClick={() => setTab('seguimiento')} icon={Route}>Seguimiento</TabButton>
+          <TabButton active={tab === 'servicios'} onClick={() => setTab('servicios')} icon={Package}>Servicios</TabButton>
         </div>
 
-        {tab === 'monitoreo' && (
+        {tab === 'hoy' && <div className="text-center py-12 text-slate-400">Vista "Hoy" (próximamente)</div>}
+        {tab === 'calendario' && <CalendarView appointments={visibleApps} onEdit={setEditingApp} />}
+        {tab === 'seguimiento' && (
           <MonitoringPanel 
             appointments={appointments}
+            patients={patients}
+            professionals={professionals}
             services={services}
             currentUser={user}
-            saveAppointments={saveAppointments}
+            saveAppointments={handleSaveAppointments}
             onEdit={setEditingApp}
           />
         )}
 
-        {tab === 'calendario' && <CalendarView appointments={appointments} onEdit={setEditingApp} />}
+        {/* NUEVA PESTAÑA */}
+        {tab === 'servicios' && (
+          <ServicesManager 
+            services={services} 
+            saveServices={async (list) => {
+              setServices(list);
+              await sset('enf:services', list);
+            }} 
+          />
+      )}
 
         {editingApp && (
           <EditAppointmentModal 
@@ -1449,7 +1620,7 @@ function AdminPanel({
             services={services} 
             onSave={async (updates) => {
               const newList = appointments.map(a => a.id === updates.id ? { ...a, ...updates } : a);
-              await saveAppointments(newList);
+              await handleSaveAppointments(newList);
               setEditingApp(null);
             }} 
             onClose={() => setEditingApp(null)} 
@@ -1460,9 +1631,11 @@ function AdminPanel({
   );
 }
 
-// ==================== MONITORING PANEL - VERSIÓN ESTABLE ====================
+// ==================== MONITORING PANEL - VERSIÓN FINAL ESTABLE ====================
 function MonitoringPanel({ 
   appointments, 
+  patients, 
+  professionals, 
   services, 
   currentUser, 
   saveAppointments,
@@ -1540,7 +1713,7 @@ function MonitoringPanel({
                       {new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}
                     </div>
                   </div>
-                  <button onClick={() => onEdit(app)} className="text-teal-600 hover:text-teal-700 font-medium">
+                  <button onClick={() => onEdit(app)} className="text-teal-600 hover:text-teal-700">
                     Ver detalle →
                   </button>
                 </div>
@@ -1578,9 +1751,13 @@ function MonitoringPanel({
                       onChange={(e) => updateField(app.id, 'notes', e.target.value)}
                       rows={3}
                       className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
-                      placeholder="Observaciones clínicas..."
+                      placeholder="Escribe observaciones, evolución o incidencias..."
                     />
                   </div>
+                </div>
+
+                <div className="text-xs text-slate-500 mt-5">
+                  Total estimado: <span className="font-medium text-teal-600">{fmtCLP(net)}</span>
                 </div>
               </div>
             );
