@@ -2128,7 +2128,7 @@ function ServicesManager({ services, saveServices }) {
     );
   }
 
-// ==================== APP PRINCIPAL ====================
+// ==================== APP PRINCIPAL - ADMINISTRADOR CORREGIDO ====================
 export default function App() {
   const [view, setView] = useState('landing');
   const [user, setUser] = useState(null);
@@ -2149,14 +2149,9 @@ export default function App() {
 
       // ==================== CREACIÓN FORZADA DEL ADMINISTRADOR ====================
       const adminEmail = 'admin@enfermereando.cl';
-      const existingAdmin = profs.find(p => 
-        p.email === adminEmail || p.username === 'admin' || p.role === 'admin'
-      );
+      let existingAdmin = profs.find(p => p.email === adminEmail || p.role === 'admin');
 
-      if (!existingAdmin || !existingAdmin.email) {
-        // Eliminar cualquier admin antiguo sin email
-        profs = profs.filter(p => p.role !== 'admin' && p.username !== 'admin');
-
+      if (!existingAdmin) {
         const defaultAdmin = {
           id: 'admin-default',
           name: PROFESSIONAL_NAME,
@@ -2170,7 +2165,14 @@ export default function App() {
 
         profs = [defaultAdmin, ...profs];
         await sset('enf:professionals', profs);
-        console.log('✅ Administrador creado/forzado con email:', defaultAdmin);
+        console.log('✅ Administrador creado correctamente:', defaultAdmin);
+      } else if (!existingAdmin.email) {
+        // Actualizar admin antiguo que no tenía email
+        profs = profs.map(p => 
+          p.role === 'admin' ? { ...p, email: adminEmail } : p
+        );
+        await sset('enf:professionals', profs);
+        console.log('✅ Administrador actualizado con email');
       }
 
       setServices(svcs);
@@ -2199,9 +2201,7 @@ export default function App() {
     setView('landing');
   };
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-2xl text-slate-400">Cargando...</div>;
-  }
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-2xl">Cargando...</div>;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50">
