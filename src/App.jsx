@@ -785,7 +785,7 @@ function RequestForm({ services, onSubmit, onCancel }) {
   const [comuna, setComuna] = useState('');
   const [notes, setNotes] = useState('');
 
-  // ==================== AGREGAR / ELIMINAR BENEFICIARIO ====================
+  // ==================== BENEFICIARIOS ====================
   const addBeneficiary = () => {
     setBeneficiaries([...beneficiaries, {
       id: uid(),
@@ -806,7 +806,6 @@ function RequestForm({ services, onSubmit, onCancel }) {
     ));
   };
 
-  // ==================== SERVICIOS POR BENEFICIARIO ====================
   const addServiceToBeneficiary = (benId) => {
     setBeneficiaries(beneficiaries.map(ben => {
       if (ben.id !== benId) return ben;
@@ -837,12 +836,6 @@ function RequestForm({ services, onSubmit, onCancel }) {
     }));
   };
 
-  // ==================== GENERACIÓN DE SERIE (opcional) ====================
-  const generateAppointmentSeries = (baseApp, servicesList) => {
-    // ... (tu función anterior de series)
-    return [baseApp]; // por ahora devolvemos una sola para simplificar
-  };
-
   // ==================== SUBMIT ====================
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -871,12 +864,12 @@ function RequestForm({ services, onSubmit, onCancel }) {
       }))
     };
 
-    const finalAppointments = generateAppointmentSeries(baseAppointment, services);
+    const finalAppointments = [baseAppointment]; // puedes volver a agregar generateAppointmentSeries si lo necesitas
 
     await sendWhatsAppToAdmin(baseAppointment, 'new', services);
     onSubmit(finalAppointments);
 
-    alert(`✅ Solicitud enviada correctamente.\nSe generaron ${finalAppointments.length} cita(s).`);
+    alert(`✅ Solicitud enviada correctamente.`);
     onCancel();
   };
 
@@ -886,13 +879,17 @@ function RequestForm({ services, onSubmit, onCancel }) {
 
       <form onSubmit={handleSubmit} className="space-y-10">
 
-        {/* Solo se renderiza los beneficiarios que existen */}
+        {/* BENEFICIARIOS */}
         {beneficiaries.map((ben, index) => (
           <div key={ben.id} className="border border-slate-200 rounded-3xl p-6 bg-slate-50">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-semibold text-lg">Beneficiario {index + 1}</h3>
               {beneficiaries.length > 1 && (
-                <button type="button" onClick={() => removeBeneficiary(ben.id)} className="text-red-500 hover:text-red-600 text-sm flex items-center gap-1">
+                <button 
+                  type="button" 
+                  onClick={() => removeBeneficiary(ben.id)} 
+                  className="text-red-500 hover:text-red-600 text-sm flex items-center gap-1"
+                >
                   <Trash2 className="w-4 h-4" /> Eliminar
                 </button>
               )}
@@ -907,6 +904,7 @@ function RequestForm({ services, onSubmit, onCancel }) {
               required
             />
 
+            {/* Servicios del beneficiario */}
             {ben.services.map((svc, svcIndex) => (
               <div key={svcIndex} className="flex gap-4 items-end mb-4 bg-white p-4 rounded-2xl border">
                 <div className="flex-1">
@@ -964,7 +962,7 @@ function RequestForm({ services, onSubmit, onCancel }) {
           </div>
         ))}
 
-        {/* Botón para agregar nuevo beneficiario */}
+        {/* BOTÓN PARA AGREGAR OTRO BENEFICIARIO */}
         <button
           type="button"
           onClick={addBeneficiary}
@@ -974,31 +972,34 @@ function RequestForm({ services, onSubmit, onCancel }) {
           Agregar otro beneficiario
         </button>
 
-        {/* Fecha, Hora y Comuna */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-2">Fecha</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required />
+        {/* CAMPOS COMUNES - SIEMPRE VISIBLES */}
+        <div className="pt-6 border-t">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-2">Fecha</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-2">Hora</label>
+              <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-2">Comuna</label>
+              <select value={comuna} onChange={e => setComuna(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required>
+                <option value="">Seleccionar comuna...</option>
+                {COMUNAS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-2">Hora</label>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-2">Comuna</label>
-            <select value={comuna} onChange={e => setComuna(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" required>
-              <option value="">Seleccionar comuna...</option>
-              {COMUNAS.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+
+          <div className="mt-6">
+            <label className="block text-xs font-medium text-slate-500 mb-2">Notas / Observaciones</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" placeholder="Detalles adicionales..." />
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-medium text-slate-500 mb-2">Notas / Observaciones</label>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500" placeholder="Detalles adicionales..." />
-        </div>
-
-        <div className="flex justify-end gap-4 pt-6 border-t">
+        {/* BOTONES FINALES */}
+        <div className="flex justify-end gap-4 pt-8 border-t">
           <button type="button" onClick={onCancel} className="px-10 py-4 text-slate-600 hover:bg-slate-100 rounded-2xl font-medium">Cancelar</button>
           <button type="submit" className="px-10 py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-semibold">Enviar Solicitud + Notificar por WhatsApp</button>
         </div>
