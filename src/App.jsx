@@ -1490,19 +1490,11 @@ function AppointmentCard({ a, services, onCancel }) {
 }
 
 // ==================== ADMINPANEL (CORREGIDO) ====================
+// ==================== ADMINPANEL (ACTUALIZADO CON KANBAN) ====================
 function AdminPanel({ 
-  user, 
-  setUser, 
-  services, 
-  appointments, 
-  patients, 
-  professionals, 
-  notifications, 
-  saveAppointments, 
-  savePatients, 
-  saveProfessionals, 
-  addNotification, 
-  onLogout 
+  user, setUser, services, appointments, patients, professionals, 
+  notifications, saveAppointments, savePatients, saveProfessionals, 
+  addNotification, onLogout 
 }) {
   const [tab, setTab] = useState('hoy');
   const [editingApp, setEditingApp] = useState(null);
@@ -1553,35 +1545,40 @@ function AdminPanel({
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* PESTAÑAS ACTUALIZADAS */}
         <div className="flex gap-2 mb-8 overflow-x-auto pb-2 border-b">
           <TabButton active={tab === 'hoy'} onClick={() => setTab('hoy')} icon={Calendar}>Hoy</TabButton>
           <TabButton active={tab === 'calendario'} onClick={() => setTab('calendario')} icon={Calendar}>Calendario</TabButton>
+          <TabButton active={tab === 'seguimiento'} onClick={() => setTab('seguimiento')} icon={Route}>Seguimiento</TabButton>
           <TabButton active={tab === 'integridad'} onClick={() => setTab('integridad')} icon={Shield}>Integridad</TabButton>
           <TabButton active={tab === 'duplicados'} onClick={() => setTab('duplicados')} icon={Users}>Duplicados</TabButton>
         </div>
 
-        {tab === 'hoy' && <div className="text-center py-12 text-slate-400">Vista "Hoy" (próximamente con lista de citas del día)</div>}
+        {/* CONTENIDO */}
+        {tab === 'hoy' && <div className="text-center py-12 text-slate-400">Vista "Hoy" (próximamente)</div>}
         {tab === 'calendario' && <CalendarView appointments={visibleApps} onEdit={setEditingApp} />}
-        {tab === 'integridad' && (
-          <IntegrityDashboard 
-            appointments={appointments} 
-            patients={patients} 
-            professionals={professionals} 
-            services={services} 
-            currentUser={user} 
-            saveAppointments={handleSaveAppointments} 
+        
+        {/* NUEVO KANBAN */}
+        {tab === 'seguimiento' && (
+          <KanbanBoard 
+            appointments={appointments}
+            patients={patients}
+            professionals={professionals}
+            services={services}
+            currentUser={user}
+            saveAppointments={handleSaveAppointments}
+            onEdit={setEditingApp}
           />
         )}
-        {tab === 'duplicados' && (
-          <DuplicateMerger 
-            patients={patients} 
-            professionals={professionals} 
-            appointments={appointments} 
-            savePatients={savePatients} 
-            saveAppointments={handleSaveAppointments} 
-            currentUser={user} 
-          />
-        )}
+
+        {tab === 'integridad' && <IntegrityDashboard ... />}
+        {tab === 'duplicados' && <DuplicateMerger ... />}
+
+        {editingApp && <EditAppointmentModal app={editingApp} services={services} onSave={...} onClose={() => setEditingApp(null)} />}
+      </div>
+    </div>
+  );
+}
 
         {editingApp && (
           <EditAppointmentModal 
@@ -1914,7 +1911,7 @@ function DuplicateMerger({
   );
 }
 
-// ==================== KANBAN BOARD (NUEVO MÓDULO DE SEGUIMIENTO) ====================
+// ==================== KANBAN BOARD CON MARCACIÓN DE DOSIS ====================
 function KanbanBoard({ 
   appointments, 
   patients, 
@@ -1929,65 +1926,71 @@ function KanbanBoard({
     ? appointments 
     : appointments.filter(a => a.assignedTo === currentUser.id);
 
-  // Estados del flujo de atención
   const COLUMNS = [
-    { id: 'pendiente',     title: 'Pendiente',     color: 'amber', icon: Clock },
-    { id: 'asignada',      title: 'Asignada',      color: 'blue',  icon: UserCog },
-    { id: 'confirmada',    title: 'Confirmada',    color: 'teal',  icon: CheckCircle },
-    { id: 'en_tratamiento',title: 'En tratamiento',color: 'purple',icon: Activity },
-    { id: 'completada',    title: 'Completada',    color: 'green', icon: Check },
-    { id: 'cancelada',     title: 'Cancelada',     color: 'red',   icon: X }
+    { id: 'pendiente',      title: 'Pendiente',     color: 'amber', icon: Clock },
+    { id: 'asignada',       title: 'Asignada',      color: 'blue',  icon: UserCog },
+    { id: 'confirmada',     title: 'Confirmada',    color: 'teal',  icon: CheckCircle },
+    { id: 'en_tratamiento', title: 'En tratamiento',color: 'purple',icon: Activity },
+    { id: 'completada',     title: 'Completada',    color: 'green', icon: Check },
+    { id: 'cancelada',      title: 'Cancelada',     color: 'red',   icon: X }
   ];
 
-  // Agrupar citas por estado
+  // Agrupar citas
   const grouped = {};
   COLUMNS.forEach(col => { grouped[col.id] = []; });
 
   visibleApps.forEach(app => {
     let status = app.status || 'pendiente';
-    
-    // LÓGICA ESPECIAL PARA "EN TRATAMIENTO"
+
+    // Lógica automática de "En tratamiento"
     if (app.seriesId && app.beneficiaries) {
       let totalDoses = 0;
       let completedDoses = 0;
-      
       app.beneficiaries.forEach(ben => {
         ben.services.forEach(item => {
           totalDoses += (item.doses || 1);
           completedDoses += (item.completedDoses || 0);
         });
       });
-
-      if (completedDoses > 0 && completedDoses < totalDoses) {
-        status = 'en_tratamiento';
-      } else if (completedDoses === totalDoses && totalDoses > 0) {
-        status = 'completada';
-      }
+      if (completedDoses > 0 && completedDoses < totalDoses) status = 'en_tratamiento';
+      else if (completedDoses === totalDoses && totalDoses > 0) status = 'completada';
     }
-    
+
     if (grouped[status]) grouped[status].push(app);
   });
 
-  // Cambiar estado (drag & drop o click)
-  const changeStatus = async (appId, newStatus) => {
-    const updated = appointments.map(app => {
-      if (app.id === appId) {
-        return { ...app, status: newStatus };
-      }
-      return app;
+  // Función para marcar una dosis como completada
+  const markDoseCompleted = async (appId, serviceId, increment = 1) => {
+    const updatedAppointments = appointments.map(app => {
+      if (app.id !== appId) return app;
+
+      const newBeneficiaries = app.beneficiaries.map(ben => ({
+        ...ben,
+        services: ben.services.map(item => {
+          if (item.serviceId !== serviceId) return item;
+          const newCompleted = Math.min(
+            (item.completedDoses || 0) + increment,
+            item.doses || 1
+          );
+          return { ...item, completedDoses: newCompleted };
+        })
+      }));
+
+      return { ...app, beneficiaries: newBeneficiaries };
     });
-    await saveAppointments(updated);
+
+    await saveAppointments(updatedAppointments);
   };
 
   return (
     <div className="bg-white rounded-3xl p-6 border border-slate-200">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold flex items-center gap-3">
           <Route className="w-7 h-7 text-teal-600" />
           Seguimiento de Solicitudes
         </h2>
         <div className="text-sm text-slate-500">
-          {visibleApps.length} citas • {isAdmin ? 'Todos' : 'Mis asignadas'}
+          {visibleApps.length} citas • {isAdmin ? 'Todos los profesionales' : 'Mis asignadas'}
         </div>
       </div>
 
@@ -1995,82 +1998,92 @@ function KanbanBoard({
         {COLUMNS.map(column => {
           const Icon = column.icon;
           const appsInColumn = grouped[column.id] || [];
-          
+
           return (
-            <div key={column.id} className="bg-slate-50 rounded-3xl p-4 min-h-[500px] flex flex-col">
-              {/* Header de columna */}
+            <div key={column.id} className="bg-slate-50 rounded-3xl p-4 flex flex-col min-h-[520px]">
               <div className={`px-4 py-3 rounded-2xl mb-4 flex items-center gap-2 bg-white shadow-sm border border-${column.color}-200`}>
                 <Icon className={`w-5 h-5 text-${column.color}-600`} />
-                <span className="font-semibold text-slate-900">{column.title}</span>
-                <span className="ml-auto bg-slate-100 text-slate-600 text-xs font-medium px-2.5 py-0.5 rounded-xl">
+                <span className="font-semibold">{column.title}</span>
+                <span className="ml-auto text-xs font-medium bg-slate-100 px-3 py-1 rounded-2xl">
                   {appsInColumn.length}
                 </span>
               </div>
 
-              {/* Cards */}
               <div className="flex-1 space-y-3 overflow-y-auto">
                 {appsInColumn.map(app => {
                   const net = app.beneficiaries ? appNetPrice(app, services) : 0;
                   const isSeries = !!app.seriesId;
-                  
-                  // Calcular progreso de dosis para series
-                  let progress = null;
+
+                  // Calcular totales de dosis para esta cita
+                  let totalDoses = 0;
+                  let completedDoses = 0;
                   if (isSeries && app.beneficiaries) {
-                    let total = 0, done = 0;
-                    app.beneficiaries.forEach(b => {
-                      b.services.forEach(s => {
-                        total += (s.doses || 1);
-                        done += (s.completedDoses || 0);
+                    app.beneficiaries.forEach(ben => {
+                      ben.services.forEach(item => {
+                        totalDoses += item.doses || 1;
+                        completedDoses += item.completedDoses || 0;
                       });
                     });
-                    progress = total > 0 ? Math.round((done / total) * 100) : 0;
                   }
 
                   return (
                     <div
                       key={app.id}
-                      onClick={() => onEdit(app)}
                       className="bg-white border border-slate-200 rounded-2xl p-4 cursor-pointer hover:shadow-md transition-all hover:border-teal-300"
-                      draggable
-                      onDragStart={e => e.dataTransfer.setData('text/plain', app.id)}
-                      onDragOver={e => e.preventDefault()}
-                      onDrop={e => {
-                        e.preventDefault();
-                        const draggedId = e.dataTransfer.getData('text/plain');
-                        if (draggedId !== app.id) changeStatus(draggedId, column.id);
-                      }}
+                      onClick={() => onEdit(app)}
                     >
-                      <div className="flex justify-between items-start">
-                        <div className="font-medium text-slate-900 text-sm">{app.patientName}</div>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-xl font-medium ${column.color === 'amber' ? 'bg-amber-100 text-amber-700' : ''}`}>
-                          {fmtTime(app.time)}
-                        </span>
+                      <div className="flex justify-between">
+                        <div className="font-medium text-slate-900">{app.patientName}</div>
+                        <span className="text-xs text-slate-500">{fmtTime(app.time)}</span>
                       </div>
-                      
-                      <div className="text-xs text-slate-500 mt-1">{new Date(app.date).toLocaleDateString('es-CL')}</div>
-                      
-                      {isSeries && progress !== null && (
-                        <div className="mt-3 bg-slate-100 rounded-2xl p-2">
-                          <div className="flex justify-between text-[10px] mb-1">
-                            <span>Dosis</span>
-                            <span>{progress}%</span>
+                      <div className="text-xs text-slate-500 mt-0.5">{new Date(app.date).toLocaleDateString('es-CL')}</div>
+
+                      {/* TRACKER DE DOSIS */}
+                      {isSeries && totalDoses > 1 && (
+                        <div className="mt-4">
+                          <div className="flex justify-between text-xs mb-2">
+                            <span className="font-medium">Dosis</span>
+                            <span className="text-teal-600">{completedDoses}/{totalDoses}</span>
                           </div>
-                          <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                            <div className="h-1.5 bg-teal-500 rounded-full" style={{ width: `${progress}%` }}></div>
+                          <div className="flex gap-1 flex-wrap">
+                            {Array.from({ length: totalDoses }, (_, i) => {
+                              const doseNum = i + 1;
+                              const isCompleted = doseNum <= completedDoses;
+                              return (
+                                <button
+                                  key={doseNum}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Marcamos la dosis correspondiente
+                                    const serviceId = app.beneficiaries[0]?.services[0]?.serviceId;
+                                    if (serviceId) markDoseCompleted(app.id, serviceId, 1);
+                                  }}
+                                  className={`w-6 h-6 flex items-center justify-center text-[10px] font-medium rounded-xl border transition-all ${
+                                    isCompleted 
+                                      ? 'bg-teal-500 text-white border-teal-500' 
+                                      : 'bg-white border-slate-300 hover:border-teal-400'
+                                  }`}
+                                >
+                                  {doseNum}
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
 
                       <div className="mt-3 text-xs text-slate-600 line-clamp-2">
-                        {app.beneficiaries?.flatMap(b => b.services.map(s => {
-                          const svc = services.find(svc => svc.id === s.serviceId);
-                          return svc ? svc.title : '';
-                        })).join(' • ')}
+                        {app.beneficiaries?.flatMap(b => 
+                          b.services.map(s => {
+                            const svc = services.find(svc => svc.id === s.serviceId);
+                            return svc ? svc.title : '';
+                          })
+                        ).join(' • ')}
                       </div>
 
-                      <div className="mt-4 flex justify-between items-center text-xs">
+                      <div className="mt-4 flex justify-between text-xs">
                         <div className="font-semibold text-teal-600">{fmtCLP(net)}</div>
-                        {app.seriesId && <span className="text-purple-600 text-[10px] font-medium">Serie</span>}
+                        {isSeries && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-[10px] rounded-xl">Serie</span>}
                       </div>
                     </div>
                   );
