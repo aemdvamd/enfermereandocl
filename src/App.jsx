@@ -388,95 +388,177 @@ function CalendarView({ appointments, onEdit }) {
 }
 
 /* ============================== LOGIN VIEW  ============================================= */
-   function LoginView({ onLogin, onBack, patients = [], professionals = [] }) {
-    const [tab, setTab] = useState('login');
-    const [role, setRole] = useState('professional'); // Por defecto en profesional/admin
-    const [email, setEmail] = useState('marielads.enfermera@gmail.com');
-    const [password, setPassword] = useState('enfermera2026');
-    const [loading, setLoading] = useState(false);
-  
-    const handleLogin = async () => {
-      setLoading(true);
-      console.log(`[LOGIN] Intentando login como ${role} | Email: ${email} | Password: ${password}`);
-  
-      let foundUser = null;
-  
-      if (role === 'patient') {
-        console.log(`[LOGIN] Buscando en patients (${patients.length} registros)`);
-        foundUser = patients.find(p => p.email === email && p.password === password);
-      } else {
-        console.log(`[LOGIN] Buscando en professionals (${professionals.length} registros)`);
-        foundUser = professionals.find(p => 
-          (p.email === email || p.role === 'admin') && p.password === password
-        );
-      }
-  
-      console.log('[LOGIN] Usuario encontrado:', foundUser);
-  
-      if (foundUser) {
-        console.log('[LOGIN] ✅ Login exitoso');
-        onLogin({ ...foundUser, role });
-      } else {
-        console.log('[LOGIN] ❌ No se encontró el usuario');
-        alert('❌ Credenciales incorrectas.\n\nRevisa la consola (F12) para ver los detalles de la búsqueda.');
-      }
+function LoginView({ onLogin, onBack, patients = [], professionals = [] }) {
+  const [tab, setTab] = useState('login'); // login | register | recovery
+  const [role, setRole] = useState('patient');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [comuna, setComuna] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // ==================== VALIDACIÓN DE EMAIL ====================
+  const isValidEmail = (em) => em && em.includes('@') && em.includes('.');
+
+  // ==================== LOGIN ====================
+  const handleLogin = async () => {
+    setLoading(true);
+    let foundUser = null;
+
+    if (role === 'patient') {
+      foundUser = patients.find(p => p.email === email && p.password === password);
+    } else {
+      foundUser = professionals.find(p => (p.email === email || p.role === 'admin') && p.password === password);
+    }
+
+    if (foundUser) {
+      onLogin({ ...foundUser, role });
+    } else {
+      alert('❌ Credenciales incorrectas. Verifica tu correo y contraseña.');
+    }
+    setLoading(false);
+  };
+
+  // ==================== CREACIÓN DE USUARIO CON VALIDACIÓN DE INTEGRIDAD ====================
+  const handleRegister = async () => {
+    if (!name || !email || !password || !phone) {
+      return alert('❌ Todos los campos son obligatorios');
+    }
+
+    if (!isValidEmail(email)) {
+      return alert('❌ Ingresa un correo electrónico válido');
+    }
+
+    setLoading(true);
+
+    const emailLower = email.trim().toLowerCase();
+
+    // === VALIDACIÓN DE INTEGRIDAD: EVITAR DUPLICADOS ===
+    const userExistsInPatients = patients.some(p => p.email?.toLowerCase() === emailLower);
+    const userExistsInProfessionals = professionals.some(p => p.email?.toLowerCase() === emailLower);
+
+    if (userExistsInPatients || userExistsInProfessionals) {
       setLoading(false);
+      return alert('❌ Ya existe un usuario registrado con ese correo electrónico.\n\nIntenta iniciar sesión o usa otro correo.');
+    }
+
+    // === CREAR USUARIO ===
+    const newUser = {
+      id: uid(),
+      name: name.trim(),
+      email: emailLower,
+      password: password,
+      phone: phone.trim(),
+      comuna: comuna || 'No especificada',
+      role: role,
+      status: role === 'professional' ? 'pending' : 'active',
+      createdAt: new Date().toISOString()
     };
-  
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-teal-50 to-white flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
-          <div className="px-8 pt-8 pb-6 border-b flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Stethoscope className="w-9 h-9 text-teal-600" />
-              <div className="font-bold text-3xl">Enfermereando</div>
-            </div>
-            <button onClick={onBack} className="text-slate-400 hover:text-slate-600">← Volver</button>
+
+    let updatedList = [];
+
+    if (role === 'patient') {
+      updatedList = [...patients, newUser];
+      await sset('enf:patients', updatedList);
+    } else {
+      updatedList = [...professionals, newUser];
+      await sset('enf:professionals', updatedList);
+    }
+
+    alert(`✅ ¡Usuario creado correctamente!\n\n` +
+          `Nombre: ${newUser.name}\n` +
+          `Correo: ${newUser.email}\n` +
+          `Rol: ${role === 'patient' ? 'Paciente' : 'Profesional'}\n\n` +
+          (role === 'professional' ? 'Tu cuenta está pendiente de aprobación.' : 'Ya puedes iniciar sesión.'));
+
+    // Limpiar formulario y volver a login
+    setName('');
+    setEmail('');
+    setPassword('');
+    setPhone('');
+    setComuna('');
+    setTab('login');
+    setLoading(false);
+  };
+
+  // ==================== RECUPERACIÓN ====================
+  const handleRecovery = async () => {
+    if (!email || !isValidEmail(email)) return alert('❌ Ingresa un correo válido');
+    setLoading(true);
+    alert(`✅ Se ha enviado un enlace de recuperación a ${email} (simulado)`);
+    setLoading(false);
+    setTab('login');
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-teal-50 to-white flex items-center justify-center p-6">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
+        <div className="px-8 pt-8 pb-6 border-b flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Stethoscope className="w-9 h-9 text-teal-600" />
+            <div className="font-bold text-3xl">Enfermereando</div>
           </div>
-  
-          <div className="p-8 space-y-6">
-            <div className="flex bg-slate-100 rounded-2xl p-1">
-              <button 
-                onClick={() => setRole('patient')} 
-                className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}
-              >
-                Paciente
+          <button onClick={onBack} className="text-slate-400 hover:text-slate-600">← Volver</button>
+        </div>
+
+        <div className="flex border-b text-sm">
+          <button onClick={() => setTab('login')} className={`flex-1 py-5 ${tab === 'login' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Iniciar Sesión</button>
+          <button onClick={() => setTab('register')} className={`flex-1 py-5 ${tab === 'register' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Registrarse</button>
+          <button onClick={() => setTab('recovery')} className={`flex-1 py-5 ${tab === 'recovery' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Recuperar</button>
+        </div>
+
+        <div className="p-8 space-y-6">
+          {tab === 'login' && (
+            <>
+              <div className="flex bg-slate-100 rounded-2xl p-1">
+                <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}>Paciente</button>
+                <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}>Profesional</button>
+              </div>
+              <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+              <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+              <button onClick={handleLogin} disabled={loading} className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg disabled:opacity-70">
+                {loading ? 'Ingresando...' : 'Iniciar Sesión'}
               </button>
-              <button 
-                onClick={() => setRole('professional')} 
-                className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}
-              >
-                Profesional / Admin
+            </>
+          )}
+
+          {tab === 'register' && (
+            <div className="space-y-5">
+              <div className="flex bg-slate-100 rounded-2xl p-1">
+                <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}>Paciente</button>
+                <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}>Profesional</button>
+              </div>
+
+              <input type="text" placeholder="Nombre completo" value={name} onChange={e => setName(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+              <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+              <input type="tel" placeholder="Teléfono" value={phone} onChange={e => setPhone(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+              <select value={comuna} onChange={e => setComuna(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500">
+                <option value="">Seleccionar comuna</option>
+                {COMUNAS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+
+              <button onClick={handleRegister} disabled={loading} className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg disabled:opacity-70">
+                {loading ? 'Creando cuenta...' : 'Crear Cuenta'}
               </button>
             </div>
-  
-            <input 
-              type="email" 
-              placeholder="Correo electrónico" 
-              value={email} 
-              onChange={e => setEmail(e.target.value)} 
-              className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" 
-            />
-            <input 
-              type="password" 
-              placeholder="Contraseña" 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" 
-            />
-  
-            <button 
-              onClick={handleLogin} 
-              disabled={loading} 
-              className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg disabled:opacity-70"
-            >
-              {loading ? 'Verificando credenciales...' : 'Iniciar Sesión'}
-            </button>
-          </div>
+          )}
+
+          {tab === 'recovery' && (
+            <div className="space-y-6">
+              <p className="text-slate-600">Ingresa tu correo para recuperar la contraseña.</p>
+              <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+              <button onClick={handleRecovery} disabled={loading} className="w-full py-5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-3xl text-lg disabled:opacity-70">
+                {loading ? 'Enviando...' : 'Enviar enlace de recuperación'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
 // ==================== PATIENT PORTAL + REQUEST FORM + APPOINTMENT CARD ====================
 
@@ -2069,8 +2151,12 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50">
       {view === 'landing' && <Landing services={services.filter(s => s.active)} onLogin={() => setView('login')} />}
-      {view === 'login' && <LoginView onLogin={login} onBack={() => setView('landing')} patients={patients} professionals={professionals} />}
-      {view === 'patient' && user && user.role === 'patient' && <PatientPortal user={user} services={services.filter(s => s.active)} appointments={appointments} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
+      {view === 'login' && <LoginView 
+  onLogin={login} 
+  onBack={() => setView('landing')} 
+  patients={patients} 
+  professionals={professionals} 
+/>}      {view === 'patient' && user && user.role === 'patient' && <PatientPortal user={user} services={services.filter(s => s.active)} appointments={appointments} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
       {view === 'professional' && user && user.role === 'professional' && <ProfessionalDashboard user={user} services={services} appointments={appointments} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
       {view === 'admin' && user && user.role === 'admin' && <AdminPanel user={user} services={services} appointments={appointments} patients={patients} professionals={professionals} notifications={notifications} saveAppointments={saveAppointmentsLocal} onLogout={logout} />}
     </div>
