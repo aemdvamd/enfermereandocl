@@ -108,44 +108,40 @@ const sendWhatsAppToAdmin = async (app, action = 'new', services = [], extraInfo
   try {
     let message = `🔔 *Enfermereando - ${PROFESSIONAL_NAME}*\n\n`;
 
-    switch (action) {
-      case 'new':
-        message += `📌 *NUEVA SOLICITUD DE ATENCIÓN*\n`;
-        break;
-      case 'cancelled':
-        message += `❌ *ATENCIÓN CANCELADA*\n`;
-        break;
-      case 'status_change':
-        message += `🔄 *Cambio de estado*\n`;
-        break;
-      case 'task_taken':
-        message += `✅ *TAREA TOMADA POR PROFESIONAL*\n`;
-        break;
-      case 'dose_update':
-        message += `💉 *Dosis actualizada*\n`;
-        break;
-      default:
-        message += `📌 *ACTUALIZACIÓN DE ATENCIÓN*\n`;
-    }
+    if (action === 'new') message += `📌 *NUEVA SOLICITUD DE ATENCIÓN*\n`;
+    else if (action === 'cancelled') message += `❌ *ATENCIÓN CANCELADA*\n`;
+    else if (action === 'status_change') message += `🔄 *CAMBIO DE ESTADO*\n`;
+    else if (action === 'task_taken') message += `✅ *TAREA TOMADA*\n`;
 
     message += `Paciente: ${app.patientName}\n`;
     message += `Fecha: ${new Date(app.date).toLocaleDateString('es-CL')}\n`;
     message += `Hora: ${fmtTime(app.time)}\n`;
     message += `Comuna: ${app.comuna || 'No especificada'}\n`;
-
-    if (app.status) message += `Estado: ${app.status}\n`;
     if (extraInfo) message += `${extraInfo}\n`;
 
-    const url = `https://api.callmebot.com/whatsapp.php?phone=${WHATSAPP}&text=${encodeURIComponent(message)}`;
+    // Formato correcto de teléfono para CallMeBot (sin +)
+    const phoneClean = WHATSAPP.replace('+', '');
+
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${phoneClean}&text=${encodeURIComponent(message)}`;
+
+    console.log(`[WHATSAPP] Enviando a: ${phoneClean}`);
+    console.log(`[WHATSAPP] URL: ${url}`);
 
     const res = await fetch(url, { method: 'GET' });
+
     if (res.ok) {
-      console.log(`✅ WhatsApp enviado: ${action}`);
+      console.log(`✅ WhatsApp enviado correctamente (${action})`);
+      return true;
     } else {
-      console.warn('⚠️ CallMeBot respondió con error');
+      const text = await res.text();
+      console.error(`❌ CallMeBot error: ${res.status} - ${text}`);
+      alert(`Error al enviar WhatsApp (${res.status}). Revisa la consola.`);
+      return false;
     }
   } catch (error) {
-    console.error('❌ Error enviando WhatsApp:', error);
+    console.error('❌ Error al enviar WhatsApp:', error);
+    alert('No se pudo conectar con CallMeBot. Revisa la consola (F12).');
+    return false;
   }
 };
 
