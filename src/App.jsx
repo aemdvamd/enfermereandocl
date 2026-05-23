@@ -8,7 +8,6 @@ import {
   ChevronDown, Tag, UserCog, Clock, Package, Bell, Route
 } from 'lucide-react';
 
-const WHATSAPP = '56920489639';
 const PHONE = '+56 9 2048 9639';
 const PROFESSIONAL_NAME = 'Mariela Droguett';
 
@@ -103,44 +102,53 @@ const appNetPrice = (a, services) => {
   return Math.round(gross * (1 - discount));
 };
 
-/* === INTEGRACIÓN CALLMEBOT WHATSAPP === */
-const sendWhatsAppToAdmin = async (app, action = 'new', services = [], extraInfo = '') => {
+/* === INTEGRACIÓN TELEGRAM === */
+const sendTelegramToAdmin = async (app, action = 'new', services = [], extraInfo = '') => {
   try {
-    let message = `🔔 *Enfermereando - ${PROFESSIONAL_NAME}*\n\n`;
+    let text = `🔔 *Enfermereando - ${PROFESSIONAL_NAME}*\n\n`;
 
-    if (action === 'new') message += `📌 *NUEVA SOLICITUD DE ATENCIÓN*\n`;
-    else if (action === 'cancelled') message += `❌ *ATENCIÓN CANCELADA*\n`;
-    else if (action === 'status_change') message += `🔄 *CAMBIO DE ESTADO*\n`;
-    else if (action === 'task_taken') message += `✅ *TAREA TOMADA*\n`;
+    if (action === 'new') text += `📌 *NUEVA SOLICITUD DE ATENCIÓN*\n`;
+    else if (action === 'cancelled') text += `❌ *ATENCIÓN CANCELADA*\n`;
+    else if (action === 'status_change') text += `🔄 *CAMBIO DE ESTADO*\n`;
+    else if (action === 'task_taken') text += `✅ *TAREA TOMADA*\n`;
 
-    message += `Paciente: ${app.patientName}\n`;
-    message += `Fecha: ${new Date(app.date).toLocaleDateString('es-CL')}\n`;
-    message += `Hora: ${fmtTime(app.time)}\n`;
-    message += `Comuna: ${app.comuna || 'No especificada'}\n`;
-    if (extraInfo) message += `${extraInfo}\n`;
+    text += `Paciente: ${app.patientName}\n`;
+    text += `Fecha: ${new Date(app.date).toLocaleDateString('es-CL')}\n`;
+    text += `Hora: ${fmtTime(app.time)}\n`;
+    text += `Comuna: ${app.comuna || 'No especificada'}\n`;
+    if (extraInfo) text += `${extraInfo}\n`;
 
-    // Formato correcto de teléfono para CallMeBot (sin +)
-    const phoneClean = WHATSAPP.replace('+', '');
+    const BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN;
+    const CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID;
 
-    const url = `https://api.callmebot.com/whatsapp.php?phone=${phoneClean}&text=${encodeURIComponent(message)}`;
+    if (!BOT_TOKEN || !CHAT_ID) {
+      console.error('❌ Faltan variables de Telegram');
+      return false;
+    }
 
-    console.log(`[WHATSAPP] Enviando a: ${phoneClean}`);
-    console.log(`[WHATSAPP] URL: ${url}`);
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
 
-    const res = await fetch(url, { method: 'GET' });
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        text: text,
+        parse_mode: 'Markdown'
+      })
+    });
 
-    if (res.ok) {
-      console.log(`✅ WhatsApp enviado correctamente (${action})`);
+    const result = await response.json();
+
+    if (result.ok) {
+      console.log(`✅ Telegram enviado correctamente (${action})`);
       return true;
     } else {
-      const text = await res.text();
-      console.error(`❌ CallMeBot error: ${res.status} - ${text}`);
-      alert(`Error al enviar WhatsApp (${res.status}). Revisa la consola.`);
+      console.error('❌ Error Telegram:', result);
       return false;
     }
   } catch (error) {
-    console.error('❌ Error al enviar WhatsApp:', error);
-    alert('No se pudo conectar con CallMeBot. Revisa la consola (F12).');
+    console.error('❌ Error enviando Telegram:', error);
     return false;
   }
 };
@@ -615,32 +623,36 @@ function PatientPortal({ user, services, appointments, saveAppointments, onLogou
     .filter(a => a.status === 'cancelada' || new Date(a.date) < new Date())
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  const cancelAppointment = async (app) => {
-    if (!confirm(`¿Cancelar la atención del ${new Date(app.date).toLocaleDateString('es-CL')}?`)) return;
-
-    const isSeries = !!app.seriesId;
-    let appointmentsToCancel = [app.id];
-
-    if (isSeries) {
-      const seriesApps = appointments.filter(a => a.seriesId === app.seriesId);
-      const cancelAll = confirm(`Esta cita pertenece a una SERIE de ${seriesApps.length} dosis.\n\n¿Cancelar SOLO esta cita o TODA LA SERIE?`);
-      if (cancelAll) appointmentsToCancel = seriesApps.map(a => a.id);
-    }
-
-    const updated = appointments.map(a => 
-      appointmentsToCancel.includes(a.id) ? { ...a, status: 'cancelada' } : a
-    );
-
-    await saveAppointments(updated);
-
-    const representative = appointments.find(a => a.id === appointmentsToCancel[0]);
-    await sendWhatsAppToAdmin(representative, 'cancelled', services, appointmentsToCancel.length > 1);
-
-    alert(appointmentsToCancel.length > 1 
-      ? `✅ Toda la serie (${appointmentsToCancel.length} citas) ha sido cancelada.` 
-      : '✅ Cita cancelada correctamente.'
-    );
-  };
+    const cancelAppointment = async (app) => {
+      if (!confirm(`¿Cancelar la atención del ${new Date(app.date).toLocaleDateString('es-CL')}?`)) return;
+    
+      const isSeries = !!app.seriesId;
+      let appointmentsToCancel = [app.id];
+    
+      if (isSeries) {
+        const seriesApps = appointments.filter(a => a.seriesId === app.seriesId);
+        const cancelAll = confirm(`Esta cita pertenece a una SERIE de ${seriesApps.length} dosis.\n\n¿Cancelar SOLO esta cita o TODA LA SERIE?`);
+        if (cancelAll) appointmentsToCancel = seriesApps.map(a => a.id);
+      }
+    
+      const updated = appointments.map(a => 
+        appointmentsToCancel.includes(a.id) ? { ...a, status: 'cancelada' } : a
+      );
+    
+      await saveAppointments(updated);
+    
+      const representative = appointments.find(a => a.id === appointmentsToCancel[0]);
+    
+      // ←←← TELEGRAM
+      await sendTelegramToAdmin(representative, 'cancelled', services, 
+        appointmentsToCancel.length > 1 ? 'Serie completa cancelada' : ''
+      );
+    
+      alert(appointmentsToCancel.length > 1 
+        ? `✅ Toda la serie (${appointmentsToCancel.length} citas) ha sido cancelada.` 
+        : '✅ Cita cancelada correctamente.'
+      );
+    };
 
   const handleNewAppointment = async (newAppointmentsArray) => {
     const updated = [...appointments, ...newAppointmentsArray];
@@ -773,7 +785,7 @@ function RequestForm({ services, onSubmit, onCancel }) {
   const [beneficiaries, setBeneficiaries] = useState([{
     id: uid(),
     name: '',
-    direccion: '',                    // ← Nuevo campo Dirección
+    direccion: '',
     services: [{ serviceId: '', doses: 1, frequency: 'once' }]
   }]);
 
@@ -866,10 +878,12 @@ function RequestForm({ services, onSubmit, onCancel }) {
       }))
     };
 
-    await sendWhatsAppToAdmin(baseAppointment, 'new', services);
-    onSubmit([baseAppointment]);   // puedes volver a poner series si lo necesitas
+    // ←←← TELEGRAM
+    await sendTelegramToAdmin(baseAppointment, 'new', services);
 
-    alert(`✅ Solicitud enviada correctamente.`);
+    onSubmit([baseAppointment]);
+
+    alert(`✅ Solicitud enviada correctamente.\nSe notificó por Telegram.`);
     onCancel();
   };
 
@@ -1007,7 +1021,7 @@ function RequestForm({ services, onSubmit, onCancel }) {
         {/* Botones finales */}
         <div className="flex justify-end gap-4 pt-8 border-t">
           <button type="button" onClick={onCancel} className="px-10 py-4 text-slate-600 hover:bg-slate-100 rounded-2xl font-medium">Cancelar</button>
-          <button type="submit" className="px-10 py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-semibold">Enviar Solicitud + Notificar por WhatsApp</button>
+          <button type="submit" className="px-10 py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-semibold">Enviar Solicitud + Notificar</button>
         </div>
       </form>
     </div>
@@ -1794,51 +1808,50 @@ function ServicesManager({ services, saveServices }) {
     // Solo atenciones asignadas a este profesional
     const myAppointments = appointments.filter(a => a.assignedTo === user.id);
   
-    // ==================== TOMAR TAREA + WHATSAPP ====================
-    const takeTask = async (app) => {
-      if (app.status !== 'pendiente') return;
-  
-      const updated = appointments.map(a => 
-        a.id === app.id ? { ...a, status: 'asignada', assignedTo: user.id } : a
-      );
-  
-      await saveAppointments(updated);
-      await sendWhatsAppToAdmin(app, 'task_taken', services, `Tomada por: ${user.name}`);
-      
-      alert(`✅ Tarea tomada correctamente y notificado por WhatsApp.`);
+    // ==================== TOMAR TAREA ====================
+// TOMAR TAREA
+const takeTask = async (app) => {
+  if (app.status !== 'pendiente') return;
+
+  const updated = appointments.map(a => 
+    a.id === app.id ? { ...a, status: 'asignada', assignedTo: user.id } : a
+  );
+
+  await saveAppointments(updated);
+
+  await sendTelegramToAdmin(app, 'task_taken', services, `Tomada por: ${user.name}`);
+  alert(`✅ Tarea tomada y notificado por Telegram.`);
+};
+
+// ==================== ACTUALIZAR ESTADO ====================
+const updateStatus = async (appId, newStatus) => {
+  const updated = appointments.map(a => a.id === appId ? { ...a, status: newStatus } : a);
+  await saveAppointments(updated);
+
+  const app = updated.find(a => a.id === appId);
+  await sendTelegramToAdmin(app, 'status_change', services);
+};
+
+// ==================== ACTUALIZAR DOSIS ====================
+const updateDoses = async (appId, completedDoses) => {
+  const updated = appointments.map(app => {
+    if (app.id !== appId) return app;
+    return {
+      ...app,
+      beneficiaries: app.beneficiaries.map(ben => ({
+        ...ben,
+        services: ben.services.map(s => ({
+          ...s,
+          completedDoses: parseInt(completedDoses) || 0
+        }))
+      }))
     };
-  
-    // ==================== ACTUALIZAR ESTADO + WHATSAPP ====================
-    const updateStatus = async (appId, newStatus) => {
-      const updated = appointments.map(a => 
-        a.id === appId ? { ...a, status: newStatus } : a
-      );
-      await saveAppointments(updated);
-  
-      const app = updated.find(a => a.id === appId);
-      await sendWhatsAppToAdmin(app, 'status_change', services, `Nuevo estado: ${newStatus}`);
-    };
-  
-    // ==================== ACTUALIZAR DOSIS + WHATSAPP ====================
-    const updateDoses = async (appId, completedDoses) => {
-      const updated = appointments.map(app => {
-        if (app.id !== appId) return app;
-        return {
-          ...app,
-          beneficiaries: app.beneficiaries.map(ben => ({
-            ...ben,
-            services: ben.services.map(s => ({
-              ...s,
-              completedDoses: parseInt(completedDoses) || 0
-            }))
-          }))
-        };
-      });
-      await saveAppointments(updated);
-  
-      const app = updated.find(a => a.id === appId);
-      await sendWhatsAppToAdmin(app, 'dose_update', services, `Dosis actualizadas: ${completedDoses}`);
-    };
+  });
+  await saveAppointments(updated);
+
+  const app = updated.find(a => a.id === appId);
+  await sendTelegramToAdmin(app, 'dose_update', services, `Dosis actualizadas: ${completedDoses}`);
+};
   
     return (
       <div className="min-h-screen bg-slate-50">
