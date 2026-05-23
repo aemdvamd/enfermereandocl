@@ -1217,7 +1217,7 @@ function RequestForm({ services, onSubmit, onCancel }) {
                   Hablar por WhatsApp
                 </a>
               </div>
-  
+              
               <div className="mt-12 flex items-center gap-8 text-sm">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-5 h-5 text-teal-500" />
