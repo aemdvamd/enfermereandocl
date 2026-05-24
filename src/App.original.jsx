@@ -1347,7 +1347,7 @@ function Landing({ setView, services = [] }) {
 
           {/* WhatsApp */}
           <a
-            href="https://wa.me/56912345678"
+            href="https://wa.me/56920489639"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2.5 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold px-7 py-3 rounded-3xl transition-all shadow-md"
@@ -1506,7 +1506,7 @@ function Landing({ setView, services = [] }) {
 
       {/* BOTÓN FLOTANTE WHATSAPP */}
       <a
-        href="https://wa.me/56912345678"
+        href="https://wa.me/56920489639"
         target="_blank"
         rel="noopener noreferrer"
         className="fixed bottom-8 right-8 bg-green-500 hover:bg-green-600 text-white w-16 h-16 rounded-3xl flex items-center justify-center text-4xl shadow-2xl z-50 transition-transform hover:scale-110"
