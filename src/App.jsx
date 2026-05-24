@@ -2197,9 +2197,7 @@ function ServicesManager({ services, saveServices }) {
     const safeAppointments = Array.isArray(appointments) ? appointments : [];
     const safeServices = Array.isArray(services) ? services : [];
   
-    const allAppointments = [...safeAppointments].sort((a, b) => 
-      new Date(b.date) - new Date(a.date)
-    );
+    const allAppointments = [...safeAppointments].sort((a, b) => new Date(b.date) - new Date(a.date));
   
     const todayApps = allAppointments.filter(app => 
       new Date(app.date).toDateString() === new Date().toDateString()
@@ -2209,7 +2207,7 @@ function ServicesManager({ services, saveServices }) {
       app.assignedTo === user?.id || app.status === 'asignada'
     );
   
-    // ==================== ACCIONES ====================
+    // Acciones
     const takeTask = async (app) => {
       if (!app || app.status !== 'pendiente') return;
       const updated = safeAppointments.map(a => 
@@ -2221,31 +2219,10 @@ function ServicesManager({ services, saveServices }) {
     };
   
     const updateStatus = async (appId, newStatus) => {
-      const updated = safeAppointments.map(a => 
-        a.id === appId ? { ...a, status: newStatus } : a
-      );
+      const updated = safeAppointments.map(a => a.id === appId ? { ...a, status: newStatus } : a);
       await saveAppointments(updated);
       const app = updated.find(a => a.id === appId) || {};
       await sendTelegramToAdmin(app, 'status_change', safeServices);
-    };
-  
-    const updateDoses = async (appId, completedDoses) => {
-      const updated = safeAppointments.map(app => {
-        if (app.id !== appId) return app;
-        return {
-          ...app,
-          beneficiaries: (app.beneficiaries || []).map(ben => ({
-            ...ben,
-            services: (ben.services || []).map(s => ({
-              ...s,
-              completedDoses: parseInt(completedDoses) || 0
-            }))
-          }))
-        };
-      });
-      await saveAppointments(updated);
-      const app = updated.find(a => a.id === appId) || {};
-      await sendTelegramToAdmin(app, 'dose_update', safeServices, `Dosis actualizadas`);
     };
   
     return (
@@ -2265,40 +2242,18 @@ function ServicesManager({ services, saveServices }) {
   
         {/* TABS */}
         <div className="flex border-b border-gray-200 mb-8 overflow-x-auto">
-          <button 
-            onClick={() => setTab('hoy')}
-            className={`px-8 py-4 font-medium whitespace-nowrap ${tab === 'hoy' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
-          >
-            Hoy
-          </button>
-          <button 
-            onClick={() => setTab('mis')}
-            className={`px-8 py-4 font-medium whitespace-nowrap ${tab === 'mis' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
-          >
-            Mis Atenciones
-          </button>
-          <button 
-            onClick={() => setTab('calendario')}
-            className={`px-8 py-4 font-medium whitespace-nowrap ${tab === 'calendario' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
-          >
-            Calendario
-          </button>
-          <button 
-            onClick={() => setTab('monitoreo')}
-            className={`px-8 py-4 font-medium whitespace-nowrap ${tab === 'monitoreo' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
-          >
-            Monitoreo
-          </button>
+          <button onClick={() => setTab('hoy')} className={`px-8 py-4 font-medium ${tab === 'hoy' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Hoy</button>
+          <button onClick={() => setTab('mis')} className={`px-8 py-4 font-medium ${tab === 'mis' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Mis Atenciones</button>
+          <button onClick={() => setTab('calendario')} className={`px-8 py-4 font-medium ${tab === 'calendario' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Calendario</button>
+          <button onClick={() => setTab('monitoreo')} className={`px-8 py-4 font-medium ${tab === 'monitoreo' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Monitoreo</button>
         </div>
   
-        {/* CONTENIDO SEGÚN PESTAÑA */}
+        {/* CONTENIDO */}
         {tab === 'hoy' && (
           <div>
             <h2 className="text-2xl font-semibold mb-6">Atenciones de Hoy ({todayApps.length})</h2>
             {todayApps.length === 0 ? (
-              <div className="bg-white rounded-3xl p-12 text-center text-gray-500">
-                No hay atenciones programadas para hoy.
-              </div>
+              <div className="bg-white rounded-3xl p-12 text-center text-gray-500">No hay atenciones para hoy.</div>
             ) : (
               <div className="grid gap-4">
                 {todayApps.map(app => <AppointmentCard key={app.id} app={app} />)}
@@ -2311,9 +2266,7 @@ function ServicesManager({ services, saveServices }) {
           <div>
             <h2 className="text-2xl font-semibold mb-6">Mis Tareas Asignadas ({myTasks.length})</h2>
             {myTasks.length === 0 ? (
-              <div className="bg-white rounded-3xl p-12 text-center text-gray-500">
-                No tienes tareas asignadas en este momento.
-              </div>
+              <div className="bg-white rounded-3xl p-12 text-center text-gray-500">No tienes tareas asignadas.</div>
             ) : (
               <div className="grid gap-4">
                 {myTasks.map(app => (
@@ -2321,27 +2274,12 @@ function ServicesManager({ services, saveServices }) {
                     <AppointmentCard app={app} />
                     <div className="flex gap-3 mt-6">
                       {app.status === 'pendiente' && (
-                        <button 
-                          onClick={() => takeTask(app)}
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-3xl font-medium"
-                        >
-                          Tomar esta tarea
-                        </button>
+                        <button onClick={() => takeTask(app)} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-3xl font-medium">Tomar esta tarea</button>
                       )}
                       {app.status === 'asignada' && (
                         <>
-                          <button 
-                            onClick={() => updateStatus(app.id, 'en_tratamiento')}
-                            className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-3xl font-medium"
-                          >
-                            Iniciar tratamiento
-                          </button>
-                          <button 
-                            onClick={() => updateStatus(app.id, 'completada')}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-4 rounded-3xl font-medium"
-                          >
-                            Marcar como completada
-                          </button>
+                          <button onClick={() => updateStatus(app.id, 'en_tratamiento')} className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-3xl font-medium">Iniciar tratamiento</button>
+                          <button onClick={() => updateStatus(app.id, 'completada')} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-4 rounded-3xl font-medium">Marcar como completada</button>
                         </>
                       )}
                     </div>
@@ -2352,27 +2290,17 @@ function ServicesManager({ services, saveServices }) {
           </div>
         )}
   
-        {tab === 'calendario' && (
-          <CalendarView 
-            appointments={allAppointments} 
-            onEdit={(app) => alert(`Editar cita: ${app.patientName}`)} 
-          />
-        )}
+        {tab === 'calendario' && <CalendarView appointments={allAppointments} onEdit={(app) => alert(`Editar: ${app.patientName}`)} />}
   
-        {/* NUEVA PESTAÑA: MONITOREO */}
         {tab === 'monitoreo' && (
           <MonitoringPanel 
             appointments={safeAppointments}
             services={safeServices}
             currentUser={user}
             saveAppointments={saveAppointments}
-            onEdit={(app) => alert(`Editar detalle: ${app.patientName}`)}
+            onEdit={(app) => alert(`Ver detalle: ${app.patientName}`)}
           />
         )}
-  
-        <div className="mt-12 text-center text-xs text-gray-400">
-          Professional Dashboard • Enfermereando © 2026
-        </div>
       </div>
     );
   }
@@ -2470,12 +2398,12 @@ export default function App() {
 
       {/* PANEL PROFESIONAL / ADMIN */}
       {user && (user.role === 'professional' || user.role === 'admin') && view === 'professional' && (
-        <ProfessionalDashboard
-          user={user}
-          appointments={appointments}
-          saveAppointments={saveAppointments}
-          services={services}
-          setView={setView}
+        <ProfessionalDashboard 
+          user={user} 
+          appointments={appointments} 
+          saveAppointments={saveAppointments} 
+          services={services} 
+          setView={setView} 
         />
       )}
 
