@@ -8,6 +8,7 @@ import {
   ChevronDown, Tag, UserCog, Clock, Package, Bell, Route
 } from 'lucide-react';
 
+const WHATSAPP = '56920489639';
 const PHONE = '+56 9 2048 9639';
 const PROFESSIONAL_NAME = 'Mariela Droguett';
 
