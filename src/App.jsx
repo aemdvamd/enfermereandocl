@@ -593,30 +593,20 @@ function LoginView({
 // ==================== PATIENT PORTAL + REQUEST FORM + APPOINTMENT CARD ====================
 
 /* ====================== PATIENT PORTAL ===================================== */
-function PatientPortal({ user, appointments, saveAppointments, services, setView }) {
+function PatientPortal({ user, appointments = [], saveAppointments, services, setView }) {
   const [tab, setTab] = useState('inicio');
 
-  // FILTRO CORREGIDO: el paciente ve TODAS sus solicitudes
-  // (como paciente principal O como beneficiario)
-  const myAppointments = appointments.filter(app => 
+  const safeAppointments = appointments || [];
+
+  const myAppointments = safeAppointments.filter(app => 
     app.patientName === user.name || 
     (app.beneficiaries && app.beneficiaries.some(b => b.name === user.name))
   );
 
-  // Últimas solicitudes para la pestaña "Inicio"
   const lastRequests = [...myAppointments]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 5);
 
-  const upcoming = myAppointments.filter(a => 
-    ['pendiente', 'asignada', 'en_tratamiento'].includes(a.status)
-  );
-
-  const history = myAppointments.filter(a => 
-    ['completada', 'cancelada'].includes(a.status)
-  );
-
-  // Cancelación con Telegram
   const cancelAppointment = async (app) => {
     if (!confirm(`¿Cancelar la atención del ${new Date(app.date).toLocaleDateString('es-CL')}?`)) return;
 
@@ -624,20 +614,21 @@ function PatientPortal({ user, appointments, saveAppointments, services, setView
     let appointmentsToCancel = [app.id];
 
     if (isSeries) {
-      const seriesApps = appointments.filter(a => a.seriesId === app.seriesId);
+      const seriesApps = safeAppointments.filter(a => a.seriesId === app.seriesId);
       const cancelAll = confirm(`Esta cita pertenece a una SERIE de ${seriesApps.length} dosis.\n\n¿Cancelar SOLO esta cita o TODA LA SERIE?`);
       if (cancelAll) appointmentsToCancel = seriesApps.map(a => a.id);
     }
 
-    const updated = appointments.map(a => 
+    const updated = safeAppointments.map(a => 
       appointmentsToCancel.includes(a.id) ? { ...a, status: 'cancelada' } : a
     );
 
     await saveAppointments(updated);
 
-    const representative = appointments.find(a => a.id === appointmentsToCancel[0]);
+    // ←←← CORRECCIÓN: safe find
+    const representative = safeAppointments.find(a => a.id === appointmentsToCancel[0]);
 
-    await sendTelegramToAdmin(representative, 'cancelled', services,
+    await sendTelegramToAdmin(representative || {}, 'cancelled', services,
       appointmentsToCancel.length > 1 ? 'Serie completa cancelada' : ''
     );
 
@@ -1769,11 +1760,12 @@ function ServicesManager({ services, saveServices }) {
 /* =============================================
    PROFESSIONAL DASHBOARD - Dashboard del Profesional
    ============================================= */
-   function ProfessionalDashboard({ user, appointments, saveAppointments, services, setView }) {
+   function ProfessionalDashboard({ user, appointments = [], saveAppointments, services, setView }) {
     const [tab, setTab] = useState('hoy');
   
-    // El profesional ve TODAS las solicitudes (correcto)
-    const allAppointments = [...appointments].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const safeAppointments = appointments || [];
+  
+    const allAppointments = [...safeAppointments].sort((a, b) => new Date(b.date) - new Date(a.date));
   
     const todayApps = allAppointments.filter(app => 
       new Date(app.date).toDateString() === new Date().toDateString()
@@ -1785,7 +1777,7 @@ function ServicesManager({ services, saveServices }) {
   
     const takeTask = async (app) => {
       if (app.status !== 'pendiente') return;
-      const updated = appointments.map(a => 
+      const updated = safeAppointments.map(a => 
         a.id === app.id ? { ...a, status: 'asignada', assignedTo: user.id } : a
       );
       await saveAppointments(updated);
@@ -1794,14 +1786,15 @@ function ServicesManager({ services, saveServices }) {
     };
   
     const updateStatus = async (appId, newStatus) => {
-      const updated = appointments.map(a => a.id === appId ? { ...a, status: newStatus } : a);
+      const updated = safeAppointments.map(a => a.id === appId ? { ...a, status: newStatus } : a);
       await saveAppointments(updated);
+      // ←←← CORRECCIÓN: safe find
       const app = updated.find(a => a.id === appId);
-      await sendTelegramToAdmin(app, 'status_change', services);
+      await sendTelegramToAdmin(app || {}, 'status_change', services);
     };
   
     const updateDoses = async (appId, completedDoses) => {
-      const updated = appointments.map(app => {
+      const updated = safeAppointments.map(app => {
         if (app.id !== appId) return app;
         return {
           ...app,
@@ -1815,8 +1808,9 @@ function ServicesManager({ services, saveServices }) {
         };
       });
       await saveAppointments(updated);
+      // ←←← CORRECCIÓN: safe find
       const app = updated.find(a => a.id === appId);
-      await sendTelegramToAdmin(app, 'dose_update', services, `Dosis: ${completedDoses}`);
+      await sendTelegramToAdmin(app || {}, 'dose_update', services, `Dosis: ${completedDoses}`);
     };
   
     return (
