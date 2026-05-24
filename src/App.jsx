@@ -1416,6 +1416,7 @@ function AdminPanel({
   // Estados para sección Servicios
   const [newServiceName, setNewServiceName] = useState('');
   const [newServicePrice, setNewServicePrice] = useState('');
+  const [newServiceDescription, setNewServiceDescription] = useState('');
   const [editingPriceId, setEditingPriceId] = useState(null);
   const [tempPrice, setTempPrice] = useState('');
   const [priceError, setPriceError] = useState('');
@@ -1477,12 +1478,14 @@ function AdminPanel({
       id: uid(),
       name: newServiceName.trim(),
       price: parseInt(newServicePrice),
+      description: newServiceDescription.trim(),
       active: true
     };
 
     setServices([...safeServices, newService]);
     setNewServiceName('');
     setNewServicePrice('');
+    setNewServiceDescription('');
     setPriceError('');
     alert('✅ Nuevo servicio agregado correctamente');
   };
@@ -1527,12 +1530,7 @@ function AdminPanel({
           <h1 className="text-3xl font-bold text-gray-900">Panel de Administración</h1>
           <p className="text-gray-600">Gestión completa del sistema</p>
         </div>
-        <button 
-          onClick={() => setView('landing')}
-          className="flex items-center gap-2 text-gray-500 hover:text-gray-700 font-medium"
-        >
-          ← Cerrar sesión
-        </button>
+        <button onClick={() => setView('landing')} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 font-medium">← Cerrar sesión</button>
       </div>
 
       {/* TABS */}
@@ -1672,7 +1670,7 @@ function AdminPanel({
         </div>
       )}
 
-      {/* ==================== SECCIÓN SERVICIOS (Nombre destacado) ==================== */}
+      {/* SECCIÓN SERVICIOS - CON DESCRIPCIÓN EN CADA TARJETA */}
       {tab === 'servicios' && (
         <div className="bg-white rounded-3xl shadow p-8">
           <div className="flex justify-between items-center mb-8">
@@ -1695,29 +1693,37 @@ function AdminPanel({
                 onChange={e => setNewServiceName(e.target.value)}
                 className="border border-gray-300 rounded-2xl px-5 py-4"
               />
-              <div>
-                <input 
-                  type="number" 
-                  placeholder="Precio CLP" 
-                  value={newServicePrice}
-                  onChange={e => {
-                    setNewServicePrice(e.target.value);
-                    setPriceError('');
-                  }}
-                  className="border border-gray-300 rounded-2xl px-5 py-4 w-full"
-                />
-                {priceError && <p className="text-red-500 text-xs mt-1">{priceError}</p>}
-              </div>
+              <input 
+                type="number" 
+                placeholder="Precio CLP" 
+                value={newServicePrice}
+                onChange={e => {
+                  setNewServicePrice(e.target.value);
+                  setPriceError('');
+                }}
+                className="border border-gray-300 rounded-2xl px-5 py-4"
+              />
               <button onClick={addNewService} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-3xl font-medium">Agregar</button>
             </div>
+            <textarea
+              placeholder="Descripción del servicio (opcional)"
+              value={newServiceDescription}
+              onChange={e => setNewServiceDescription(e.target.value)}
+              className="mt-4 w-full border border-gray-300 rounded-3xl px-5 py-4 h-24 resize-y"
+            />
           </div>
 
-          {/* Lista de Servicios con nombre destacado */}
+          {/* Lista de Servicios con descripción */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {safeServices.map(service => (
               <div key={service.id} className="bg-white border border-gray-200 rounded-3xl p-6 hover:shadow-xl transition-all">
-                {/* Nombre del servicio - destacado */}
-                <h3 className="font-bold text-xl text-gray-900 mb-4">{service.name}</h3>
+                {/* Nombre destacado */}
+                <h3 className="font-bold text-xl text-gray-900 mb-2">{service.name}</h3>
+
+                {/* Descripción */}
+                <p className="text-gray-600 text-sm leading-relaxed mb-6 line-clamp-3">
+                  {service.description || 'Sin descripción'}
+                </p>
 
                 <div className="flex items-center justify-between mb-6">
                   {/* Precio editable */}
@@ -1743,7 +1749,7 @@ function AdminPanel({
                     </button>
                   )}
 
-                  {/* Toggle Activo/Inactivo */}
+                  {/* Toggle */}
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input 
                       type="checkbox" 
@@ -1766,7 +1772,6 @@ function AdminPanel({
           </div>
         </div>
       )}
-
       <div className="mt-12 text-center text-xs text-gray-400">
         Admin Panel • Enfermereando © 2026
       </div>
