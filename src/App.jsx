@@ -892,52 +892,88 @@ function AdminPanel({
   setServices, 
   setView 
 }) {
-  const [tab, setTab] = useState('servicios');
+  const [tab, setTab] = useState('dashboard');
 
+  const safeAppointments = Array.isArray(appointments) ? appointments : [];
   const safeServices = Array.isArray(services) ? services : [];
 
-  // Estados para nuevo servicio
+  // ==================== DASHBOARD STATES ====================
+  const totalApps = safeAppointments.length;
+  const pending = safeAppointments.filter(a => a.status === 'pendiente').length;
+  const today = safeAppointments.filter(a => {
+    const appDate = new Date(a.date);
+    const now = new Date();
+    return appDate.getFullYear() === now.getFullYear() &&
+           appDate.getMonth() === now.getMonth() &&
+           appDate.getDate() === now.getDate();
+  }).length;
+  const inTreatment = safeAppointments.filter(a => a.status === 'en_tratamiento').length;
+  const completed = safeAppointments.filter(a => a.status === 'completada').length;
+
+  // ==================== SERVICIOS STATES ====================
   const [newServiceName, setNewServiceName] = useState('');
   const [newServicePrice, setNewServicePrice] = useState('');
   const [newServiceDescription, setNewServiceDescription] = useState('');
   const [priceError, setPriceError] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [tempName, setTempName] = useState('');
+  const [tempPrice, setTempPrice] = useState('');
+  const [tempDescription, setTempDescription] = useState('');
 
-  // ==================== FUNCIONES DE SERVICIOS ====================
+  // ==================== SEGUIMIENTO STATES ====================
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editedDoses, setEditedDoses] = useState({});
+
+  // ==================== FUNCIONES SERVICIOS ====================
   const addNewService = () => {
-    if (!newServiceName.trim()) return alert('Debes ingresar un nombre de servicio');
-    if (!newServicePrice || parseInt(newServicePrice) <= 0) {
+    if (!newServiceName.trim()) return alert('❌ Ingresa el nombre del servicio');
+    const priceNum = parseInt(newServicePrice);
+    if (!priceNum || priceNum <= 0) {
       setPriceError('El precio debe ser mayor a 0');
       return;
     }
-
     const newService = {
       id: uid(),
       name: newServiceName.trim(),
-      price: parseInt(newServicePrice),
+      price: priceNum,
       description: newServiceDescription.trim() || 'Sin descripción',
       active: true
     };
-
     setServices([...safeServices, newService]);
     setNewServiceName('');
     setNewServicePrice('');
     setNewServiceDescription('');
     setPriceError('');
-    alert('✅ Nuevo servicio agregado correctamente');
+    alert('✅ Servicio agregado correctamente');
   };
 
   const toggleService = (id) => {
-    const updated = safeServices.map(s => 
-      s.id === id ? { ...s, active: !s.active } : s
-    );
+    const updated = safeServices.map(s => s.id === id ? { ...s, active: !s.active } : s);
     setServices(updated);
   };
 
-  const updateService = (id, field, value) => {
+  const startEditing = (service) => {
+    setEditingId(service.id);
+    setTempName(service.name);
+    setTempPrice(service.price.toString());
+    setTempDescription(service.description || '');
+  };
+
+  const saveEditing = (id) => {
+    const priceNum = parseInt(tempPrice);
+    if (!priceNum || priceNum <= 0) {
+      setPriceError('El precio debe ser mayor a 0');
+      return;
+    }
     const updated = safeServices.map(s => 
-      s.id === id ? { ...s, [field]: value } : s
+      s.id === id ? { ...s, name: tempName, price: priceNum, description: tempDescription } : s
     );
     setServices(updated);
+    setEditingId(null);
+    setPriceError('');
   };
 
   const deleteService = (id) => {
@@ -946,145 +982,324 @@ function AdminPanel({
     setServices(updated);
   };
 
+  // ==================== FUNCIONES SEGUIMIENTO ====================
+  const filteredAppointments = safeAppointments.filter(app => {
+    const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
+    const matchesSearch = !searchTerm || 
+      (app.patientName || (app.beneficiaries?.[0]?.name || '')).toLowerCase().includes(searchTerm.toLowerCase());
+    let matchesDate = true;
+    if (dateFrom) matchesDate = matchesDate && new Date(app.date) >= new Date(dateFrom);
+    if (dateTo) matchesDate = matchesDate && new Date(app.date) <= new Date(dateTo);
+    return matchesStatus && matchesSearch && matchesDate;
+  });
+
+  const updateTempDoses = (appId, beneficiaryIndex, serviceIndex, newValue) => {
+    const key = `${appId}-${beneficiaryIndex}-${serviceIndex}`;
+    setEditedDoses(prev => ({
+      ...prev,
+      [key]: Math.max(0, parseInt(newValue) || 0)
+    }));
+  };
+
+  const saveDoseChanges = async (app) => {
+    const updated = safeAppointments.map(a => {
+      if (a.id !== app.id) return a;
+      const newBeneficiaries = (a.beneficiaries || []).map((ben, bIndex) => {
+        const newServices = (ben.services || []).map((srv, sIndex) => {
+          const key = `${app.id}-${bIndex}-${sIndex}`;
+          const newCompleted = editedDoses[key] !== undefined ? editedDoses[key] : (srv.completedDoses || 0);
+          return { ...srv, completedDoses: newCompleted };
+        });
+        return { ...ben, services: newServices };
+      });
+      return { ...a, beneficiaries: newBeneficiaries };
+    });
+    await saveAppointments(updated);
+    setEditedDoses({});
+    alert('✅ Dosis actualizadas y guardadas');
+  };
+
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-6 min-h-screen bg-gray-50">
+      {/* HEADER */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Panel de Administración</h1>
-          <p className="text-gray-600">Gestión completa del sistema</p>
+          <h1 className="text-4xl font-bold text-gray-900">Panel de Administración</h1>
+          <p className="text-gray-600 mt-1">Gestión completa • Enfermereando</p>
         </div>
         <button 
           onClick={() => setView('landing')}
-          className="flex items-center gap-2 text-gray-500 hover:text-gray-700 font-medium"
+          className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 hover:bg-gray-100 rounded-3xl text-sm font-medium transition-all"
         >
-          ← Cerrar sesión
+          ← Volver al Landing
         </button>
       </div>
 
       {/* TABS */}
-      <div className="flex border-b border-gray-200 mb-8 overflow-x-auto">
-        <button onClick={() => setTab('servicios')} className={`px-8 py-4 font-medium ${tab === 'servicios' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Servicios</button>
-        <button onClick={() => setTab('solicitudes')} className={`px-8 py-4 font-medium ${tab === 'solicitudes' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Solicitudes</button>
-        <button onClick={() => setTab('seguimiento')} className={`px-8 py-4 font-medium ${tab === 'seguimiento' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Seguimiento de Dosis</button>
+      <div className="flex border-b border-gray-200 mb-8 overflow-x-auto bg-white rounded-3xl p-1 shadow-sm">
+        <button 
+          onClick={() => setTab('dashboard')} 
+          className={`flex-1 md:flex-none px-8 py-4 font-semibold rounded-3xl transition-all ${tab === 'dashboard' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+        >
+          📊 Dashboard
+        </button>
+        <button 
+          onClick={() => setTab('solicitudes')} 
+          className={`flex-1 md:flex-none px-8 py-4 font-semibold rounded-3xl transition-all ${tab === 'solicitudes' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+        >
+          📋 Solicitudes
+        </button>
+        <button 
+          onClick={() => setTab('seguimiento')} 
+          className={`flex-1 md:flex-none px-8 py-4 font-semibold rounded-3xl transition-all ${tab === 'seguimiento' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+        >
+          📈 Seguimiento de Dosis
+        </button>
+        <button 
+          onClick={() => setTab('servicios')} 
+          className={`flex-1 md:flex-none px-8 py-4 font-semibold rounded-3xl transition-all ${tab === 'servicios' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+        >
+          🛠️ Servicios
+        </button>
       </div>
 
-      {/* ==================== SECCIÓN SERVICIOS (Rediseñada con descripción) ==================== */}
+      {/* ==================== DASHBOARD ==================== */}
+      {tab === 'dashboard' && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center text-3xl">📋</div>
+              <div>
+                <p className="text-sm text-gray-500">Total Solicitudes</p>
+                <p className="text-5xl font-bold text-gray-900 mt-1">{totalApps}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center text-3xl">⏳</div>
+              <div>
+                <p className="text-sm text-gray-500">Pendientes</p>
+                <p className="text-5xl font-bold text-amber-600 mt-1">{pending}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-3xl">📅</div>
+              <div>
+                <p className="text-sm text-gray-500">Hoy</p>
+                <p className="text-5xl font-bold text-emerald-600 mt-1">{today}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center text-3xl">🔄</div>
+              <div>
+                <p className="text-sm text-gray-500">En Tratamiento</p>
+                <p className="text-5xl font-bold text-purple-600 mt-1">{inTreatment}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== SOLICITUDES ==================== */}
+      {tab === 'solicitudes' && (
+        <div className="bg-white rounded-3xl shadow-xl p-8">
+          <h2 className="text-2xl font-semibold mb-6 flex items-center gap-3">
+            📋 Todas las Solicitudes
+            <span className="text-sm font-normal text-gray-500">({safeAppointments.length})</span>
+          </h2>
+          <div className="space-y-4 max-h-[680px] overflow-auto pr-2">
+            {safeAppointments.length === 0 ? (
+              <div className="text-center py-20 text-gray-400">No hay solicitudes registradas aún</div>
+            ) : (
+              safeAppointments.map(app => (
+                <AppointmentCard key={app.id} app={app} />
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== SEGUIMIENTO DE DOSIS ==================== */}
+      {tab === 'seguimiento' && (
+        <div className="bg-white rounded-3xl shadow-xl p-8">
+          <h2 className="text-2xl font-semibold mb-6">📈 Seguimiento de Dosis</h2>
+
+          {/* FILTROS */}
+          <div className="flex flex-wrap gap-4 mb-8 bg-gray-50 p-4 rounded-3xl">
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-gray-300 rounded-3xl px-5 py-3 text-sm focus:outline-none focus:border-indigo-500">
+              <option value="all">Todos los estados</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="asignada">Asignada</option>
+              <option value="en_tratamiento">En tratamiento</option>
+              <option value="completada">Completada</option>
+              <option value="cancelada">Cancelada</option>
+            </select>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="border border-gray-300 rounded-3xl px-5 py-3 text-sm focus:outline-none focus:border-indigo-500" />
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="border border-gray-300 rounded-3xl px-5 py-3 text-sm focus:outline-none focus:border-indigo-500" />
+            <input type="text" placeholder="Buscar por paciente..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-1 min-w-[240px] border border-gray-300 rounded-3xl px-5 py-3 text-sm focus:outline-none focus:border-indigo-500" />
+          </div>
+
+          <div className="space-y-8 max-h-[680px] overflow-auto">
+            {filteredAppointments.length === 0 ? (
+              <div className="text-center py-20 text-gray-400">No se encontraron solicitudes con los filtros aplicados</div>
+            ) : (
+              filteredAppointments.map(app => {
+                const totalDoses = (app.beneficiaries || []).reduce((acc, ben) => acc + (ben.services || []).reduce((s, srv) => s + (srv.doses || 0), 0), 0);
+                const completedDoses = (app.beneficiaries || []).reduce((acc, ben) => acc + (ben.services || []).reduce((s, srv) => s + (srv.completedDoses || 0), 0), 0);
+                const progress = totalDoses > 0 ? Math.round((completedDoses / totalDoses) * 100) : 0;
+
+                return (
+                  <div key={app.id} className="border border-gray-200 rounded-3xl p-7 hover:shadow-md transition-all">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-semibold text-lg">{app.patientName || app.beneficiaries?.[0]?.name || 'Sin nombre'}</p>
+                        <p className="text-sm text-gray-500">{new Date(app.date).toLocaleDateString('es-CL')} • {app.time} • {app.comuna}</p>
+                      </div>
+                      <span className={`px-6 py-2 text-xs font-semibold rounded-3xl ${app.status === 'completada' ? 'bg-green-100 text-green-700' : app.status === 'en_tratamiento' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {app.status?.toUpperCase() || 'PENDIENTE'}
+                      </span>
+                    </div>
+
+                    <div className="mt-6 mb-8">
+                      <div className="flex justify-between text-xs mb-3 text-gray-500">
+                        <span>Progreso general</span>
+                        <span>{completedDoses} / {totalDoses} dosis</span>
+                      </div>
+                      <div className="h-4 bg-gray-100 rounded-3xl overflow-hidden">
+                        <div className="h-4 bg-indigo-600 transition-all" style={{ width: `${progress}%` }}></div>
+                      </div>
+                    </div>
+
+                    {(app.beneficiaries || []).map((ben, bIndex) => (
+                      <div key={bIndex} className="mb-8 last:mb-0">
+                        <p className="text-sm font-medium mb-4 text-gray-700">Beneficiario: {ben.name}</p>
+                        {(ben.services || []).map((srv, sIndex) => {
+                          const key = `${app.id}-${bIndex}-${sIndex}`;
+                          const current = editedDoses[key] !== undefined ? editedDoses[key] : (srv.completedDoses || 0);
+                          const serviceName = safeServices.find(s => s.id === srv.serviceId)?.name || 'Servicio';
+                          return (
+                            <div key={sIndex} className="flex items-center gap-6 mb-4 bg-gray-50 rounded-3xl p-4">
+                              <div className="flex-1">
+                                <p className="text-sm font-medium">{serviceName}</p>
+                                <div className="h-2 bg-gray-200 rounded-full mt-2 overflow-hidden">
+                                  <div className="h-2 bg-indigo-500" style={{ width: `${srv.doses > 0 ? (current / srv.doses) * 100 : 0}%` }}></div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <button onClick={() => updateTempDoses(app.id, bIndex, sIndex, current - 1)} className="w-9 h-9 flex items-center justify-center border rounded-2xl hover:bg-white text-xl">-</button>
+                                <span className="font-mono text-2xl font-semibold w-12 text-center">{current}</span>
+                                <button onClick={() => updateTempDoses(app.id, bIndex, sIndex, current + 1)} className="w-9 h-9 flex items-center justify-center border rounded-2xl hover:bg-white text-xl">+</button>
+                                <span className="text-xs text-gray-400">/ {srv.doses}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+
+                    <button onClick={() => saveDoseChanges(app)} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-3xl text-lg transition-all">
+                      💾 Guardar cambios de dosis
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== SERVICIOS (Rediseñado) ==================== */}
       {tab === 'servicios' && (
-        <div className="bg-white rounded-3xl shadow p-8">
+        <div className="bg-white rounded-3xl shadow-xl p-8">
           <div className="flex justify-between items-center mb-8">
-            <h2 className="text-2xl font-semibold">Gestión de Servicios</h2>
+            <h2 className="text-2xl font-semibold">🛠️ Gestión de Servicios</h2>
             <button 
               onClick={() => document.getElementById('newServiceForm').classList.toggle('hidden')}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-3xl text-sm font-medium flex items-center gap-2"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-3xl font-medium flex items-center gap-2 text-sm"
             >
-              + Nuevo Servicio
+              + Agregar Nuevo Servicio
             </button>
           </div>
 
           {/* Formulario Nuevo Servicio */}
-          <div id="newServiceForm" className="hidden bg-gray-50 border border-gray-200 rounded-3xl p-6 mb-8">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-              <div className="md:col-span-5">
-                <input 
-                  type="text" 
-                  placeholder="Nombre del servicio" 
-                  value={newServiceName}
-                  onChange={e => setNewServiceName(e.target.value)}
-                  className="w-full border border-gray-300 rounded-3xl px-5 py-4"
-                />
+          <div id="newServiceForm" className="hidden bg-gray-50 border border-gray-200 rounded-3xl p-8 mb-10">
+            <div className="grid grid-cols-12 gap-4">
+              <div className="col-span-5">
+                <input type="text" placeholder="Nombre del servicio" value={newServiceName} onChange={e => setNewServiceName(e.target.value)} className="w-full border border-gray-300 rounded-3xl px-6 py-4 text-lg" />
               </div>
-              <div className="md:col-span-2">
-                <input 
-                  type="number" 
-                  placeholder="Precio CLP" 
-                  value={newServicePrice}
-                  onChange={e => {
-                    setNewServicePrice(e.target.value);
-                    setPriceError('');
-                  }}
-                  className="w-full border border-gray-300 rounded-3xl px-5 py-4"
-                />
-                {priceError && <p className="text-red-500 text-xs mt-1">{priceError}</p>}
+              <div className="col-span-2">
+                <input type="number" placeholder="Precio CLP" value={newServicePrice} onChange={e => { setNewServicePrice(e.target.value); setPriceError(''); }} className="w-full border border-gray-300 rounded-3xl px-6 py-4 text-lg" />
+                {priceError && <p className="text-red-500 text-sm mt-2">{priceError}</p>}
               </div>
-              <div className="md:col-span-4">
-                <textarea 
-                  placeholder="Descripción del servicio" 
-                  value={newServiceDescription}
-                  onChange={e => setNewServiceDescription(e.target.value)}
-                  className="w-full border border-gray-300 rounded-3xl px-5 py-4 h-14 resize-y"
-                />
+              <div className="col-span-4">
+                <textarea placeholder="Descripción (opcional)" value={newServiceDescription} onChange={e => setNewServiceDescription(e.target.value)} className="w-full border border-gray-300 rounded-3xl px-6 py-4 h-24 resize-y" />
               </div>
-              <div className="md:col-span-1">
-                <button onClick={addNewService} className="w-full h-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-3xl font-medium">Agregar</button>
+              <div className="col-span-1 flex items-end">
+                <button onClick={addNewService} className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-3xl font-semibold">Agregar</button>
               </div>
             </div>
           </div>
 
-          {/* Lista de servicios con nombre y descripción */}
+          {/* Tarjetas de Servicios */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {safeServices.map(service => (
-              <div key={service.id} className="bg-white border border-gray-200 rounded-3xl p-6 hover:shadow-xl transition-all">
-                <div className="flex justify-between items-start">
-                  <h3 className="font-bold text-xl text-gray-900">{service.name}</h3>
+              <div key={service.id} className="border border-gray-200 rounded-3xl p-7 hover:shadow-2xl transition-all group">
+                <div className="flex justify-between">
+                  {editingId === service.id ? (
+                    <input type="text" value={tempName} onChange={e => setTempName(e.target.value)} className="font-bold text-2xl flex-1 border-b-2 border-indigo-400 focus:outline-none bg-transparent" autoFocus />
+                  ) : (
+                    <h3 onClick={() => startEditing(service)} className="font-bold text-2xl cursor-pointer group-hover:text-indigo-600">{service.name}</h3>
+                  )}
+
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={service.active} 
-                      onChange={() => toggleService(service.id)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    <input type="checkbox" checked={service.active} onChange={() => toggleService(service.id)} className="sr-only peer" />
+                    <div className="w-12 h-7 bg-gray-200 rounded-full peer peer-checked:bg-indigo-600 peer-focus:ring-4 peer-focus:ring-indigo-300 transition-all"></div>
+                    <div className="w-5 h-5 bg-white rounded-full absolute top-1 left-1 peer-checked:left-6 transition-all"></div>
                   </label>
                 </div>
 
-                <p className="text-gray-600 text-sm mt-3 line-clamp-3">{service.description || 'Sin descripción'}</p>
+                {editingId === service.id ? (
+                  <textarea value={tempDescription} onChange={e => setTempDescription(e.target.value)} rows={3} className="mt-4 w-full border border-gray-300 rounded-2xl p-4 text-sm" />
+                ) : (
+                  <p className="text-gray-600 text-sm mt-4 line-clamp-4">{service.description || 'Sin descripción'}</p>
+                )}
 
-                <div className="mt-6 flex items-center justify-between">
-                  <button 
-                    onClick={() => {
-                      const newPrice = prompt('Nuevo precio para ' + service.name, service.price);
-                      if (newPrice !== null && parseInt(newPrice) > 0) {
-                        updateService(service.id, 'price', parseInt(newPrice));
-                      }
-                    }}
-                    className="text-3xl font-bold text-gray-900 hover:text-indigo-600"
-                  >
-                    ${service.price}
-                  </button>
+                <div className="mt-8 flex items-center justify-between">
+                  {editingId === service.id ? (
+                    <div className="flex items-center">
+                      <span className="text-4xl font-light text-gray-400">$</span>
+                      <input type="number" value={tempPrice} onChange={e => setTempPrice(e.target.value)} className="text-5xl font-bold w-32 border-b-2 border-indigo-400 focus:outline-none text-right" />
+                    </div>
+                  ) : (
+                    <button onClick={() => startEditing(service)} className="text-5xl font-bold text-gray-900 hover:text-indigo-600">$ {service.price}</button>
+                  )}
                 </div>
 
-                <button 
-                  onClick={() => deleteService(service.id)}
-                  className="mt-8 w-full text-red-500 hover:text-red-700 text-sm font-medium py-3 border border-red-200 rounded-3xl hover:bg-red-50 transition-colors"
-                >
-                  🗑 Eliminar servicio
-                </button>
+                {editingId === service.id && (
+                  <div className="flex gap-3 mt-8">
+                    <button onClick={() => saveEditing(service.id)} className="flex-1 py-4 bg-emerald-600 text-white rounded-3xl font-semibold">Guardar</button>
+                    <button onClick={() => setEditingId(null)} className="flex-1 py-4 border border-gray-300 rounded-3xl">Cancelar</button>
+                  </div>
+                )}
+
+                <button onClick={() => deleteService(service.id)} className="mt-10 text-red-500 hover:text-red-700 text-sm font-medium w-full py-4 border border-red-200 rounded-3xl hover:bg-red-50">🗑 Eliminar servicio</button>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Otras pestañas (Dashboard, Solicitudes, Seguimiento) */}
-      {tab === 'solicitudes' && (
-        <div className="bg-white rounded-3xl shadow p-8 text-gray-500">
-          Lista de solicitudes (pendiente de implementar)
-        </div>
-      )}
-      {tab === 'seguimiento' && (
-        <div className="bg-white rounded-3xl shadow p-8 text-gray-500">
-          Seguimiento de dosis (pendiente de implementar)
-        </div>
-      )}
-
-      <div className="mt-12 text-center text-xs text-gray-400">
-        Admin Panel • Enfermereando © 2026
-      </div>
+      <div className="mt-12 text-center text-xs text-gray-400">Admin Panel v2.0 • Enfermereando © 2026</div>
     </div>
   );
 }
 
-// ==================== LOGIN VIEW - COMPLETO CON VALIDACIÓN ====================
+// ==================== LOGIN VIEW ====================
 function LoginView({ 
   setView, 
   setUser, 
