@@ -8,6 +8,17 @@ import {
   ChevronDown, Tag, UserCog, Clock, Package, Bell, Route
 } from 'lucide-react';
 
+// ==================== UTILIDADES SEGURAS ====================
+const safeFind = (array, predicate) => {
+  if (!Array.isArray(array)) return undefined;
+  return array.find(predicate);
+};
+
+const safeFilter = (array, predicate) => {
+  if (!Array.isArray(array)) return [];
+  return array.filter(predicate);
+};
+
 const WHATSAPP = '56920489639';
 const PHONE = '+56 9 2048 9639';
 const PROFESSIONAL_NAME = 'Mariela Droguett';
@@ -357,58 +368,121 @@ function TabButton({ active, onClick, children, icon: Icon }) {
 }
 
 // ==================== CALENDAR VIEW ====================
-function CalendarView({ appointments, onEdit }) {
+function CalendarView({ appointments = [], onEdit }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
-  const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-  const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+  const safeAppointments = Array.isArray(appointments) ? appointments : [];
+
+  // Agrupar citas por fecha (YYYY-MM-DD)
+  const appointmentsByDate = {};
+  safeAppointments.forEach(app => {
+    if (app?.date) {
+      const key = app.date; // formato YYYY-MM-DD
+      if (!appointmentsByDate[key]) appointmentsByDate[key] = [];
+      appointmentsByDate[key].push(app);
+    }
+  });
+
+  // Generar días del mes
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
+
+  const startOfMonth = new Date(year, month, 1);
+  const endOfMonth = new Date(year, month + 1, 0);
 
   const days = [];
-  const startDay = startOfMonth.getDay();
-  for (let i = 0; i < startDay; i++) days.push(null);
-  for (let i = 1; i <= endOfMonth.getDate(); i++) {
-    const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), i);
-    days.push(date);
+  const firstDay = startOfMonth.getDay(); // 0 = domingo
+
+  // Días vacíos al inicio
+  for (let i = 0; i < firstDay; i++) {
+    days.push(null);
   }
 
-  const appointmentsByDate = {};
-  appointments.forEach(app => {
-    const key = app.date;
-    if (!appointmentsByDate[key]) appointmentsByDate[key] = [];
-    appointmentsByDate[key].push(app);
-  });
+  // Días del mes
+  for (let i = 1; i <= endOfMonth.getDate(); i++) {
+    days.push(new Date(year, month, i));
+  }
+
+  const goToPrevMonth = () => setCurrentMonth(new Date(year, month - 1, 1));
+  const goToNextMonth = () => setCurrentMonth(new Date(year, month + 1, 1));
 
   return (
     <div className="bg-white rounded-3xl shadow-xl p-6">
-      <div className="flex justify-between items-center mb-6">
-        <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="text-2xl">←</button>
-        <h2 className="text-2xl font-semibold">
+      {/* Cabecera del calendario */}
+      <div className="flex items-center justify-between mb-6">
+        <button
+          onClick={goToPrevMonth}
+          className="w-10 h-10 flex items-center justify-center text-3xl text-gray-400 hover:text-gray-700 transition-colors"
+        >
+          ←
+        </button>
+        <h2 className="text-2xl font-semibold text-gray-800">
           {currentMonth.toLocaleString('es-CL', { month: 'long', year: 'numeric' })}
         </h2>
-        <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="text-2xl">→</button>
+        <button
+          onClick={goToNextMonth}
+          className="w-10 h-10 flex items-center justify-center text-3xl text-gray-400 hover:text-gray-700 transition-colors"
+        >
+          →
+        </button>
       </div>
 
-      <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-2xl overflow-hidden">
-        {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map(day => (
-          <div key={day} className="bg-white p-3 text-center text-sm font-medium text-gray-500">{day}</div>
+      {/* Nombres de los días */}
+      <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-2xl overflow-hidden mb-1">
+        {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((day) => (
+          <div key={day} className="bg-white py-3 text-center text-sm font-medium text-gray-500">
+            {day}
+          </div>
         ))}
-        {days.map((day, i) => {
-          if (!day) return <div key={i} className="bg-white p-3 min-h-[120px]"></div>;
+      </div>
+
+      {/* Cuerpo del calendario */}
+      <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-2xl overflow-hidden">
+        {days.map((day, index) => {
+          if (!day) {
+            return <div key={index} className="bg-white min-h-[110px]"></div>;
+          }
+
           const dateKey = day.toISOString().split('T')[0];
           const dayApps = appointmentsByDate[dateKey] || [];
+
           return (
-            <div key={i} className="bg-white p-3 min-h-[120px] border-t hover:bg-gray-50 cursor-pointer" onClick={() => dayApps.length && onEdit(dayApps[0])}>
-              <div className="text-right text-sm font-medium">{day.getDate()}</div>
-              {dayApps.slice(0, 3).map(app => (
-                <div key={app.id} className="text-xs mt-1 bg-indigo-100 text-indigo-700 px-2 py-1 rounded-xl truncate">
-                  {app.patientName} • {app.time}
-                </div>
-              ))}
-              {dayApps.length > 3 && <div className="text-xs text-gray-400 mt-1">+{dayApps.length - 3} más</div>}
+            <div
+              key={index}
+              onClick={() => dayApps.length > 0 && onEdit && onEdit(dayApps[0])}
+              className={`bg-white p-3 min-h-[110px] hover:bg-indigo-50 transition-colors cursor-pointer border-t ${
+                day.getDate() === new Date().getDate() &&
+                day.getMonth() === new Date().getMonth() &&
+                day.getFullYear() === new Date().getFullYear()
+                  ? 'ring-2 ring-indigo-500'
+                  : ''
+              }`}
+            >
+              <div className="text-right text-sm font-medium text-gray-700">
+                {day.getDate()}
+              </div>
+
+              <div className="mt-2 space-y-1">
+                {dayApps.slice(0, 3).map((app) => (
+                  <div
+                    key={app.id}
+                    className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-2xl truncate font-medium"
+                  >
+                    {app.time} - {app.patientName || app.beneficiaries?.[0]?.name || '—'}
+                  </div>
+                ))}
+                {dayApps.length > 3 && (
+                  <div className="text-xs text-gray-400 text-center">+{dayApps.length - 3} más</div>
+                )}
+              </div>
             </div>
           );
         })}
       </div>
+
+      <p className="text-center text-xs text-gray-400 mt-4">
+        Haz clic en un día con citas para editar
+      </p>
     </div>
   );
 }
@@ -596,10 +670,9 @@ function LoginView({
 function PatientPortal({ user, appointments = [], saveAppointments, services, setView }) {
   const [tab, setTab] = useState('inicio');
 
-  // Protección extra
   const safeAppointments = Array.isArray(appointments) ? appointments : [];
 
-  const myAppointments = safeAppointments.filter(app => 
+  const myAppointments = safeFilter(safeAppointments, app => 
     app?.patientName === user?.name || 
     (app?.beneficiaries && app.beneficiaries.some(b => b?.name === user?.name))
   );
@@ -615,7 +688,7 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
     let appointmentsToCancel = [app.id];
 
     if (isSeries) {
-      const seriesApps = safeAppointments.filter(a => a.seriesId === app.seriesId);
+      const seriesApps = safeFilter(safeAppointments, a => a.seriesId === app.seriesId);
       const cancelAll = confirm(`Esta cita pertenece a una SERIE de ${seriesApps.length} dosis.\n\n¿Cancelar SOLO esta cita o TODA LA SERIE?`);
       if (cancelAll) appointmentsToCancel = seriesApps.map(a => a.id);
     }
@@ -626,7 +699,7 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
 
     await saveAppointments(updated);
 
-    const representative = safeAppointments.find(a => a.id === appointmentsToCancel[0]) || {};
+    const representative = safeFind(safeAppointments, a => a.id === appointmentsToCancel[0]) || {};
 
     await sendTelegramToAdmin(representative, 'cancelled', services || [],
       appointmentsToCancel.length > 1 ? 'Serie completa cancelada' : ''
@@ -643,67 +716,26 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Mi Panel de Paciente</h1>
-          <p className="text-gray-600">Bienvenido, {user.name}</p>
+          <p className="text-gray-600">Bienvenido, {user?.name || 'Paciente'}</p>
         </div>
-        <button
-          onClick={() => setView('landing')}
-          className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors"
-        >
-          ← Cerrar sesión
-        </button>
+        <button onClick={() => setView('landing')} className="text-gray-500 hover:text-gray-700">← Cerrar sesión</button>
       </div>
 
-      {/* TABS */}
+      {/* Tabs */}
       <div className="flex border-b border-gray-200 mb-8">
-        <button
-          onClick={() => setTab('inicio')}
-          className={`px-8 py-4 font-medium text-lg transition-all ${
-            tab === 'inicio' 
-              ? 'border-b-4 border-indigo-600 text-indigo-600' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Inicio
-        </button>
-        <button
-          onClick={() => setTab('solicitar')}
-          className={`px-8 py-4 font-medium text-lg transition-all ${
-            tab === 'solicitar' 
-              ? 'border-b-4 border-indigo-600 text-indigo-600' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Solicitar Atención
-        </button>
-        <button
-          onClick={() => setTab('historial')}
-          className={`px-8 py-4 font-medium text-lg transition-all ${
-            tab === 'historial' 
-              ? 'border-b-4 border-indigo-600 text-indigo-600' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Historial
-        </button>
+        <button onClick={() => setTab('inicio')} className={`px-8 py-4 font-medium ${tab === 'inicio' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Inicio</button>
+        <button onClick={() => setTab('solicitar')} className={`px-8 py-4 font-medium ${tab === 'solicitar' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Solicitar Atención</button>
+        <button onClick={() => setTab('historial')} className={`px-8 py-4 font-medium ${tab === 'historial' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Historial</button>
       </div>
 
-      {/* CONTENIDO - Solo una pestaña activa */}
       {tab === 'inicio' && (
         <div>
           <h2 className="text-2xl font-semibold mb-6">Últimas solicitudes</h2>
           {lastRequests.length === 0 ? (
-            <div className="bg-white rounded-3xl p-12 text-center text-gray-500">
-              Aún no tienes solicitudes de atención.
-            </div>
+            <div className="bg-white rounded-3xl p-12 text-center text-gray-500">Aún no tienes solicitudes de atención.</div>
           ) : (
             <div className="grid gap-4">
-              {lastRequests.map(app => (
-                <AppointmentCard 
-                  key={app.id} 
-                  app={app} 
-                  onCancel={cancelAppointment} 
-                />
-              ))}
+              {lastRequests.map(app => <AppointmentCard key={app.id} app={app} onCancel={cancelAppointment} />)}
             </div>
           )}
         </div>
@@ -713,9 +745,8 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
         <RequestForm 
           services={services} 
           onSubmit={async (newApps) => {
-            const updated = [...appointments, ...newApps];
-            await saveAppointments(updated);
-            setTab('inicio'); // vuelve al inicio después de enviar
+            await saveAppointments([...safeAppointments, ...newApps]);
+            setTab('inicio');
           }} 
           onCancel={() => setTab('inicio')}
         />
@@ -725,18 +756,10 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
         <div>
           <h2 className="text-2xl font-semibold mb-6">Historial completo</h2>
           {myAppointments.length === 0 ? (
-            <div className="bg-white rounded-3xl p-12 text-center text-gray-500">
-              No tienes historial de solicitudes.
-            </div>
+            <div className="bg-white rounded-3xl p-12 text-center text-gray-500">No tienes historial de solicitudes.</div>
           ) : (
             <div className="grid gap-4">
-              {myAppointments.map(app => (
-                <AppointmentCard 
-                  key={app.id} 
-                  app={app} 
-                  onCancel={cancelAppointment} 
-                />
-              ))}
+              {myAppointments.map(app => <AppointmentCard key={app.id} app={app} onCancel={cancelAppointment} />)}
             </div>
           )}
         </div>
@@ -994,66 +1017,49 @@ function RequestForm({ services, onSubmit, onCancel }) {
 }
 
 /* ============================ APPOINTMENT CARD ====================================== */
-   function AppointmentCard({ app, services, onEdit, onCancel, saveAppointments }) {
-    const netPrice = appNetPrice(app, services);
-  
-    return (
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 hover:shadow-md transition-all">
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <div className="font-semibold text-xl">{app.patientName}</div>
-              {app.seriesId && (
-                <span className="px-3 py-1 text-xs bg-amber-100 text-amber-700 rounded-2xl font-medium">
-                  SERIE • Dosis {app.doseNumber || 1}
-                </span>
-              )}
-            </div>
-            <div className="text-slate-500 mt-1 flex items-center gap-4 text-sm">
-              <span>{new Date(app.date).toLocaleDateString('es-CL', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-              <span className="font-mono">{fmtTime(app.time)}</span>
-              <span className="text-teal-600">{app.comuna}</span>
-            </div>
-          </div>
-  
-          <div className="text-right">
-            <div className="text-sm text-slate-400">Total</div>
-            <div className="font-semibold text-lg text-teal-700">{fmtCLP(netPrice)}</div>
-          </div>
+function AppointmentCard({ app, onCancel }) {
+  if (!app) return null;
+
+  const statusColor = {
+    pendiente: 'bg-yellow-100 text-yellow-700',
+    asignada: 'bg-blue-100 text-blue-700',
+    en_tratamiento: 'bg-purple-100 text-purple-700',
+    completada: 'bg-green-100 text-green-700',
+    cancelada: 'bg-red-100 text-red-700'
+  };
+
+  return (
+    <div className="bg-white rounded-3xl shadow p-6 hover:shadow-xl transition-all">
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="font-semibold text-lg">{app.patientName || app.beneficiaries?.[0]?.name || 'Sin nombre'}</p>
+          <p className="text-gray-500">
+            {new Date(app.date).toLocaleDateString('es-CL')} • {app.time}
+          </p>
+          <p className="text-sm text-gray-600">{app.comuna}</p>
         </div>
-  
-        {/* Estado */}
-        <div className="mt-4 flex items-center justify-between">
-          <span className={`px-5 py-1.5 text-xs font-medium rounded-2xl ${
-            app.status === 'pendiente' ? 'bg-yellow-100 text-yellow-700' :
-            app.status === 'asignada' ? 'bg-blue-100 text-blue-700' :
-            app.status === 'en_tratamiento' ? 'bg-purple-100 text-purple-700' :
-            app.status === 'completada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-          }`}>
-            {app.status ? app.status.charAt(0).toUpperCase() + app.status.slice(1) : 'Pendiente'}
-          </span>
-  
-          <div className="flex gap-3">
-            <button
-              onClick={() => onEdit(app)}
-              className="flex items-center gap-2 px-5 py-2 text-teal-600 hover:bg-teal-50 rounded-2xl text-sm font-medium transition-colors"
-            >
-              <Edit className="w-4 h-4" /> Editar
-            </button>
-            
-            {app.status !== 'cancelada' && (
-              <button
-                onClick={() => onCancel(app)}
-                className="flex items-center gap-2 px-5 py-2 text-red-600 hover:bg-red-50 rounded-2xl text-sm font-medium transition-colors"
-              >
-                <Trash2 className="w-4 h-4" /> Cancelar
-              </button>
-            )}
-          </div>
-        </div>
+        <span className={`px-4 py-1 rounded-2xl text-xs font-medium ${statusColor[app.status] || 'bg-gray-100'}`}>
+          {app.status?.toUpperCase() || 'PENDIENTE'}
+        </span>
       </div>
-    );
-  }
+
+      {app.beneficiaries && app.beneficiaries.length > 1 && (
+        <p className="text-xs text-gray-500 mt-3">
+          +{app.beneficiaries.length - 1} beneficiarios
+        </p>
+      )}
+
+      {onCancel && app.status !== 'cancelada' && (
+        <button
+          onClick={() => onCancel(app)}
+          className="mt-6 text-red-500 hover:text-red-700 text-sm font-medium flex items-center gap-1"
+        >
+          ✕ Cancelar cita
+        </button>
+      )}
+    </div>
+  );
+}
 
 /* ======================= EDIT APPOINTMENT MODAL  ============================= */
    function EditAppointmentModal({ app, services, onSave, onClose }) {
@@ -1155,264 +1161,424 @@ function RequestForm({ services, onSubmit, onCancel }) {
   }
 
 /* ========================== LANDING PAGE ======================================== */
-   function Landing({ services, onLogin }) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50">
-        {/* HERO SECTION */}
-        <div className="max-w-7xl mx-auto px-6 pt-16 pb-24">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 bg-white px-6 py-3 rounded-3xl shadow-sm mb-6">
-                <Stethoscope className="w-6 h-6 text-teal-600" />
-                <span className="font-semibold text-teal-700">Enfermereando</span>
-              </div>
-              
-              <h1 className="text-6xl md:text-7xl font-bold leading-none text-slate-900 tracking-tighter">
-                Atención de enfermería<br />
-                <span className="text-teal-600">a domicilio</span>
-              </h1>
-              
-              <p className="mt-8 text-2xl text-slate-600 max-w-lg">
-                Inyecciones, curaciones, consejería y más.<br />
-                Con profesionalidad, cercanía y en tu hogar.
-              </p>
-  
-              <div className="flex flex-wrap gap-4 mt-10">
-                <button 
-                  onClick={onLogin}
-                  className="px-10 py-5 bg-teal-600 hover:bg-teal-700 text-white text-xl font-semibold rounded-3xl transition-all flex items-center gap-3 shadow-lg shadow-teal-200"
-                >
-                  Iniciar Sesión
-                  <ArrowRight className="w-6 h-6" />
-                </button>
-                
-                <a 
-                  href="https://wa.me/56920489639"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-8 py-5 bg-white border-2 border-teal-600 text-teal-700 hover:bg-teal-50 text-xl font-semibold rounded-3xl transition-all flex items-center gap-3"
-                >
-                  <Phone className="w-6 h-6" />
-                  Hablar por WhatsApp
-                </a>
-              </div>
-              
-              <div className="mt-12 flex items-center gap-8 text-sm">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-teal-500" />
-                  <span className="font-medium">Profesional certificada</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-teal-500" />
-                  <span className="font-medium">Atención en tu hogar</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-teal-500" />
-                  <span className="font-medium">Santiago y alrededores</span>
-                </div>
-              </div>
-            </div>
-  
-            {/* Imagen hero */}
-            <div className="hidden md:block">
-              <div className="bg-white rounded-3xl shadow-2xl p-4">
-                <img 
-                  src="https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=800"
-                  alt="Enfermera en domicilio"
-                  className="rounded-3xl w-full aspect-video object-cover"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-  
-        {/* SERVICIOS DESTACADOS */}
-        <div className="bg-white py-20">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="text-center mb-12">
-              <h2 className="text-4xl font-bold text-slate-900">Nuestros Servicios</h2>
-              <p className="text-slate-600 mt-3">Profesionales, seguros y a tu medida</p>
-            </div>
-  
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {services.map((service) => {
-                const Icon = getIconComponent(service.iconId);
-                return (
-                  <div key={service.id} className="bg-slate-50 hover:bg-white border border-slate-200 hover:border-teal-200 rounded-3xl p-8 transition-all group">
-                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                      <Icon className="w-8 h-8 text-teal-600" />
-                    </div>
-                    <h3 className="font-semibold text-xl mb-2">{service.title}</h3>
-                    <p className="text-slate-600 text-sm leading-relaxed mb-6">{service.desc}</p>
-                    <div className="flex justify-between items-end">
-                      <div>
-                        <span className="text-xs text-slate-400">Desde</span>
-                        <div className="text-3xl font-bold text-teal-700">{fmtCLP(service.price)}</div>
-                      </div>
-                      {service.allowDoses && (
-                        <span className="text-xs bg-teal-100 text-teal-700 px-4 py-1 rounded-2xl font-medium">Múltiples dosis</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-  
-        {/* BENEFICIOS */}
-        <div className="py-20 bg-slate-50">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="grid md:grid-cols-3 gap-10">
-              <div className="text-center">
-                <div className="mx-auto w-16 h-16 bg-teal-100 rounded-2xl flex items-center justify-center mb-6">
-                  <HomeIcon className="w-8 h-8 text-teal-600" />
-                </div>
-                <h4 className="font-semibold text-2xl mb-3">En tu hogar</h4>
-                <p className="text-slate-600">Sin traslados. Comodidad y seguridad en el lugar que más te gusta.</p>
-              </div>
-              <div className="text-center">
-                <div className="mx-auto w-16 h-16 bg-teal-100 rounded-2xl flex items-center justify-center mb-6">
-                  <Shield className="w-8 h-8 text-teal-600" />
-                </div>
-                <h4 className="font-semibold text-2xl mb-3">Profesionalismo</h4>
-                <p className="text-slate-600">Técnicas estériles, experiencia y atención personalizada.</p>
-              </div>
-              <div className="text-center">
-                <div className="mx-auto w-16 h-16 bg-teal-100 rounded-2xl flex items-center justify-center mb-6">
-                  <Clock className="w-8 h-8 text-teal-600" />
-                </div>
-                <h4 className="font-semibold text-2xl mb-3">Horarios flexibles</h4>
-                <p className="text-slate-600">Mañana y tarde. Adaptamos el horario a tus necesidades.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-  
-        {/* CTA FINAL */}
-        <div className="bg-teal-700 text-white py-20">
-          <div className="max-w-7xl mx-auto px-6 text-center">
-            <h2 className="text-5xl font-bold mb-6">¿Necesitas atención hoy?</h2>
-            <p className="text-2xl mb-10 max-w-xl mx-auto">Agenda tu atención en minutos y recibe atención profesional en casa.</p>
-            
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button 
-                onClick={onLogin}
-                className="px-12 py-6 bg-white text-teal-700 text-2xl font-semibold rounded-3xl hover:scale-105 transition-transform"
-              >
-                Iniciar Sesión como Paciente
-              </button>
-              <a 
-                href={`https://wa.me/${WHATSAPP}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-12 py-6 border-2 border-white text-white text-2xl font-semibold rounded-3xl hover:bg-white/10 transition-all flex items-center gap-3"
-              >
-                <Phone className="w-7 h-7" />
-                Hablar por WhatsApp
-              </a>
-            </div>
-            
-            <p className="text-teal-200 mt-8 text-sm">
-              📍 Santiago y comunas cercanas • Profesional: {PROFESSIONAL_NAME}
-            </p>
-          </div>
-        </div>
-  
-        {/* FOOTER */}
-        <footer className="bg-slate-900 text-white py-12">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-8">
-              <div className="flex items-center gap-3">
-                <Stethoscope className="w-8 h-8" />
-                <div className="font-bold text-2xl">Enfermereando</div>
-              </div>
-              
-              <div className="flex gap-8 text-sm">
-                <a href="https://wa.me/56920489639" target="_blank" rel="noopener noreferrer" className="hover:text-teal-400 transition-colors flex items-center gap-2">
-                  <Phone className="w-4 h-4" /> WhatsApp
-                </a>
-                <div className="flex items-center gap-2">
-                  <Phone className="w-4 h-4" /> {PHONE}
-                </div>
-              </div>
-  
-              <div className="text-xs text-slate-400 text-center md:text-right">
-                © 2026 Enfermereando • Atención de enfermería a domicilio<br />
-                Profesional: {PROFESSIONAL_NAME}
-              </div>
-            </div>
-          </div>
-        </footer>
-      </div>
-    );
-  }
-
-// ==================== ADMINPANEL ====================
-function AdminPanel({ 
-  user, 
-  services, 
-  appointments, 
-  patients, 
-  professionals, 
-  notifications, 
-  saveAppointments, 
-  onLogout 
-}) {
-  const [tab, setTab] = useState('monitoreo');
-  const [editingApp, setEditingApp] = useState(null);
-
+function Landing({ setView }) {
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+    <div className="min-h-screen bg-white overflow-hidden">
+      {/* NAVBAR (sin cambios) */}
+      <nav className="bg-white border-b sticky top-0 z-50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 md:px-10 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Stethoscope className="w-8 h-8 text-teal-600" />
-            <div className="font-bold text-2xl text-slate-900">Enfermereando</div>
+            <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-3xl shadow-inner">🩺</div>
+            <span className="text-3xl font-bold tracking-tighter text-gray-900">Enfermereando</span>
           </div>
-          <div className="flex items-center gap-4">
-            <NotificationBell userId={user.id} notifications={notifications} />
-            <div className="text-right">
-              <div className="font-semibold">{user.name}</div>
-              <RoleBadge role={user.role} />
-            </div>
-            <button onClick={onLogout} className="p-2 hover:bg-slate-100 rounded-xl">
-              <LogOut className="w-5 h-5 text-slate-600" />
+
+          <div className="hidden md:flex items-center gap-9 text-sm font-medium text-gray-700">
+            <a href="#servicios" className="hover:text-indigo-600 transition-colors">Servicios</a>
+            <a href="#valores" className="hover:text-indigo-600 transition-colors">Valores</a>
+            <a href="#testimonios" className="hover:text-indigo-600 transition-colors">Testimonios</a>
+          </div>
+
+          <a
+            href="https://wa.me/56912345678"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold px-7 py-3 rounded-3xl transition-all shadow-md"
+          >
+            <span className="text-xl">💬</span>
+            <span>WhatsApp</span>
+          </a>
+
+          <button
+            onClick={() => setView('login')}
+            className="px-7 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-3xl transition-all text-sm"
+          >
+            Iniciar Sesión
+          </button>
+        </div>
+      </nav>
+
+      {/* HERO - Imagen real de enfermería a domicilio */}
+      <section className="max-w-7xl mx-auto px-6 md:px-10 pt-16 pb-20 grid md:grid-cols-12 gap-12 items-center">
+        <div className="md:col-span-7">
+          <div className="inline-flex items-center gap-2 bg-emerald-100 text-emerald-700 text-sm font-medium px-6 py-2 rounded-3xl mb-6">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            Atención disponible hoy en Santiago
+          </div>
+
+          <h1 className="text-6xl md:text-7xl font-bold leading-none tracking-tighter text-gray-900">
+            Cuidados de enfermería<br />en la comodidad de tu hogar
+          </h1>
+
+          <p className="mt-8 text-2xl text-gray-600 max-w-xl">
+            Profesionales certificadas con más de 15 años de experiencia. Rápido, seguro y con seguimiento en tiempo real.
+          </p>
+
+          <div className="mt-10 flex flex-wrap gap-4">
+            <button
+              onClick={() => setView('login')}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xl font-semibold px-12 py-6 rounded-3xl transition-all active:scale-[0.97] shadow-xl flex items-center gap-3"
+            >
+              Solicitar Atención Ahora
+              <span className="text-3xl leading-none">→</span>
             </button>
           </div>
         </div>
-      </header>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex gap-2 mb-8 overflow-x-auto pb-2 border-b">
-          <TabButton active={tab === 'monitoreo'} onClick={() => setTab('monitoreo')} icon={Route}>Monitoreo</TabButton>
-          <TabButton active={tab === 'calendario'} onClick={() => setTab('calendario')} icon={Calendar}>Calendario</TabButton>
+        {/* HERO IMAGE - Enfermera atendiendo en casa */}
+        <div className="md:col-span-5 relative">
+          <div className="aspect-video bg-gradient-to-br from-indigo-100 to-blue-100 rounded-3xl overflow-hidden shadow-2xl">
+            <img
+              src="https://picsum.photos/id/1005/1200/800" 
+              alt="Enfermera atendiendo paciente en su hogar"
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          {/* Testimonio flotante */}
+          <div className="absolute -bottom-6 -left-6 bg-white rounded-3xl shadow-2xl p-6 max-w-[260px]">
+            <p className="italic text-gray-700">"Llegó puntual, fue muy amable y me explicó todo paso a paso."</p>
+            <div className="flex items-center gap-3 mt-5">
+              <div className="w-9 h-9 bg-amber-100 rounded-2xl flex-shrink-0"></div>
+              <div>
+                <p className="font-medium text-sm">María González</p>
+                <p className="text-xs text-gray-500">Las Condes • Mayo 2026</p>
+              </div>
+            </div>
+          </div>
         </div>
+      </section>
 
-        {tab === 'monitoreo' && (
-          <MonitoringPanel 
-            appointments={appointments}
-            services={services}
-            currentUser={user}
-            saveAppointments={saveAppointments}
-            onEdit={setEditingApp}
-          />
-        )}
+      {/* SERVICIOS */}
+      <section id="servicios" className="bg-gray-50 py-20">
+        <div className="max-w-7xl mx-auto px-6 md:px-10">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold text-gray-900">Nuestros Servicios</h2>
+            <p className="text-gray-600 mt-3">Atención especializada y personalizada a domicilio</p>
+          </div>
 
-        {tab === 'calendario' && <CalendarView appointments={appointments} onEdit={setEditingApp} />}
+          <div className="grid md:grid-cols-4 gap-6">
+            {[
+              { emoji: "💉", title: "Inyecciones y vacunas", desc: "Administración segura en tu hogar" },
+              { emoji: "🩸", title: "Curaciones y heridas", desc: "Cuidado avanzado postquirúrgico" },
+              { emoji: "🧪", title: "Toma de muestras", desc: "Exámenes de sangre y más" },
+              { emoji: "🧓", title: "Cuidado geriátrico", desc: "Atención integral para adultos mayores" }
+            ].map((service, i) => (
+              <div key={i} className="bg-white rounded-3xl p-8 hover:shadow-xl transition-all group">
+                <div className="text-5xl mb-6 group-hover:scale-110 transition-transform">{service.emoji}</div>
+                <h3 className="font-semibold text-xl text-gray-900">{service.title}</h3>
+                <p className="text-gray-600 text-sm mt-3">{service.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
-        {editingApp && (
-          <EditAppointmentModal 
-            app={editingApp} 
-            services={services} 
-            onSave={async (updates) => {
-              const newList = appointments.map(a => a.id === updates.id ? { ...a, ...updates } : a);
-              await saveAppointments(newList);
-              setEditingApp(null);
-            }} 
-            onClose={() => setEditingApp(null)} 
-          />
-        )}
+      {/* VALORES */}
+      <section id="valores" className="py-20">
+        <div className="max-w-7xl mx-auto px-6 md:px-10">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold text-gray-900">Nuestros Valores</h2>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="text-center p-8">
+              <div className="mx-auto w-20 h-20 bg-indigo-100 rounded-3xl flex items-center justify-center text-5xl mb-6">❤️</div>
+              <h3 className="text-2xl font-semibold">Empatía</h3>
+              <p className="text-gray-600 mt-4">Tratamos a cada paciente como parte de nuestra familia</p>
+            </div>
+            <div className="text-center p-8">
+              <div className="mx-auto w-20 h-20 bg-indigo-100 rounded-3xl flex items-center justify-center text-5xl mb-6">🔒</div>
+              <h3 className="text-2xl font-semibold">Confianza</h3>
+              <p className="text-gray-600 mt-4">Profesionales certificadas con años de experiencia</p>
+            </div>
+            <div className="text-center p-8">
+              <div className="mx-auto w-20 h-20 bg-indigo-100 rounded-3xl flex items-center justify-center text-5xl mb-6">⏱️</div>
+              <h3 className="text-2xl font-semibold">Rapidez</h3>
+              <p className="text-gray-600 mt-4">Respuesta en menos de 90 minutos en Santiago</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA FINAL */}
+      <section className="bg-gradient-to-r from-indigo-600 to-blue-700 py-20 text-white">
+        <div className="max-w-4xl mx-auto text-center px-6">
+          <h2 className="text-5xl font-bold">¿Necesitas atención hoy?</h2>
+          <p className="text-2xl mt-4 opacity-90">Solicita tu cita en menos de 60 segundos</p>
+          <button
+            onClick={() => setView('login')}
+            className="mt-12 bg-white text-indigo-700 hover:bg-amber-100 text-2xl font-semibold px-16 py-7 rounded-3xl transition-all active:scale-95 shadow-2xl"
+          >
+            Solicitar Atención Ahora
+          </button>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer className="bg-gray-900 text-white py-12">
+        <div className="max-w-7xl mx-auto px-6 md:px-10 text-center">
+          <p className="text-sm opacity-60">Enfermereando © 2026 • Mariela Droguett • Enfermera Universitaria</p>
+          <p className="text-xs opacity-40 mt-4">Atención profesional a domicilio en Santiago y Región Metropolitana</p>
+        </div>
+      </footer>
+
+      {/* BOTÓN FLOTANTE WHATSAPP */}
+      <a
+        href="https://wa.me/56912345678"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-8 right-8 bg-green-500 hover:bg-green-600 text-white w-16 h-16 rounded-3xl flex items-center justify-center text-4xl shadow-2xl z-50 transition-transform hover:scale-110"
+      >
+        💬
+      </a>
+    </div>
+  );
+}
+
+// ==================== ADMINPANEL ====================
+function AdminPanel({ appointments = [], saveAppointments, services = [], setServices, setView }) {
+  const [tab, setTab] = useState('dashboard');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const safeAppointments = Array.isArray(appointments) ? appointments : [];
+
+  // Filtros para Seguimiento de Dosis
+  const filteredAppointments = safeAppointments.filter(app => {
+    const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
+    const matchesSearch = !searchTerm || 
+      (app.patientName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (app.beneficiaries && app.beneficiaries.some(b => b.name.toLowerCase().includes(searchTerm.toLowerCase())));
+
+    let matchesDate = true;
+    if (dateFrom) {
+      matchesDate = matchesDate && new Date(app.date) >= new Date(dateFrom);
+    }
+    if (dateTo) {
+      matchesDate = matchesDate && new Date(app.date) <= new Date(dateTo);
+    }
+
+    return matchesStatus && matchesSearch && matchesDate;
+  });
+
+  const totalDoses = filteredAppointments.reduce((acc, app) => {
+    return acc + (app.beneficiaries || []).reduce((sum, ben) => {
+      return sum + (ben.services || []).reduce((s, srv) => s + (srv.doses || 0), 0);
+    }, 0);
+  }, 0);
+
+  const completedDoses = filteredAppointments.reduce((acc, app) => {
+    return acc + (app.beneficiaries || []).reduce((sum, ben) => {
+      return sum + (ben.services || []).reduce((s, srv) => s + (srv.completedDoses || 0), 0);
+    }, 0);
+  }, 0);
+
+  return (
+    <div className="max-w-7xl mx-auto p-6">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Panel de Administración</h1>
+          <p className="text-gray-600">Gestión completa del sistema</p>
+        </div>
+        <button
+          onClick={() => setView('landing')}
+          className="flex items-center gap-2 text-gray-500 hover:text-gray-700 font-medium"
+        >
+          ← Cerrar sesión
+        </button>
+      </div>
+
+      {/* TABS */}
+      <div className="flex border-b border-gray-200 mb-8 overflow-x-auto">
+        <button onClick={() => setTab('dashboard')} className={`px-8 py-4 font-medium ${tab === 'dashboard' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Dashboard</button>
+        <button onClick={() => setTab('solicitudes')} className={`px-8 py-4 font-medium ${tab === 'solicitudes' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Solicitudes</button>
+        <button onClick={() => setTab('seguimiento')} className={`px-8 py-4 font-medium ${tab === 'seguimiento' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Seguimiento de Dosis</button>
+        <button onClick={() => setTab('servicios')} className={`px-8 py-4 font-medium ${tab === 'servicios' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Servicios</button>
+      </div>
+
+      {/* DASHBOARD */}
+      {tab === 'dashboard' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white rounded-3xl p-8 shadow">
+            <p className="text-gray-500">Total solicitudes</p>
+            <p className="text-6xl font-bold text-gray-900 mt-2">{safeAppointments.length}</p>
+          </div>
+          <div className="bg-white rounded-3xl p-8 shadow">
+            <p className="text-gray-500">Pendientes</p>
+            <p className="text-6xl font-bold text-amber-600 mt-2">{safeAppointments.filter(a => a.status === 'pendiente').length}</p>
+          </div>
+          <div className="bg-white rounded-3xl p-8 shadow">
+            <p className="text-gray-500">En tratamiento</p>
+            <p className="text-6xl font-bold text-purple-600 mt-2">{safeAppointments.filter(a => a.status === 'en_tratamiento').length}</p>
+          </div>
+        </div>
+      )}
+
+      {/* SOLICITUDES */}
+      {tab === 'solicitudes' && (
+        <div className="bg-white rounded-3xl shadow p-6">
+          <h2 className="text-2xl font-semibold mb-6">Todas las Solicitudes</h2>
+          <div className="space-y-4 max-h-[600px] overflow-auto">
+            {safeAppointments.length === 0 ? (
+              <p className="text-center py-12 text-gray-500">No hay solicitudes registradas.</p>
+            ) : (
+              safeAppointments.map(app => <AppointmentCard key={app.id} app={app} />)
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* SEGUIMIENTO DE DOSIS - NUEVA VISTA */}
+      {tab === 'seguimiento' && (
+        <div className="bg-white rounded-3xl shadow p-6">
+          <h2 className="text-2xl font-semibold mb-6">Seguimiento de Dosis</h2>
+
+          {/* Filtros */}
+          <div className="flex flex-wrap gap-4 mb-8">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Estado</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="border border-gray-300 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
+              >
+                <option value="all">Todos los estados</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="asignada">Asignada</option>
+                <option value="en_tratamiento">En tratamiento</option>
+                <option value="completada">Completada</option>
+                <option value="cancelada">Cancelada</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Desde</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="border border-gray-300 rounded-2xl px-4 py-3 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Hasta</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="border border-gray-300 rounded-2xl px-4 py-3 text-sm"
+              />
+            </div>
+
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs text-gray-500 mb-1">Buscar paciente</label>
+              <input
+                type="text"
+                placeholder="Nombre del paciente..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full border border-gray-300 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Resultados */}
+          <div className="space-y-4 max-h-[600px] overflow-auto">
+            {filteredAppointments.length === 0 ? (
+              <p className="text-center py-12 text-gray-500">No se encontraron solicitudes con los filtros aplicados.</p>
+            ) : (
+              filteredAppointments.map(app => {
+                const totalDosesApp = (app.beneficiaries || []).reduce((acc, ben) => {
+                  return acc + (ben.services || []).reduce((s, srv) => s + (srv.doses || 0), 0);
+                }, 0);
+
+                const completedDosesApp = (app.beneficiaries || []).reduce((acc, ben) => {
+                  return acc + (ben.services || []).reduce((s, srv) => s + (srv.completedDoses || 0), 0);
+                }, 0);
+
+                const progress = totalDosesApp > 0 ? Math.round((completedDosesApp / totalDosesApp) * 100) : 0;
+
+                return (
+                  <div key={app.id} className="border border-gray-200 rounded-3xl p-6 hover:shadow-md transition-all">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-semibold text-lg">{app.patientName || app.beneficiaries?.[0]?.name}</p>
+                        <p className="text-sm text-gray-500">
+                          {new Date(app.date).toLocaleDateString('es-CL')} • {app.time}
+                        </p>
+                      </div>
+                      <span className={`px-4 py-1 text-xs font-medium rounded-2xl ${app.status === 'completada' ? 'bg-green-100 text-green-700' : app.status === 'en_tratamiento' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {app.status?.toUpperCase()}
+                      </span>
+                    </div>
+
+                    <div className="mt-6">
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="text-gray-600">Progreso de dosis</span>
+                        <span className="font-medium">{completedDosesApp} / {totalDosesApp} dosis</span>
+                      </div>
+                      <div className="h-3 bg-gray-100 rounded-3xl overflow-hidden">
+                        <div
+                          className="h-3 bg-indigo-600 transition-all"
+                          style={{ width: `${progress}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-right text-xs text-gray-500 mt-1">{progress}% completado</p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'servicios' && (
+        <div className="bg-white rounded-3xl shadow p-8">
+          <h2 className="text-2xl font-semibold mb-6">Gestión de Servicios</h2>
+          <div className="grid gap-4">
+            {safeServices.map((service) => (
+              <div key={service.id} className="flex items-center justify-between border-b pb-4">
+                <div>
+                  <p className="font-medium">{service.name}</p>
+                  <p className="text-sm text-gray-500">${service.price} CLP</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => {
+                      // Lógica de activar/desactivar (puedes expandir)
+                      alert(`Servicio ${service.name} actualizado`);
+                    }}
+                    className="px-5 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-2xl"
+                  >
+                    {service.active ? 'Desactivar' : 'Activar'}
+                  </button>
+                  <button className="px-5 py-2 text-sm bg-indigo-600 text-white rounded-2xl">
+                    Editar precio
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === 'profesionales' && (
+        <div className="bg-white rounded-3xl shadow p-8">
+          <h2 className="text-2xl font-semibold mb-6">Profesionales y Usuarios</h2>
+          <p className="text-gray-500">Lista de profesionales y pacientes registrados (próximamente)</p>
+          {/* Aquí puedes agregar tabla de usuarios si lo necesitas */}
+        </div>
+      )}
+
+      {/* Footer del panel */}
+      <div className="mt-12 text-center text-xs text-gray-400">
+        Admin Panel • Enfermereando © 2026
       </div>
     </div>
   );
@@ -1767,19 +1933,17 @@ function ServicesManager({ services, saveServices }) {
   
     const allAppointments = [...safeAppointments].sort((a, b) => new Date(b.date) - new Date(a.date));
   
-    const todayApps = allAppointments.filter(app => 
+    const todayApps = safeFilter(allAppointments, app => 
       new Date(app.date).toDateString() === new Date().toDateString()
     );
   
-    const myTasks = allAppointments.filter(app => 
+    const myTasks = safeFilter(allAppointments, app => 
       app?.assignedTo === user?.id || app?.status === 'asignada'
     );
   
     const takeTask = async (app) => {
       if (!app || app.status !== 'pendiente') return;
-      const updated = safeAppointments.map(a => 
-        a.id === app.id ? { ...a, status: 'asignada', assignedTo: user.id } : a
-      );
+      const updated = safeAppointments.map(a => a.id === app.id ? { ...a, status: 'asignada', assignedTo: user.id } : a);
       await saveAppointments(updated);
       await sendTelegramToAdmin(app, 'task_taken', services || [], `Tomada por: ${user?.name}`);
       alert(`✅ Tarea asignada y notificado por Telegram`);
@@ -1788,7 +1952,7 @@ function ServicesManager({ services, saveServices }) {
     const updateStatus = async (appId, newStatus) => {
       const updated = safeAppointments.map(a => a.id === appId ? { ...a, status: newStatus } : a);
       await saveAppointments(updated);
-      const app = updated.find(a => a.id === appId) || {};
+      const app = safeFind(updated, a => a.id === appId) || {};
       await sendTelegramToAdmin(app, 'status_change', services || []);
     };
   
@@ -1807,12 +1971,43 @@ function ServicesManager({ services, saveServices }) {
         };
       });
       await saveAppointments(updated);
-      const app = updated.find(a => a.id === appId) || {};
+      const app = safeFind(updated, a => a.id === appId) || {};
       await sendTelegramToAdmin(app, 'dose_update', services || [], `Dosis: ${completedDoses}`);
     };
-  }
   
-// ==================== APP PRINCIPAL - ADMINISTRADOR CORREGIDO ====================
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold">Panel Profesional</h1>
+          <button onClick={() => setView('landing')} className="text-gray-500 hover:text-gray-700">← Cerrar sesión</button>
+        </div>
+  
+        <div className="flex border-b mb-8">
+          <button onClick={() => setTab('hoy')} className={`px-8 py-4 ${tab === 'hoy' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Hoy</button>
+          <button onClick={() => setTab('mis')} className={`px-8 py-4 ${tab === 'mis' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Mis Atenciones</button>
+          <button onClick={() => setTab('calendario')} className={`px-8 py-4 ${tab === 'calendario' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Calendario</button>
+        </div>
+  
+        {tab === 'hoy' && (
+          <div>
+            <h2 className="text-2xl font-semibold mb-6">Atenciones de Hoy</h2>
+            {todayApps.length === 0 ? <p className="text-gray-500">No hay atenciones para hoy.</p> : todayApps.map(app => <AppointmentCard key={app.id} app={app} />)}
+          </div>
+        )}
+  
+        {tab === 'mis' && (
+          <div>
+            <h2 className="text-2xl font-semibold mb-6">Mis Tareas Asignadas</h2>
+            {myTasks.length === 0 ? <p className="text-gray-500">No tienes tareas asignadas.</p> : myTasks.map(app => <AppointmentCard key={app.id} app={app} />)}
+          </div>
+        )}
+  
+        {tab === 'calendario' && <CalendarView appointments={allAppointments} onEdit={() => {}} />}
+      </div>
+    );
+  }
+
+// ==================== APP PRINCIPAL ====================
 export default function App() {
   const [view, setView] = useState('landing');
   const [user, setUser] = useState(null);
@@ -1823,69 +2018,68 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Carga inicial de datos (Supabase / localStorage)
   useEffect(() => {
     (async () => {
-      let svcs = await sget('enf:services', DEFAULT_SERVICES);
-      let apps = (await sget('enf:appointments', [])).map(normalizeApp || (x => x));
-      const pats = await sget('enf:patients', []);
-      let profs = await sget('enf:professionals', []);
-      const notifs = await sget('enf:notifications', []);
+      try {
+        const svcs = await sget('enf:services', DEFAULT_SERVICES);
+        let apps = (await sget('enf:appointments', [])).map(normalizeApp);
+        const pats = await sget('enf:patients', []);
+        let profs = await sget('enf:professionals', []);
+        const notifs = await sget('enf:notifications', []);
 
-      // Administrador por defecto (con el correo que pediste)
-      const adminEmail = 'marielads.enfermera@gmail.com';
-      if (!profs.some(p => p.email === adminEmail || p.role === 'admin')) {
-        const defaultAdmin = {
-          id: 'admin-default',
-          name: PROFESSIONAL_NAME,
-          email: adminEmail,
-          password: 'enfermera2026',
-          phone: PHONE,
-          role: 'admin',
-          status: 'active',
-          createdAt: new Date().toISOString()
-        };
-        profs = [defaultAdmin, ...profs];
-        await sset('enf:professionals', profs);
+        // Admin por defecto
+        if (!profs.some(p => p.role === 'admin')) {
+          profs = [{
+            id: 'admin-default',
+            username: 'admin',
+            password: 'enfermera2026',
+            name: PROFESSIONAL_NAME,
+            email: 'marielads.enfermera@gmail.com',
+            role: 'admin',
+            active: true
+          }].concat(profs);
+        }
+
+        setServices(svcs);
+        setAppointments(apps);
+        setPatients(pats);
+        setProfessionals(profs);
+        setNotifications(notifs);
+      } catch (e) {
+        console.error("Error cargando datos:", e);
+      } finally {
+        setLoading(false);
       }
-
-      setServices(svcs);
-      setAppointments(apps);
-      setPatients(pats);
-      setProfessionals(profs);
-      setNotifications(notifs);
-      setLoading(false);
     })();
   }, []);
 
-  const saveAppointmentsLocal = async (list) => {
-    setAppointments(list);
-    await sset('enf:appointments', list);
+  const saveAppointments = async (newList) => {
+    setAppointments(newList);
+    await sset('enf:appointments', newList);
   };
 
-  const login = (loggedUser) => {
-    setUser(loggedUser);
-    if (loggedUser.role === 'patient') setView('patient');
-    else if (loggedUser.role === 'admin') setView('admin');
-    else setView('professional');
-  };
-
-  const logout = () => {
-    setUser(null);
-    setView('landing');
-  };
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-2xl">Cargando...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto"></div>
+          <p className="mt-4 text-gray-600">Cargando Enfermereando...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50">
-      {/* LANDING */}
-      {view === 'landing' && <Landing services={services.filter(s => s.active)} onLogin={() => setView('login')} />}
+    <div className="min-h-screen bg-gray-50">
+      {/* LANDING PROFESIONAL */}
+      {view === 'landing' && <Landing setView={setView} />}
 
-      {/* LOGIN + REGISTRO (con validación de duplicados) */}
+      {/* LOGIN */}
       {view === 'login' && (
-        <LoginView 
-          onLogin={login} 
-          onBack={() => setView('landing')} 
+        <LoginView
+          setView={setView}
+          setUser={setUser}
           patients={patients}
           professionals={professionals}
           setPatients={setPatients}
@@ -1893,39 +2087,36 @@ export default function App() {
         />
       )}
 
-      {/* PORTAL DEL PACIENTE */}
-      {view === 'patient' && user && user.role === 'patient' && (
-        <PatientPortal 
-          user={user} 
-          services={services.filter(s => s.active)} 
-          appointments={appointments} 
-          saveAppointments={saveAppointmentsLocal} 
-          onLogout={logout} 
+      {/* PANEL PACIENTE */}
+      {user && user.role === 'patient' && view === 'patient' && (
+        <PatientPortal
+          user={user}
+          appointments={appointments}
+          saveAppointments={saveAppointments}
+          services={services}
+          setView={setView}
         />
       )}
 
-      {/* DASHBOARD DEL PROFESIONAL */}
-      {view === 'professional' && user && user.role === 'professional' && (
-        <ProfessionalDashboard 
-          user={user} 
-          services={services} 
-          appointments={appointments} 
-          saveAppointments={saveAppointmentsLocal} 
-          onLogout={logout} 
+      {/* PANEL PROFESIONAL / ADMIN */}
+      {user && (user.role === 'professional' || user.role === 'admin') && view === 'professional' && (
+        <ProfessionalDashboard
+          user={user}
+          appointments={appointments}
+          saveAppointments={saveAppointments}
+          services={services}
+          setView={setView}
         />
       )}
 
-      {/* PANEL DE ADMINISTRADOR */}
-      {view === 'admin' && user && user.role === 'admin' && (
-        <AdminPanel 
-          user={user} 
-          services={services} 
-          appointments={appointments} 
-          patients={patients} 
-          professionals={professionals} 
-          notifications={notifications} 
-          saveAppointments={saveAppointmentsLocal} 
-          onLogout={logout} 
+      {/* PANEL ADMIN (si tienes uno separado) */}
+      {user && user.role === 'admin' && view === 'admin' && (
+        <AdminPanel
+          appointments={appointments}
+          saveAppointments={saveAppointments}
+          services={services}
+          setServices={setServices}
+          setView={setView}
         />
       )}
     </div>
