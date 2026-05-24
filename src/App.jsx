@@ -596,11 +596,12 @@ function LoginView({
 function PatientPortal({ user, appointments = [], saveAppointments, services, setView }) {
   const [tab, setTab] = useState('inicio');
 
-  const safeAppointments = appointments || [];
+  // Protección extra
+  const safeAppointments = Array.isArray(appointments) ? appointments : [];
 
   const myAppointments = safeAppointments.filter(app => 
-    app.patientName === user.name || 
-    (app.beneficiaries && app.beneficiaries.some(b => b.name === user.name))
+    app?.patientName === user?.name || 
+    (app?.beneficiaries && app.beneficiaries.some(b => b?.name === user?.name))
   );
 
   const lastRequests = [...myAppointments]
@@ -608,7 +609,7 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
     .slice(0, 5);
 
   const cancelAppointment = async (app) => {
-    if (!confirm(`¿Cancelar la atención del ${new Date(app.date).toLocaleDateString('es-CL')}?`)) return;
+    if (!app || !confirm(`¿Cancelar la atención del ${new Date(app.date).toLocaleDateString('es-CL')}?`)) return;
 
     const isSeries = !!app.seriesId;
     let appointmentsToCancel = [app.id];
@@ -625,10 +626,9 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
 
     await saveAppointments(updated);
 
-    // ←←← CORRECCIÓN: safe find
-    const representative = safeAppointments.find(a => a.id === appointmentsToCancel[0]);
+    const representative = safeAppointments.find(a => a.id === appointmentsToCancel[0]) || {};
 
-    await sendTelegramToAdmin(representative || {}, 'cancelled', services,
+    await sendTelegramToAdmin(representative, 'cancelled', services || [],
       appointmentsToCancel.length > 1 ? 'Serie completa cancelada' : ''
     );
 
@@ -1763,7 +1763,7 @@ function ServicesManager({ services, saveServices }) {
    function ProfessionalDashboard({ user, appointments = [], saveAppointments, services, setView }) {
     const [tab, setTab] = useState('hoy');
   
-    const safeAppointments = appointments || [];
+    const safeAppointments = Array.isArray(appointments) ? appointments : [];
   
     const allAppointments = [...safeAppointments].sort((a, b) => new Date(b.date) - new Date(a.date));
   
@@ -1772,25 +1772,24 @@ function ServicesManager({ services, saveServices }) {
     );
   
     const myTasks = allAppointments.filter(app => 
-      app.assignedTo === user.id || app.status === 'asignada'
+      app?.assignedTo === user?.id || app?.status === 'asignada'
     );
   
     const takeTask = async (app) => {
-      if (app.status !== 'pendiente') return;
+      if (!app || app.status !== 'pendiente') return;
       const updated = safeAppointments.map(a => 
         a.id === app.id ? { ...a, status: 'asignada', assignedTo: user.id } : a
       );
       await saveAppointments(updated);
-      await sendTelegramToAdmin(app, 'task_taken', services, `Tomada por: ${user.name}`);
+      await sendTelegramToAdmin(app, 'task_taken', services || [], `Tomada por: ${user?.name}`);
       alert(`✅ Tarea asignada y notificado por Telegram`);
     };
   
     const updateStatus = async (appId, newStatus) => {
       const updated = safeAppointments.map(a => a.id === appId ? { ...a, status: newStatus } : a);
       await saveAppointments(updated);
-      // ←←← CORRECCIÓN: safe find
-      const app = updated.find(a => a.id === appId);
-      await sendTelegramToAdmin(app || {}, 'status_change', services);
+      const app = updated.find(a => a.id === appId) || {};
+      await sendTelegramToAdmin(app, 'status_change', services || []);
     };
   
     const updateDoses = async (appId, completedDoses) => {
@@ -1798,9 +1797,9 @@ function ServicesManager({ services, saveServices }) {
         if (app.id !== appId) return app;
         return {
           ...app,
-          beneficiaries: app.beneficiaries.map(ben => ({
+          beneficiaries: (app.beneficiaries || []).map(ben => ({
             ...ben,
-            services: ben.services.map(s => ({
+            services: (ben.services || []).map(s => ({
               ...s,
               completedDoses: parseInt(completedDoses) || 0
             }))
@@ -1808,46 +1807,11 @@ function ServicesManager({ services, saveServices }) {
         };
       });
       await saveAppointments(updated);
-      // ←←← CORRECCIÓN: safe find
-      const app = updated.find(a => a.id === appId);
-      await sendTelegramToAdmin(app || {}, 'dose_update', services, `Dosis: ${completedDoses}`);
+      const app = updated.find(a => a.id === appId) || {};
+      await sendTelegramToAdmin(app, 'dose_update', services || [], `Dosis: ${completedDoses}`);
     };
-  
-    return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">Panel Profesional</h1>
-          <button onClick={() => setView('landing')} className="text-gray-500 hover:text-gray-700">
-            ← Cerrar sesión
-          </button>
-        </div>
-  
-        {/* TABS */}
-        <div className="flex border-b mb-8">
-          <button onClick={() => setTab('hoy')} className={`px-8 py-4 ${tab === 'hoy' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Hoy</button>
-          <button onClick={() => setTab('mis')} className={`px-8 py-4 ${tab === 'mis' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Mis Atenciones</button>
-          <button onClick={() => setTab('calendario')} className={`px-8 py-4 ${tab === 'calendario' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Calendario</button>
-        </div>
-  
-        {tab === 'hoy' && (
-          <div>
-            <h2 className="text-2xl font-semibold mb-6">Atenciones de Hoy</h2>
-            {todayApps.length === 0 ? <p className="text-gray-500">No hay atenciones para hoy.</p> : todayApps.map(app => <AppointmentCard key={app.id} app={app} onCancel={() => {}} />)}
-          </div>
-        )}
-  
-        {tab === 'mis' && (
-          <div>
-            <h2 className="text-2xl font-semibold mb-6">Mis Tareas Asignadas</h2>
-            {myTasks.length === 0 ? <p className="text-gray-500">No tienes tareas asignadas.</p> : myTasks.map(app => <AppointmentCard key={app.id} app={app} onCancel={() => {}} />)}
-          </div>
-        )}
-  
-        {tab === 'calendario' && <CalendarView appointments={allAppointments} onEdit={(app) => alert(`Editar: ${app.patientName}`)} />}
-      </div>
-    );
   }
-
+  
 // ==================== APP PRINCIPAL - ADMINISTRADOR CORREGIDO ====================
 export default function App() {
   const [view, setView] = useState('landing');
