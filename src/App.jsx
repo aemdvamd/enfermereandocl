@@ -1518,6 +1518,3 @@ const setupRealtimeNotifications = (userId, addNotification) => {
   console.log(`[Realtime] Suscrito a notificaciones para usuario: ${userId}`);
   // Aquí puedes implementar la suscripción realtime si lo necesitas en el futuro
 };
-
-// ==================== EXPORT FINAL ====================
-export default App;
