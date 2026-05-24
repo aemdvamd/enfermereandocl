@@ -111,8 +111,9 @@ const sendTelegramToAdmin = async (app, action = 'new', services = [], extraInfo
     else if (action === 'cancelled') text += `❌ *ATENCIÓN CANCELADA*\n`;
     else if (action === 'status_change') text += `🔄 *CAMBIO DE ESTADO*\n`;
     else if (action === 'task_taken') text += `✅ *TAREA TOMADA*\n`;
+    else if (action === 'dose_update') text += `📊 *DOSIS ACTUALIZADAS*\n`;
 
-    text += `Paciente: ${app.patientName}\n`;
+    text += `Paciente: ${app.patientName || app.beneficiaries?.[0]?.name || 'Sin nombre'}\n`;
     text += `Fecha: ${new Date(app.date).toLocaleDateString('es-CL')}\n`;
     text += `Hora: ${fmtTime(app.time)}\n`;
     text += `Comuna: ${app.comuna || 'No especificada'}\n`;
@@ -122,7 +123,7 @@ const sendTelegramToAdmin = async (app, action = 'new', services = [], extraInfo
     const CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID;
 
     if (!BOT_TOKEN || !CHAT_ID) {
-      console.error('❌ Faltan variables de Telegram');
+      console.error('❌ Faltan variables de Telegram en Vercel');
       return false;
     }
 
@@ -144,7 +145,7 @@ const sendTelegramToAdmin = async (app, action = 'new', services = [], extraInfo
       console.log(`✅ Telegram enviado correctamente (${action})`);
       return true;
     } else {
-      console.error('❌ Error Telegram:', result);
+      console.error('❌ Error Telegram API:', result);
       return false;
     }
   } catch (error) {
@@ -1823,7 +1824,7 @@ const takeTask = async (app) => {
   alert(`✅ Tarea tomada y notificado por Telegram.`);
 };
 
-// ==================== ACTUALIZAR ESTADO ====================
+// ACTUALIZAR ESTADO
 const updateStatus = async (appId, newStatus) => {
   const updated = appointments.map(a => a.id === appId ? { ...a, status: newStatus } : a);
   await saveAppointments(updated);
@@ -1832,7 +1833,7 @@ const updateStatus = async (appId, newStatus) => {
   await sendTelegramToAdmin(app, 'status_change', services);
 };
 
-// ==================== ACTUALIZAR DOSIS ====================
+// ACTUALIZAR DOSIS
 const updateDoses = async (appId, completedDoses) => {
   const updated = appointments.map(app => {
     if (app.id !== appId) return app;
