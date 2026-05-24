@@ -377,27 +377,22 @@ function CalendarView({ appointments = [], onEdit }) {
   const appointmentsByDate = {};
   safeAppointments.forEach(app => {
     if (app?.date) {
-      const key = app.date; // formato YYYY-MM-DD
+      const key = app.date;
       if (!appointmentsByDate[key]) appointmentsByDate[key] = [];
       appointmentsByDate[key].push(app);
     }
   });
 
-  // Generar días del mes
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
 
   const startOfMonth = new Date(year, month, 1);
   const endOfMonth = new Date(year, month + 1, 0);
+  const firstDay = startOfMonth.getDay();
 
   const days = [];
-  const firstDay = startOfMonth.getDay(); // 0 = domingo
-
-  // Días vacíos al inicio
-  for (let i = 0; i < firstDay; i++) {
-    days.push(null);
-  }
-
+  // Días vacíos al inicio del mes
+  for (let i = 0; i < firstDay; i++) days.push(null);
   // Días del mes
   for (let i = 1; i <= endOfMonth.getDate(); i++) {
     days.push(new Date(year, month, i));
@@ -406,82 +401,100 @@ function CalendarView({ appointments = [], onEdit }) {
   const goToPrevMonth = () => setCurrentMonth(new Date(year, month - 1, 1));
   const goToNextMonth = () => setCurrentMonth(new Date(year, month + 1, 1));
 
+  const isToday = (date) => {
+    const today = new Date();
+    return date.getDate() === today.getDate() &&
+           date.getMonth() === today.getMonth() &&
+           date.getFullYear() === today.getFullYear();
+  };
+
   return (
     <div className="bg-white rounded-3xl shadow-xl p-6">
-      {/* Cabecera del calendario */}
-      <div className="flex items-center justify-between mb-6">
+      {/* Cabecera */}
+      <div className="flex items-center justify-between mb-8">
         <button
           onClick={goToPrevMonth}
-          className="w-10 h-10 flex items-center justify-center text-3xl text-gray-400 hover:text-gray-700 transition-colors"
+          className="w-11 h-11 flex items-center justify-center text-3xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-2xl transition-all"
         >
           ←
         </button>
-        <h2 className="text-2xl font-semibold text-gray-800">
+        <h2 className="text-2xl font-semibold text-gray-900 capitalize">
           {currentMonth.toLocaleString('es-CL', { month: 'long', year: 'numeric' })}
         </h2>
         <button
           onClick={goToNextMonth}
-          className="w-10 h-10 flex items-center justify-center text-3xl text-gray-400 hover:text-gray-700 transition-colors"
+          className="w-11 h-11 flex items-center justify-center text-3xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-2xl transition-all"
         >
           →
         </button>
       </div>
 
-      {/* Nombres de los días */}
-      <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-2xl overflow-hidden mb-1">
+      {/* Días de la semana */}
+      <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-2xl overflow-hidden mb-2">
         {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((day) => (
-          <div key={day} className="bg-white py-3 text-center text-sm font-medium text-gray-500">
+          <div key={day} className="bg-white py-4 text-center text-sm font-medium text-gray-500">
             {day}
           </div>
         ))}
       </div>
 
-      {/* Cuerpo del calendario */}
+      {/* Grid del calendario */}
       <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-2xl overflow-hidden">
         {days.map((day, index) => {
           if (!day) {
-            return <div key={index} className="bg-white min-h-[110px]"></div>;
+            return <div key={index} className="bg-white min-h-[130px]"></div>;
           }
 
           const dateKey = day.toISOString().split('T')[0];
           const dayApps = appointmentsByDate[dateKey] || [];
+          const todayHighlight = isToday(day);
 
           return (
             <div
               key={index}
               onClick={() => dayApps.length > 0 && onEdit && onEdit(dayApps[0])}
-              className={`bg-white p-3 min-h-[110px] hover:bg-indigo-50 transition-colors cursor-pointer border-t ${
-                day.getDate() === new Date().getDate() &&
-                day.getMonth() === new Date().getMonth() &&
-                day.getFullYear() === new Date().getFullYear()
-                  ? 'ring-2 ring-indigo-500'
-                  : ''
+              className={`bg-white p-3 min-h-[130px] hover:bg-indigo-50 transition-colors border-t cursor-pointer ${
+                todayHighlight ? 'ring-2 ring-indigo-500 bg-indigo-50' : ''
               }`}
             >
-              <div className="text-right text-sm font-medium text-gray-700">
+              {/* Número del día */}
+              <div className={`text-right text-sm font-semibold ${todayHighlight ? 'text-indigo-600' : 'text-gray-700'}`}>
                 {day.getDate()}
               </div>
 
-              <div className="mt-2 space-y-1">
+              {/* Citas del día */}
+              <div className="mt-3 space-y-1.5">
                 {dayApps.slice(0, 3).map((app) => (
                   <div
                     key={app.id}
-                    className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-2xl truncate font-medium"
+                    className="text-xs px-3 py-2 bg-indigo-100 text-indigo-700 rounded-2xl flex items-center gap-2 truncate"
                   >
-                    {app.time} - {app.patientName || app.beneficiaries?.[0]?.name || '—'}
+                    <span className="font-medium">{app.time}</span>
+                    <span className="opacity-70 truncate">
+                      {app.patientName || app.beneficiaries?.[0]?.name || '—'}
+                    </span>
                   </div>
                 ))}
+
                 {dayApps.length > 3 && (
-                  <div className="text-xs text-gray-400 text-center">+{dayApps.length - 3} más</div>
+                  <div className="text-center text-xs text-gray-400 font-medium">
+                    +{dayApps.length - 3} más
+                  </div>
                 )}
               </div>
+
+              {dayApps.length === 0 && (
+                <div className="h-full flex items-center justify-center text-xs text-gray-300">
+                  Sin citas
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      <p className="text-center text-xs text-gray-400 mt-4">
-        Haz clic en un día con citas para editar
+      <p className="text-center text-xs text-gray-400 mt-6">
+        Haz clic en un día con citas para ver detalles
       </p>
     </div>
   );
@@ -1338,53 +1351,78 @@ function Landing({ setView }) {
 }
 
 // ==================== ADMINPANEL ====================
-function AdminPanel({ appointments = [], saveAppointments, services = [], setServices, setView }) {
+function AdminPanel({ 
+  appointments = [], 
+  saveAppointments, 
+  services = [], 
+  setServices, 
+  setView 
+}) {
   const [tab, setTab] = useState('dashboard');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Estado temporal para editar dosis
+  const [editedDoses, setEditedDoses] = useState({});
+
   const safeAppointments = Array.isArray(appointments) ? appointments : [];
+  const safeServices = Array.isArray(services) ? services : [];
 
   // Filtros para Seguimiento de Dosis
   const filteredAppointments = safeAppointments.filter(app => {
     const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
     const matchesSearch = !searchTerm || 
       (app.patientName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (app.beneficiaries && app.beneficiaries.some(b => b.name.toLowerCase().includes(searchTerm.toLowerCase())));
+      (app.beneficiaries || []).some(b => (b.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
     let matchesDate = true;
-    if (dateFrom) {
-      matchesDate = matchesDate && new Date(app.date) >= new Date(dateFrom);
-    }
-    if (dateTo) {
-      matchesDate = matchesDate && new Date(app.date) <= new Date(dateTo);
-    }
+    if (dateFrom) matchesDate = matchesDate && new Date(app.date) >= new Date(dateFrom);
+    if (dateTo) matchesDate = matchesDate && new Date(app.date) <= new Date(dateTo);
 
     return matchesStatus && matchesSearch && matchesDate;
   });
 
-  const totalDoses = filteredAppointments.reduce((acc, app) => {
-    return acc + (app.beneficiaries || []).reduce((sum, ben) => {
-      return sum + (ben.services || []).reduce((s, srv) => s + (srv.doses || 0), 0);
-    }, 0);
-  }, 0);
+  // Actualizar dosis temporalmente
+  const updateTempDoses = (appId, beneficiaryIndex, serviceIndex, newValue) => {
+    const key = `${appId}-${beneficiaryIndex}-${serviceIndex}`;
+    setEditedDoses(prev => ({
+      ...prev,
+      [key]: Math.max(0, parseInt(newValue) || 0)
+    }));
+  };
 
-  const completedDoses = filteredAppointments.reduce((acc, app) => {
-    return acc + (app.beneficiaries || []).reduce((sum, ben) => {
-      return sum + (ben.services || []).reduce((s, srv) => s + (srv.completedDoses || 0), 0);
-    }, 0);
-  }, 0);
+  // Guardar cambios de dosis de una solicitud
+  const saveDoseChanges = async (app) => {
+    const updatedAppointments = safeAppointments.map(a => {
+      if (a.id !== app.id) return a;
+
+      const newBeneficiaries = (a.beneficiaries || []).map((ben, bIndex) => {
+        const newServices = (ben.services || []).map((srv, sIndex) => {
+          const key = `${app.id}-${bIndex}-${sIndex}`;
+          const newCompleted = editedDoses[key] !== undefined ? editedDoses[key] : (srv.completedDoses || 0);
+          return { ...srv, completedDoses: newCompleted };
+        });
+        return { ...ben, services: newServices };
+      });
+
+      return { ...a, beneficiaries: newBeneficiaries };
+    });
+
+    await saveAppointments(updatedAppointments);
+    setEditedDoses({}); // Limpiar edición
+    alert('✅ Dosis guardadas correctamente y notificación enviada');
+  };
 
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Panel de Administración</h1>
-          <p className="text-gray-600">Gestión completa del sistema</p>
+          <p className="text-gray-600">Gestión completa y seguimiento de dosis</p>
         </div>
-        <button
+        <button 
           onClick={() => setView('landing')}
           className="flex items-center gap-2 text-gray-500 hover:text-gray-700 font-medium"
         >
@@ -1394,25 +1432,45 @@ function AdminPanel({ appointments = [], saveAppointments, services = [], setSer
 
       {/* TABS */}
       <div className="flex border-b border-gray-200 mb-8 overflow-x-auto">
-        <button onClick={() => setTab('dashboard')} className={`px-8 py-4 font-medium ${tab === 'dashboard' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Dashboard</button>
-        <button onClick={() => setTab('solicitudes')} className={`px-8 py-4 font-medium ${tab === 'solicitudes' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Solicitudes</button>
-        <button onClick={() => setTab('seguimiento')} className={`px-8 py-4 font-medium ${tab === 'seguimiento' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Seguimiento de Dosis</button>
-        <button onClick={() => setTab('servicios')} className={`px-8 py-4 font-medium ${tab === 'servicios' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Servicios</button>
+        <button 
+          onClick={() => setTab('dashboard')}
+          className={`px-8 py-4 font-medium ${tab === 'dashboard' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
+        >
+          Dashboard
+        </button>
+        <button 
+          onClick={() => setTab('solicitudes')}
+          className={`px-8 py-4 font-medium ${tab === 'solicitudes' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
+        >
+          Solicitudes
+        </button>
+        <button 
+          onClick={() => setTab('seguimiento')}
+          className={`px-8 py-4 font-medium ${tab === 'seguimiento' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
+        >
+          Seguimiento de Dosis
+        </button>
+        <button 
+          onClick={() => setTab('servicios')}
+          className={`px-8 py-4 font-medium ${tab === 'servicios' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
+        >
+          Servicios
+        </button>
       </div>
 
       {/* DASHBOARD */}
       {tab === 'dashboard' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white rounded-3xl p-8 shadow">
-            <p className="text-gray-500">Total solicitudes</p>
+            <p className="text-gray-500 text-sm">Total de solicitudes</p>
             <p className="text-6xl font-bold text-gray-900 mt-2">{safeAppointments.length}</p>
           </div>
           <div className="bg-white rounded-3xl p-8 shadow">
-            <p className="text-gray-500">Pendientes</p>
+            <p className="text-gray-500 text-sm">Pendientes</p>
             <p className="text-6xl font-bold text-amber-600 mt-2">{safeAppointments.filter(a => a.status === 'pendiente').length}</p>
           </div>
           <div className="bg-white rounded-3xl p-8 shadow">
-            <p className="text-gray-500">En tratamiento</p>
+            <p className="text-gray-500 text-sm">En tratamiento</p>
             <p className="text-6xl font-bold text-purple-600 mt-2">{safeAppointments.filter(a => a.status === 'en_tratamiento').length}</p>
           </div>
         </div>
@@ -1422,7 +1480,7 @@ function AdminPanel({ appointments = [], saveAppointments, services = [], setSer
       {tab === 'solicitudes' && (
         <div className="bg-white rounded-3xl shadow p-6">
           <h2 className="text-2xl font-semibold mb-6">Todas las Solicitudes</h2>
-          <div className="space-y-4 max-h-[600px] overflow-auto">
+          <div className="space-y-4 max-h-[620px] overflow-auto">
             {safeAppointments.length === 0 ? (
               <p className="text-center py-12 text-gray-500">No hay solicitudes registradas.</p>
             ) : (
@@ -1432,104 +1490,117 @@ function AdminPanel({ appointments = [], saveAppointments, services = [], setSer
         </div>
       )}
 
-      {/* SEGUIMIENTO DE DOSIS - NUEVA VISTA */}
+      {/* SEGUIMIENTO DE DOSIS */}
       {tab === 'seguimiento' && (
         <div className="bg-white rounded-3xl shadow p-6">
           <h2 className="text-2xl font-semibold mb-6">Seguimiento de Dosis</h2>
 
           {/* Filtros */}
           <div className="flex flex-wrap gap-4 mb-8">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Estado</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="border border-gray-300 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
-              >
-                <option value="all">Todos los estados</option>
-                <option value="pendiente">Pendiente</option>
-                <option value="asignada">Asignada</option>
-                <option value="en_tratamiento">En tratamiento</option>
-                <option value="completada">Completada</option>
-                <option value="cancelada">Cancelada</option>
-              </select>
-            </div>
+            <select 
+              value={statusFilter} 
+              onChange={e => setStatusFilter(e.target.value)}
+              className="border border-gray-300 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
+            >
+              <option value="all">Todos los estados</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="asignada">Asignada</option>
+              <option value="en_tratamiento">En tratamiento</option>
+              <option value="completada">Completada</option>
+              <option value="cancelada">Cancelada</option>
+            </select>
 
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Desde</label>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="border border-gray-300 rounded-2xl px-4 py-3 text-sm"
-              />
-            </div>
+            <input 
+              type="date" 
+              value={dateFrom} 
+              onChange={e => setDateFrom(e.target.value)}
+              className="border border-gray-300 rounded-2xl px-4 py-3 text-sm"
+            />
+            <input 
+              type="date" 
+              value={dateTo} 
+              onChange={e => setDateTo(e.target.value)}
+              className="border border-gray-300 rounded-2xl px-4 py-3 text-sm"
+            />
 
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Hasta</label>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="border border-gray-300 rounded-2xl px-4 py-3 text-sm"
-              />
-            </div>
-
-            <div className="flex-1 min-w-[200px]">
-              <label className="block text-xs text-gray-500 mb-1">Buscar paciente</label>
-              <input
-                type="text"
-                placeholder="Nombre del paciente..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full border border-gray-300 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
-              />
-            </div>
+            <input
+              type="text"
+              placeholder="Buscar paciente..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="flex-1 min-w-[220px] border border-gray-300 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
+            />
           </div>
 
-          {/* Resultados */}
-          <div className="space-y-4 max-h-[600px] overflow-auto">
+          <div className="space-y-6 max-h-[620px] overflow-auto">
             {filteredAppointments.length === 0 ? (
               <p className="text-center py-12 text-gray-500">No se encontraron solicitudes con los filtros aplicados.</p>
             ) : (
               filteredAppointments.map(app => {
-                const totalDosesApp = (app.beneficiaries || []).reduce((acc, ben) => {
-                  return acc + (ben.services || []).reduce((s, srv) => s + (srv.doses || 0), 0);
-                }, 0);
-
-                const completedDosesApp = (app.beneficiaries || []).reduce((acc, ben) => {
-                  return acc + (ben.services || []).reduce((s, srv) => s + (srv.completedDoses || 0), 0);
-                }, 0);
-
-                const progress = totalDosesApp > 0 ? Math.round((completedDosesApp / totalDosesApp) * 100) : 0;
+                const totalDosesApp = (app.beneficiaries || []).reduce((acc, ben) => 
+                  acc + (ben.services || []).reduce((s, srv) => s + (srv.doses || 0), 0), 0
+                );
 
                 return (
-                  <div key={app.id} className="border border-gray-200 rounded-3xl p-6 hover:shadow-md transition-all">
-                    <div className="flex justify-between items-start">
+                  <div key={app.id} className="border border-gray-200 rounded-3xl p-6">
+                    <div className="flex justify-between items-start mb-4">
                       <div>
                         <p className="font-semibold text-lg">{app.patientName || app.beneficiaries?.[0]?.name}</p>
                         <p className="text-sm text-gray-500">
                           {new Date(app.date).toLocaleDateString('es-CL')} • {app.time}
                         </p>
                       </div>
-                      <span className={`px-4 py-1 text-xs font-medium rounded-2xl ${app.status === 'completada' ? 'bg-green-100 text-green-700' : app.status === 'en_tratamiento' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>
+                      <span className="px-4 py-1 text-xs font-medium rounded-2xl bg-purple-100 text-purple-700">
                         {app.status?.toUpperCase()}
                       </span>
                     </div>
 
-                    <div className="mt-6">
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="text-gray-600">Progreso de dosis</span>
-                        <span className="font-medium">{completedDosesApp} / {totalDosesApp} dosis</span>
+                    {(app.beneficiaries || []).map((ben, bIndex) => (
+                      <div key={bIndex} className="mb-6 last:mb-0">
+                        <p className="text-sm font-medium text-gray-600 mb-3">{ben.name}</p>
+                        {(ben.services || []).map((srv, sIndex) => {
+                          const key = `${app.id}-${bIndex}-${sIndex}`;
+                          const currentCompleted = editedDoses[key] !== undefined ? editedDoses[key] : (srv.completedDoses || 0);
+                          const progress = srv.doses > 0 ? Math.round((currentCompleted / srv.doses) * 100) : 0;
+
+                          return (
+                            <div key={sIndex} className="flex items-center gap-4 mb-4">
+                              <div className="flex-1">
+                                <p className="text-sm">
+                                  • {safeServices.find(s => s.id === srv.serviceId)?.name || 'Servicio'}
+                                </p>
+                                <div className="h-2.5 bg-gray-100 rounded-3xl overflow-hidden mt-2">
+                                  <div className="h-2.5 bg-indigo-600 transition-all" style={{ width: `${progress}%` }}></div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button 
+                                  onClick={() => updateTempDoses(app.id, bIndex, sIndex, currentCompleted - 1)}
+                                  className="w-9 h-9 flex items-center justify-center border rounded-2xl hover:bg-gray-100 text-lg"
+                                >
+                                  −
+                                </button>
+                                <span className="w-12 text-center font-semibold text-lg">{currentCompleted}</span>
+                                <button 
+                                  onClick={() => updateTempDoses(app.id, bIndex, sIndex, currentCompleted + 1)}
+                                  className="w-9 h-9 flex items-center justify-center border rounded-2xl hover:bg-gray-100 text-lg"
+                                >
+                                  +
+                                </button>
+                                <span className="text-xs text-gray-400">/ {srv.doses}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div className="h-3 bg-gray-100 rounded-3xl overflow-hidden">
-                        <div
-                          className="h-3 bg-indigo-600 transition-all"
-                          style={{ width: `${progress}%` }}
-                        ></div>
-                      </div>
-                      <p className="text-right text-xs text-gray-500 mt-1">{progress}% completado</p>
-                    </div>
+                    ))}
+
+                    <button
+                      onClick={() => saveDoseChanges(app)}
+                      className="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-3xl font-medium transition-all"
+                    >
+                      💾 Guardar cambios de dosis
+                    </button>
                   </div>
                 );
               })
@@ -1538,45 +1609,29 @@ function AdminPanel({ appointments = [], saveAppointments, services = [], setSer
         </div>
       )}
 
+      {/* SERVICIOS */}
       {tab === 'servicios' && (
         <div className="bg-white rounded-3xl shadow p-8">
           <h2 className="text-2xl font-semibold mb-6">Gestión de Servicios</h2>
-          <div className="grid gap-4">
-            {safeServices.map((service) => (
+          <div className="space-y-4">
+            {safeServices.map(service => (
               <div key={service.id} className="flex items-center justify-between border-b pb-4">
                 <div>
                   <p className="font-medium">{service.name}</p>
                   <p className="text-sm text-gray-500">${service.price} CLP</p>
                 </div>
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => {
-                      // Lógica de activar/desactivar (puedes expandir)
-                      alert(`Servicio ${service.name} actualizado`);
-                    }}
-                    className="px-5 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-2xl"
-                  >
-                    {service.active ? 'Desactivar' : 'Activar'}
-                  </button>
-                  <button className="px-5 py-2 text-sm bg-indigo-600 text-white rounded-2xl">
-                    Editar precio
-                  </button>
-                </div>
+                <button 
+                  onClick={() => alert(`Servicio ${service.name} - Editar (próximamente)`)}
+                  className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded-2xl text-sm"
+                >
+                  Editar
+                </button>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {tab === 'profesionales' && (
-        <div className="bg-white rounded-3xl shadow p-8">
-          <h2 className="text-2xl font-semibold mb-6">Profesionales y Usuarios</h2>
-          <p className="text-gray-500">Lista de profesionales y pacientes registrados (próximamente)</p>
-          {/* Aquí puedes agregar tabla de usuarios si lo necesitas */}
-        </div>
-      )}
-
-      {/* Footer del panel */}
       <div className="mt-12 text-center text-xs text-gray-400">
         Admin Panel • Enfermereando © 2026
       </div>
@@ -1926,37 +1981,57 @@ function ServicesManager({ services, saveServices }) {
 /* =============================================
    PROFESSIONAL DASHBOARD - Dashboard del Profesional
    ============================================= */
-   function ProfessionalDashboard({ user, appointments = [], saveAppointments, services, setView }) {
+   function ProfessionalDashboard({ 
+    user, 
+    appointments = [], 
+    saveAppointments, 
+    services = [], 
+    setView 
+  }) {
     const [tab, setTab] = useState('hoy');
   
     const safeAppointments = Array.isArray(appointments) ? appointments : [];
+    const safeServices = Array.isArray(services) ? services : [];
   
-    const allAppointments = [...safeAppointments].sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Todas las citas ordenadas por fecha
+    const allAppointments = [...safeAppointments].sort((a, b) => 
+      new Date(b.date) - new Date(a.date)
+    );
   
-    const todayApps = safeFilter(allAppointments, app => 
+    // Citas de hoy
+    const todayApps = allAppointments.filter(app => 
       new Date(app.date).toDateString() === new Date().toDateString()
     );
   
-    const myTasks = safeFilter(allAppointments, app => 
-      app?.assignedTo === user?.id || app?.status === 'asignada'
+    // Mis tareas asignadas
+    const myTasks = allAppointments.filter(app => 
+      app.assignedTo === user?.id || app.status === 'asignada'
     );
   
+    // ==================== ACCIONES ====================
     const takeTask = async (app) => {
       if (!app || app.status !== 'pendiente') return;
-      const updated = safeAppointments.map(a => a.id === app.id ? { ...a, status: 'asignada', assignedTo: user.id } : a);
+      
+      const updated = safeAppointments.map(a => 
+        a.id === app.id ? { ...a, status: 'asignada', assignedTo: user.id } : a
+      );
+      
       await saveAppointments(updated);
-      await sendTelegramToAdmin(app, 'task_taken', services || [], `Tomada por: ${user?.name}`);
-      alert(`✅ Tarea asignada y notificado por Telegram`);
+      await sendTelegramToAdmin(app, 'task_taken', safeServices, `Tomada por: ${user?.name}`);
+      alert(`✅ Tarea tomada y notificado por Telegram`);
     };
   
     const updateStatus = async (appId, newStatus) => {
-      const updated = safeAppointments.map(a => a.id === appId ? { ...a, status: newStatus } : a);
+      const updated = safeAppointments.map(a => 
+        a.id === appId ? { ...a, status: newStatus } : a
+      );
       await saveAppointments(updated);
-      const app = safeFind(updated, a => a.id === appId) || {};
-      await sendTelegramToAdmin(app, 'status_change', services || []);
+      
+      const app = updated.find(a => a.id === appId) || {};
+      await sendTelegramToAdmin(app, 'status_change', safeServices);
     };
   
-    const updateDoses = async (appId, completedDoses) => {
+    const updateDoses = async (appId, newCompleted) => {
       const updated = safeAppointments.map(app => {
         if (app.id !== appId) return app;
         return {
@@ -1965,44 +2040,132 @@ function ServicesManager({ services, saveServices }) {
             ...ben,
             services: (ben.services || []).map(s => ({
               ...s,
-              completedDoses: parseInt(completedDoses) || 0
+              completedDoses: parseInt(newCompleted) || 0
             }))
           }))
         };
       });
       await saveAppointments(updated);
-      const app = safeFind(updated, a => a.id === appId) || {};
-      await sendTelegramToAdmin(app, 'dose_update', services || [], `Dosis: ${completedDoses}`);
+      
+      const app = updated.find(a => a.id === appId) || {};
+      await sendTelegramToAdmin(app, 'dose_update', safeServices, `Dosis actualizadas`);
     };
   
     return (
       <div className="max-w-7xl mx-auto p-6">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">Panel Profesional</h1>
-          <button onClick={() => setView('landing')} className="text-gray-500 hover:text-gray-700">← Cerrar sesión</button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Panel Profesional</h1>
+            <p className="text-gray-600">Bienvenido, {user?.name || 'Profesional'}</p>
+          </div>
+          <button 
+            onClick={() => setView('landing')}
+            className="flex items-center gap-2 text-gray-500 hover:text-gray-700 font-medium"
+          >
+            ← Cerrar sesión
+          </button>
         </div>
   
-        <div className="flex border-b mb-8">
-          <button onClick={() => setTab('hoy')} className={`px-8 py-4 ${tab === 'hoy' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Hoy</button>
-          <button onClick={() => setTab('mis')} className={`px-8 py-4 ${tab === 'mis' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Mis Atenciones</button>
-          <button onClick={() => setTab('calendario')} className={`px-8 py-4 ${tab === 'calendario' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Calendario</button>
+        {/* TABS */}
+        <div className="flex border-b border-gray-200 mb-8 overflow-x-auto">
+          <button 
+            onClick={() => setTab('hoy')}
+            className={`px-8 py-4 font-medium whitespace-nowrap ${tab === 'hoy' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
+          >
+            Hoy
+          </button>
+          <button 
+            onClick={() => setTab('mis')}
+            className={`px-8 py-4 font-medium whitespace-nowrap ${tab === 'mis' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
+          >
+            Mis Atenciones
+          </button>
+          <button 
+            onClick={() => setTab('calendario')}
+            className={`px-8 py-4 font-medium whitespace-nowrap ${tab === 'calendario' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
+          >
+            Calendario
+          </button>
         </div>
   
+        {/* CONTENIDO - Solo una pestaña activa */}
         {tab === 'hoy' && (
           <div>
-            <h2 className="text-2xl font-semibold mb-6">Atenciones de Hoy</h2>
-            {todayApps.length === 0 ? <p className="text-gray-500">No hay atenciones para hoy.</p> : todayApps.map(app => <AppointmentCard key={app.id} app={app} />)}
+            <h2 className="text-2xl font-semibold mb-6">Atenciones de Hoy ({todayApps.length})</h2>
+            {todayApps.length === 0 ? (
+              <div className="bg-white rounded-3xl p-12 text-center text-gray-500">
+                No hay atenciones programadas para hoy.
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {todayApps.map(app => (
+                  <AppointmentCard 
+                    key={app.id} 
+                    app={app} 
+                    onCancel={() => {}} 
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
   
         {tab === 'mis' && (
           <div>
-            <h2 className="text-2xl font-semibold mb-6">Mis Tareas Asignadas</h2>
-            {myTasks.length === 0 ? <p className="text-gray-500">No tienes tareas asignadas.</p> : myTasks.map(app => <AppointmentCard key={app.id} app={app} />)}
+            <h2 className="text-2xl font-semibold mb-6">Mis Tareas Asignadas ({myTasks.length})</h2>
+            {myTasks.length === 0 ? (
+              <div className="bg-white rounded-3xl p-12 text-center text-gray-500">
+                No tienes tareas asignadas en este momento.
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {myTasks.map(app => (
+                  <div key={app.id} className="bg-white rounded-3xl p-6 shadow hover:shadow-xl transition-all">
+                    <AppointmentCard app={app} onCancel={() => {}} />
+                    
+                    <div className="flex gap-3 mt-6">
+                      {app.status === 'pendiente' && (
+                        <button 
+                          onClick={() => takeTask(app)}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-3xl font-medium"
+                        >
+                          Tomar esta tarea
+                        </button>
+                      )}
+                      {app.status === 'asignada' && (
+                        <>
+                          <button 
+                            onClick={() => updateStatus(app.id, 'en_tratamiento')}
+                            className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-3xl font-medium"
+                          >
+                            Iniciar tratamiento
+                          </button>
+                          <button 
+                            onClick={() => updateStatus(app.id, 'completada')}
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-4 rounded-3xl font-medium"
+                          >
+                            Marcar como completada
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
   
-        {tab === 'calendario' && <CalendarView appointments={allAppointments} onEdit={() => {}} />}
+        {tab === 'calendario' && (
+          <CalendarView 
+            appointments={allAppointments} 
+            onEdit={(app) => alert(`Editar cita: ${app.patientName}`)} 
+          />
+        )}
+  
+        <div className="mt-12 text-center text-xs text-gray-400">
+          Professional Dashboard • Enfermereando © 2026
+        </div>
       </div>
     );
   }
