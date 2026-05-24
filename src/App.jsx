@@ -1940,10 +1940,20 @@ const sget = async (key, defaultValue = null) => {
   try {
     const { data, error } = await supabase.from('app_storage').select('value').eq('key', key).single();
     if (error) {
-      console.error(`[sget] Error al obtener ${key}:`, error);
+      // PGRST116 = registro no existe (Supabase normal cuando aún no se ha guardado nada)
+      if (error.code !== 'PGRST116') {
+        console.error(`[sget] Error al obtener ${key}:`, error);
+      }
       return defaultValue;
     }
-    return data ? data.value : defaultValue;
+    // Defensa contra valores corruptos: si lo guardado es null, undefined o array vacío
+    // y el default es un array no vacío, preferimos el default (evita renderizar tarjetas fantasma).
+    const stored = data?.value;
+    if (stored === null || stored === undefined) return defaultValue;
+    if (Array.isArray(defaultValue) && defaultValue.length > 0 && Array.isArray(stored) && stored.length === 0) {
+      return defaultValue;
+    }
+    return stored;
   } catch (err) {
     console.error(`[sget] Excepción al obtener ${key}:`, err);
     return defaultValue;
