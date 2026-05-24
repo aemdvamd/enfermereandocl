@@ -1,3 +1,4 @@
+import { supabase } from './supabase';
 import { useState, useEffect } from 'react';
 import {
   Pill, Activity, Syringe, Home as HomeIcon, Cross, Heart, BookOpen,
@@ -81,6 +82,193 @@ const sendTelegramToAdmin = async (app, action = 'new', services = [], extraInfo
     return false;
   }
 };
+
+function Landing({ setView, services = [] }) {
+  return (
+    <div className="min-h-screen bg-white overflow-hidden">
+      {/* NAVBAR */}
+      <nav className="bg-white border-b sticky top-0 z-50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 md:px-10 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-3xl shadow-inner">🩺</div>
+            <span className="text-3xl font-bold tracking-tighter text-gray-900">Enfermereando</span>
+          </div>
+
+          <div className="hidden md:flex items-center gap-9 text-sm font-medium text-gray-700">
+            <a href="#servicios" className="hover:text-indigo-600 transition-colors">Servicios</a>
+            <a href="#valores" className="hover:text-indigo-600 transition-colors">Valores</a>
+            <a href="#testimonios" className="hover:text-indigo-600 transition-colors">Testimonios</a>
+          </div>
+
+          <a
+            href="https://wa.me/56912345678"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold px-7 py-3 rounded-3xl transition-all shadow-md"
+          >
+            <span className="text-xl">💬</span>
+            <span>WhatsApp</span>
+          </a>
+
+          <button
+            onClick={() => setView('login')}
+            className="px-7 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-3xl transition-all text-sm"
+          >
+            Iniciar Sesión
+          </button>
+        </div>
+      </nav>
+
+      {/* HERO */}
+      <section className="max-w-7xl mx-auto px-6 md:px-10 pt-16 pb-20 grid md:grid-cols-12 gap-12 items-center">
+        <div className="md:col-span-7">
+          <div className="inline-flex items-center gap-2 bg-emerald-100 text-emerald-700 text-sm font-medium px-6 py-2 rounded-3xl mb-6">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            Atención disponible hoy en Santiago
+          </div>
+
+          <h1 className="text-6xl md:text-7xl font-bold leading-none tracking-tighter text-gray-900">
+            Cuidados de enfermería<br />en la comodidad de tu hogar
+          </h1>
+
+          <p className="mt-8 text-2xl text-gray-600 max-w-xl">
+            Profesionales certificadas con más de 15 años de experiencia. Rápido, seguro y con seguimiento en tiempo real.
+          </p>
+
+          <div className="mt-10 flex flex-wrap gap-4">
+            <button
+              onClick={() => setView('login')}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xl font-semibold px-12 py-6 rounded-3xl transition-all active:scale-[0.97] shadow-xl flex items-center gap-3"
+            >
+              Solicitar Atención Ahora
+              <span className="text-3xl leading-none">→</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="md:col-span-5 relative">
+          <div className="aspect-video bg-gradient-to-br from-indigo-100 to-blue-100 rounded-3xl overflow-hidden shadow-2xl">
+            <img
+              src="https://picsum.photos/id/1005/1200/800"
+              alt="Enfermera atendiendo paciente en su hogar"
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* ==================== SERVICIOS DINÁMICOS ==================== */}
+      <section id="servicios" className="bg-gray-50 py-20">
+        <div className="max-w-7xl mx-auto px-6 md:px-10">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold text-gray-900">Nuestros Servicios</h2>
+            <p className="text-gray-600 mt-3">Atención profesional de enfermería a domicilio</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {services
+              .filter(service => service.active === true)
+              .map(service => (
+                <div
+                  key={service.id}
+                  className="bg-white rounded-3xl shadow hover:shadow-2xl transition-all p-8 flex flex-col"
+                >
+                  <div className="text-5xl mb-6">
+                    {service.name.toLowerCase().includes('inyecci') && '💉'}
+                    {service.name.toLowerCase().includes('curacion') && '🩸'}
+                    {service.name.toLowerCase().includes('muestra') && '🧪'}
+                    {service.name.toLowerCase().includes('geri') && '🧓'}
+                    {!service.name.toLowerCase().match(/inyecci|curacion|muestra|geri/) && '🩺'}
+                  </div>
+
+                  <h3 className="font-bold text-2xl text-gray-900 mb-3">{service.name}</h3>
+                  
+                  <p className="text-gray-600 text-sm leading-relaxed flex-1">
+                    {service.description || 'Servicio profesional de enfermería a domicilio'}
+                  </p>
+
+                  <div className="mt-8 pt-6 border-t flex items-baseline justify-between">
+                    <div>
+                      <span className="text-4xl font-semibold text-indigo-600">${service.price}</span>
+                      <span className="text-gray-400 text-sm ml-1">CLP</span>
+                    </div>
+                    <span className="text-xs font-medium bg-emerald-100 text-emerald-700 px-4 py-2 rounded-3xl">Disponible</span>
+                  </div>
+                </div>
+              ))}
+          </div>
+
+          {services.filter(s => s.active).length === 0 && (
+            <div className="text-center py-12 text-gray-400">
+              No hay servicios activos en este momento
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* VALORES */}
+      <section id="valores" className="py-20">
+        <div className="max-w-7xl mx-auto px-6 md:px-10">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold text-gray-900">Nuestros Valores</h2>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="text-center p-8">
+              <div className="mx-auto w-20 h-20 bg-indigo-100 rounded-3xl flex items-center justify-center text-5xl mb-6">❤️</div>
+              <h3 className="text-2xl font-semibold">Empatía</h3>
+              <p className="text-gray-600 mt-4">Tratamos a cada paciente como parte de nuestra familia</p>
+            </div>
+            <div className="text-center p-8">
+              <div className="mx-auto w-20 h-20 bg-indigo-100 rounded-3xl flex items-center justify-center text-5xl mb-6">🔒</div>
+              <h3 className="text-2xl font-semibold">Confianza</h3>
+              <p className="text-gray-600 mt-4">Profesionales certificadas con años de experiencia</p>
+            </div>
+            <div className="text-center p-8">
+              <div className="mx-auto w-20 h-20 bg-indigo-100 rounded-3xl flex items-center justify-center text-5xl mb-6">⏱️</div>
+              <h3 className="text-2xl font-semibold">Rapidez</h3>
+              <p className="text-gray-600 mt-4">Respuesta en menos de 90 minutos en Santiago</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA FINAL */}
+      <section className="bg-gradient-to-r from-indigo-600 to-blue-700 py-20 text-white">
+        <div className="max-w-4xl mx-auto text-center px-6">
+          <h2 className="text-5xl font-bold">¿Necesitas atención hoy?</h2>
+          <p className="text-2xl mt-4 opacity-90">Solicita tu cita en menos de 60 segundos</p>
+          <button
+            onClick={() => setView('login')}
+            className="mt-12 bg-white text-indigo-700 hover:bg-amber-100 text-2xl font-semibold px-16 py-7 rounded-3xl transition-all active:scale-95 shadow-2xl"
+          >
+            Solicitar Atención Ahora
+          </button>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer className="bg-gray-900 text-white py-12">
+        <div className="max-w-7xl mx-auto px-6 md:px-10 text-center">
+          <p className="text-sm opacity-60">Enfermereando © 2026 • Mariela Droguett • Enfermera Universitaria</p>
+          <p className="text-xs opacity-40 mt-4">Atención profesional a domicilio en Santiago y Región Metropolitana</p>
+        </div>
+      </footer>
+
+      {/* BOTÓN FLOTANTE WHATSAPP */}
+      <a
+        href="https://wa.me/56912345678"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-8 right-8 bg-green-500 hover:bg-green-600 text-white w-16 h-16 rounded-3xl flex items-center justify-center text-4xl shadow-2xl z-50 transition-transform hover:scale-110"
+      >
+        💬
+      </a>
+    </div>
+  );
+}
 
 // ==================== APPOINTMENT CARD ====================
 function AppointmentCard({ app, onCancel }) {
@@ -572,7 +760,7 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
   );
 }
 
-// ==================== PROFESSIONAL DASHBOARD (REFACTORIZADO) ====================
+// ==================== PROFESSIONAL DASHBOARD ====================
 function ProfessionalDashboard({ 
   user, 
   appointments = [], 
