@@ -359,66 +359,52 @@ function TabButton({ active, onClick, children, icon: Icon }) {
 // ==================== CALENDAR VIEW ====================
 function CalendarView({ appointments, onEdit }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth();
 
-  const startOfMonth = new Date(year, month, 1);
-  const startDate = new Date(startOfMonth);
-  startDate.setDate(startDate.getDate() - startDate.getDay());
+  const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+  const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
 
-  const days = Array.from({ length: 42 }, (_, i) => {
-    const d = new Date(startDate);
-    d.setDate(startDate.getDate() + i);
-    return d;
-  });
+  const days = [];
+  const startDay = startOfMonth.getDay();
+  for (let i = 0; i < startDay; i++) days.push(null);
+  for (let i = 1; i <= endOfMonth.getDate(); i++) {
+    const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), i);
+    days.push(date);
+  }
 
   const appointmentsByDate = {};
   appointments.forEach(app => {
-    if (app.status === 'cancelada') return;
     const key = app.date;
     if (!appointmentsByDate[key]) appointmentsByDate[key] = [];
     appointmentsByDate[key].push(app);
   });
 
-  const navigateMonth = (delta) => {
-    const newM = new Date(currentMonth);
-    newM.setMonth(newM.getMonth() + delta);
-    setCurrentMonth(newM);
-  };
-
   return (
-    <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
-      <div className="p-5 border-b flex items-center justify-between bg-slate-50">
-        <button onClick={() => navigateMonth(-1)} className="p-3 hover:bg-slate-100 rounded-xl">←</button>
-        <h2 className="text-2xl font-bold text-slate-900">
+    <div className="bg-white rounded-3xl shadow-xl p-6">
+      <div className="flex justify-between items-center mb-6">
+        <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="text-2xl">←</button>
+        <h2 className="text-2xl font-semibold">
           {currentMonth.toLocaleString('es-CL', { month: 'long', year: 'numeric' })}
         </h2>
-        <button onClick={() => navigateMonth(1)} className="p-3 hover:bg-slate-100 rounded-xl">→</button>
+        <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="text-2xl">→</button>
       </div>
 
-      <div className="grid grid-cols-7 text-center text-xs font-medium text-slate-500 border-b py-3 bg-white">
-        {['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].map(d => <div key={d}>{d}</div>)}
-      </div>
-
-      <div className="grid grid-cols-7 gap-px bg-slate-200 p-px">
+      <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-2xl overflow-hidden">
+        {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map(day => (
+          <div key={day} className="bg-white p-3 text-center text-sm font-medium text-gray-500">{day}</div>
+        ))}
         {days.map((day, i) => {
+          if (!day) return <div key={i} className="bg-white p-3 min-h-[120px]"></div>;
           const dateKey = day.toISOString().split('T')[0];
           const dayApps = appointmentsByDate[dateKey] || [];
           return (
-            <div key={i} className="min-h-[110px] bg-white p-2 hover:bg-teal-50">
+            <div key={i} className="bg-white p-3 min-h-[120px] border-t hover:bg-gray-50 cursor-pointer" onClick={() => dayApps.length && onEdit(dayApps[0])}>
               <div className="text-right text-sm font-medium">{day.getDate()}</div>
-              <div className="mt-2 space-y-1">
-                {dayApps.slice(0, 3).map(app => (
-                  <div
-                    key={app.id}
-                    onClick={(e) => { e.stopPropagation(); onEdit(app); }}
-                    className="text-[10px] px-2 py-1 bg-teal-100 text-teal-800 rounded flex items-center gap-1 cursor-pointer hover:bg-teal-200"
-                  >
-                    <span className="font-mono">{app.time?.slice(0,5)}</span>
-                    <span className="truncate">{app.patientName}</span>
-                  </div>
-                ))}
-              </div>
+              {dayApps.slice(0, 3).map(app => (
+                <div key={app.id} className="text-xs mt-1 bg-indigo-100 text-indigo-700 px-2 py-1 rounded-xl truncate">
+                  {app.patientName} • {app.time}
+                </div>
+              ))}
+              {dayApps.length > 3 && <div className="text-xs text-gray-400 mt-1">+{dayApps.length - 3} más</div>}
             </div>
           );
         })}
@@ -607,177 +593,163 @@ function LoginView({
 // ==================== PATIENT PORTAL + REQUEST FORM + APPOINTMENT CARD ====================
 
 /* ====================== PATIENT PORTAL ===================================== */
-function PatientPortal({ user, services, appointments, saveAppointments, onLogout }) {
+function PatientPortal({ user, appointments, saveAppointments, services, setView }) {
   const [tab, setTab] = useState('inicio');
-  const [showRequestForm, setShowRequestForm] = useState(false);
 
-  // Solo las atenciones del paciente actual
+  // FILTRO CORREGIDO: el paciente ve TODAS sus solicitudes
+  // (como paciente principal O como beneficiario)
   const myAppointments = appointments.filter(app => 
     app.patientName === user.name || 
     (app.beneficiaries && app.beneficiaries.some(b => b.name === user.name))
   );
 
-  const upcoming = myAppointments
-    .filter(a => a.status !== 'cancelada' && new Date(a.date) >= new Date())
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
+  // Últimas solicitudes para la pestaña "Inicio"
+  const lastRequests = [...myAppointments]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 5);
 
-  const history = myAppointments
-    .filter(a => a.status === 'cancelada' || new Date(a.date) < new Date())
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const upcoming = myAppointments.filter(a => 
+    ['pendiente', 'asignada', 'en_tratamiento'].includes(a.status)
+  );
 
-    const cancelAppointment = async (app) => {
-      if (!confirm(`¿Cancelar la atención del ${new Date(app.date).toLocaleDateString('es-CL')}?`)) return;
-    
-      const isSeries = !!app.seriesId;
-      let appointmentsToCancel = [app.id];
-    
-      if (isSeries) {
-        const seriesApps = appointments.filter(a => a.seriesId === app.seriesId);
-        const cancelAll = confirm(`Esta cita pertenece a una SERIE de ${seriesApps.length} dosis.\n\n¿Cancelar SOLO esta cita o TODA LA SERIE?`);
-        if (cancelAll) appointmentsToCancel = seriesApps.map(a => a.id);
-      }
-    
-      const updated = appointments.map(a => 
-        appointmentsToCancel.includes(a.id) ? { ...a, status: 'cancelada' } : a
-      );
-    
-      await saveAppointments(updated);
-    
-      const representative = appointments.find(a => a.id === appointmentsToCancel[0]);
-    
-      // ←←← TELEGRAM
-      await sendTelegramToAdmin(representative, 'cancelled', services, 
-        appointmentsToCancel.length > 1 ? 'Serie completa cancelada' : ''
-      );
-    
-      alert(appointmentsToCancel.length > 1 
-        ? `✅ Toda la serie (${appointmentsToCancel.length} citas) ha sido cancelada.` 
-        : '✅ Cita cancelada correctamente.'
-      );
-    };
+  const history = myAppointments.filter(a => 
+    ['completada', 'cancelada'].includes(a.status)
+  );
 
-  const handleNewAppointment = async (newAppointmentsArray) => {
-    const updated = [...appointments, ...newAppointmentsArray];
+  // Cancelación con Telegram
+  const cancelAppointment = async (app) => {
+    if (!confirm(`¿Cancelar la atención del ${new Date(app.date).toLocaleDateString('es-CL')}?`)) return;
+
+    const isSeries = !!app.seriesId;
+    let appointmentsToCancel = [app.id];
+
+    if (isSeries) {
+      const seriesApps = appointments.filter(a => a.seriesId === app.seriesId);
+      const cancelAll = confirm(`Esta cita pertenece a una SERIE de ${seriesApps.length} dosis.\n\n¿Cancelar SOLO esta cita o TODA LA SERIE?`);
+      if (cancelAll) appointmentsToCancel = seriesApps.map(a => a.id);
+    }
+
+    const updated = appointments.map(a => 
+      appointmentsToCancel.includes(a.id) ? { ...a, status: 'cancelada' } : a
+    );
+
     await saveAppointments(updated);
-    setShowRequestForm(false);
-    setTab('inicio');
+
+    const representative = appointments.find(a => a.id === appointmentsToCancel[0]);
+
+    await sendTelegramToAdmin(representative, 'cancelled', services,
+      appointmentsToCancel.length > 1 ? 'Serie completa cancelada' : ''
+    );
+
+    alert(appointmentsToCancel.length > 1 
+      ? `✅ Toda la serie (${appointmentsToCancel.length} citas) ha sido cancelada.` 
+      : '✅ Cita cancelada correctamente.'
+    );
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* HEADER */}
-      <header className="bg-white border-b shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <Stethoscope className="w-9 h-9 text-teal-600" />
-            <div className="font-bold text-3xl tracking-tight">Enfermereando</div>
-          </div>
-          <div className="flex items-center gap-6">
-            <div className="text-right">
-              <div className="font-semibold text-lg">Hola, {user.name}</div>
-              <div className="text-teal-600 text-sm">Paciente</div>
-            </div>
-            <button 
-              onClick={onLogout}
-              className="flex items-center gap-2 px-5 py-2.5 hover:bg-slate-100 rounded-2xl text-slate-700 transition-colors"
-            >
-              <LogOut className="w-5 h-5" /> Salir
-            </button>
-          </div>
+    <div className="max-w-6xl mx-auto p-6">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Mi Panel de Paciente</h1>
+          <p className="text-gray-600">Bienvenido, {user.name}</p>
         </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* TABS */}
-        <div className="flex border-b mb-8">
-          <button
-            onClick={() => { setTab('inicio'); setShowRequestForm(false); }}
-            className={`flex-1 md:flex-none px-8 py-4 text-lg font-medium border-b-4 transition-all ${tab === 'inicio' && !showRequestForm ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500'}`}
-          >
-            Inicio
-          </button>
-          <button
-            onClick={() => setShowRequestForm(true)}
-            className={`flex-1 md:flex-none px-8 py-4 text-lg font-medium border-b-4 transition-all ${showRequestForm ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500'}`}
-          >
-            Solicitar Atención
-          </button>
-          <button
-            onClick={() => { setTab('historial'); setShowRequestForm(false); }}
-            className={`flex-1 md:flex-none px-8 py-4 text-lg font-medium border-b-4 transition-all ${tab === 'historial' && !showRequestForm ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500'}`}
-          >
-            Historial
-          </button>
-        </div>
-
-        {/* CONTENIDO - SOLO UNA SECCIÓN ACTIVA */}
-        {showRequestForm ? (
-          <RequestForm 
-            services={services} 
-            onSubmit={handleNewAppointment} 
-            onCancel={() => setShowRequestForm(false)} 
-          />
-        ) : tab === 'inicio' ? (
-          <div>
-            <h2 className="text-3xl font-bold mb-6">Próximas Atenciones</h2>
-            {upcoming.length === 0 ? (
-              <div className="bg-white rounded-3xl p-16 text-center text-slate-400 text-xl">
-                No tienes atenciones próximas<br />
-                <button 
-                  onClick={() => setShowRequestForm(true)}
-                  className="mt-6 px-8 py-4 bg-teal-600 text-white rounded-2xl font-medium"
-                >
-                  Solicitar nueva atención
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {upcoming.map(app => (
-                  <div key={app.id} className="bg-white rounded-3xl p-6 flex justify-between items-center border border-slate-200">
-                    <div>
-                      <div className="font-semibold text-xl">{app.patientName}</div>
-                      <div className="text-slate-500 mt-1">
-                        {new Date(app.date).toLocaleDateString('es-CL', { weekday: 'long', month: 'long', day: 'numeric' })} • {fmtTime(app.time)}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => cancelAppointment(app)}
-                      className="text-red-500 hover:text-red-600 text-sm flex items-center gap-1"
-                    >
-                      <Trash2 className="w-4 h-4" /> Cancelar
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : tab === 'historial' && (
-          <div>
-            <h2 className="text-3xl font-bold mb-6">Historial de Atenciones</h2>
-            {history.length === 0 ? (
-              <div className="bg-white rounded-3xl p-16 text-center text-slate-400">Aún no tienes historial</div>
-            ) : (
-              <div className="space-y-4">
-                {history.map(app => (
-                  <div key={app.id} className="bg-white rounded-3xl p-6">
-                    <div className="flex justify-between">
-                      <div>
-                        <div className="font-medium">{app.patientName}</div>
-                        <div className="text-sm text-slate-500">
-                          {new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}
-                        </div>
-                      </div>
-                      <span className={`px-5 py-1 text-xs font-medium rounded-2xl ${app.status === 'cancelada' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                        {app.status === 'cancelada' ? 'Cancelada' : 'Completada'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        <button
+          onClick={() => setView('landing')}
+          className="flex items-center gap-2 text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          ← Cerrar sesión
+        </button>
       </div>
+
+      {/* TABS */}
+      <div className="flex border-b border-gray-200 mb-8">
+        <button
+          onClick={() => setTab('inicio')}
+          className={`px-8 py-4 font-medium text-lg transition-all ${
+            tab === 'inicio' 
+              ? 'border-b-4 border-indigo-600 text-indigo-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Inicio
+        </button>
+        <button
+          onClick={() => setTab('solicitar')}
+          className={`px-8 py-4 font-medium text-lg transition-all ${
+            tab === 'solicitar' 
+              ? 'border-b-4 border-indigo-600 text-indigo-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Solicitar Atención
+        </button>
+        <button
+          onClick={() => setTab('historial')}
+          className={`px-8 py-4 font-medium text-lg transition-all ${
+            tab === 'historial' 
+              ? 'border-b-4 border-indigo-600 text-indigo-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Historial
+        </button>
+      </div>
+
+      {/* CONTENIDO - Solo una pestaña activa */}
+      {tab === 'inicio' && (
+        <div>
+          <h2 className="text-2xl font-semibold mb-6">Últimas solicitudes</h2>
+          {lastRequests.length === 0 ? (
+            <div className="bg-white rounded-3xl p-12 text-center text-gray-500">
+              Aún no tienes solicitudes de atención.
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {lastRequests.map(app => (
+                <AppointmentCard 
+                  key={app.id} 
+                  app={app} 
+                  onCancel={cancelAppointment} 
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'solicitar' && (
+        <RequestForm 
+          services={services} 
+          onSubmit={async (newApps) => {
+            const updated = [...appointments, ...newApps];
+            await saveAppointments(updated);
+            setTab('inicio'); // vuelve al inicio después de enviar
+          }} 
+          onCancel={() => setTab('inicio')}
+        />
+      )}
+
+      {tab === 'historial' && (
+        <div>
+          <h2 className="text-2xl font-semibold mb-6">Historial completo</h2>
+          {myAppointments.length === 0 ? (
+            <div className="bg-white rounded-3xl p-12 text-center text-gray-500">
+              No tienes historial de solicitudes.
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {myAppointments.map(app => (
+                <AppointmentCard 
+                  key={app.id} 
+                  app={app} 
+                  onCancel={cancelAppointment} 
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1797,205 +1769,87 @@ function ServicesManager({ services, saveServices }) {
 /* =============================================
    PROFESSIONAL DASHBOARD - Dashboard del Profesional
    ============================================= */
-   function ProfessionalDashboard({ 
-    user, 
-    services, 
-    appointments, 
-    saveAppointments, 
-    onLogout 
-  }) {
-    const [tab, setTab] = useState('mis-atenciones');
-    const [editingApp, setEditingApp] = useState(null);
+   function ProfessionalDashboard({ user, appointments, saveAppointments, services, setView }) {
+    const [tab, setTab] = useState('hoy');
   
-    // Solo atenciones asignadas a este profesional
-    const myAppointments = appointments.filter(a => a.assignedTo === user.id);
+    // El profesional ve TODAS las solicitudes (correcto)
+    const allAppointments = [...appointments].sort((a, b) => new Date(b.date) - new Date(a.date));
   
-    // ==================== TOMAR TAREA ====================
-// TOMAR TAREA
-const takeTask = async (app) => {
-  if (app.status !== 'pendiente') return;
-
-  const updated = appointments.map(a => 
-    a.id === app.id ? { ...a, status: 'asignada', assignedTo: user.id } : a
-  );
-
-  await saveAppointments(updated);
-
-  await sendTelegramToAdmin(app, 'task_taken', services, `Tomada por: ${user.name}`);
-  alert(`✅ Tarea tomada y notificado por Telegram.`);
-};
-
-// ACTUALIZAR ESTADO
-const updateStatus = async (appId, newStatus) => {
-  const updated = appointments.map(a => a.id === appId ? { ...a, status: newStatus } : a);
-  await saveAppointments(updated);
-
-  const app = updated.find(a => a.id === appId);
-  await sendTelegramToAdmin(app, 'status_change', services);
-};
-
-// ACTUALIZAR DOSIS
-const updateDoses = async (appId, completedDoses) => {
-  const updated = appointments.map(app => {
-    if (app.id !== appId) return app;
-    return {
-      ...app,
-      beneficiaries: app.beneficiaries.map(ben => ({
-        ...ben,
-        services: ben.services.map(s => ({
-          ...s,
-          completedDoses: parseInt(completedDoses) || 0
-        }))
-      }))
+    const todayApps = allAppointments.filter(app => 
+      new Date(app.date).toDateString() === new Date().toDateString()
+    );
+  
+    const myTasks = allAppointments.filter(app => 
+      app.assignedTo === user.id || app.status === 'asignada'
+    );
+  
+    const takeTask = async (app) => {
+      if (app.status !== 'pendiente') return;
+      const updated = appointments.map(a => 
+        a.id === app.id ? { ...a, status: 'asignada', assignedTo: user.id } : a
+      );
+      await saveAppointments(updated);
+      await sendTelegramToAdmin(app, 'task_taken', services, `Tomada por: ${user.name}`);
+      alert(`✅ Tarea asignada y notificado por Telegram`);
     };
-  });
-  await saveAppointments(updated);
-
-  const app = updated.find(a => a.id === appId);
-  await sendTelegramToAdmin(app, 'dose_update', services, `Dosis actualizadas: ${completedDoses}`);
-};
+  
+    const updateStatus = async (appId, newStatus) => {
+      const updated = appointments.map(a => a.id === appId ? { ...a, status: newStatus } : a);
+      await saveAppointments(updated);
+      const app = updated.find(a => a.id === appId);
+      await sendTelegramToAdmin(app, 'status_change', services);
+    };
+  
+    const updateDoses = async (appId, completedDoses) => {
+      const updated = appointments.map(app => {
+        if (app.id !== appId) return app;
+        return {
+          ...app,
+          beneficiaries: app.beneficiaries.map(ben => ({
+            ...ben,
+            services: ben.services.map(s => ({
+              ...s,
+              completedDoses: parseInt(completedDoses) || 0
+            }))
+          }))
+        };
+      });
+      await saveAppointments(updated);
+      const app = updated.find(a => a.id === appId);
+      await sendTelegramToAdmin(app, 'dose_update', services, `Dosis: ${completedDoses}`);
+    };
   
     return (
-      <div className="min-h-screen bg-slate-50">
-        {/* HEADER */}
-        <header className="bg-white border-b shadow-sm">
-          <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <Stethoscope className="w-8 h-8 text-teal-600" />
-              <div className="font-bold text-2xl">Enfermereando</div>
-              <span className="text-teal-600 font-medium">• Dashboard Profesional</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <NotificationBell userId={user.id} notifications={[]} />
-              <div>
-                <div className="font-semibold">{user.name}</div>
-                <div className="text-xs text-teal-600">Profesional</div>
-              </div>
-              <button onClick={onLogout} className="p-2 hover:bg-slate-100 rounded-xl">
-                <LogOut className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </header>
-  
-        <div className="max-w-7xl mx-auto px-6 py-8">
-          {/* TABS */}
-          <div className="flex gap-2 mb-8 border-b pb-2">
-            <TabButton active={tab === 'mis-atenciones'} onClick={() => setTab('mis-atenciones')} icon={Users}>
-              Mis Atenciones
-            </TabButton>
-            <TabButton active={tab === 'hoy'} onClick={() => setTab('hoy')} icon={Calendar}>
-              Hoy
-            </TabButton>
-            <TabButton active={tab === 'calendario'} onClick={() => setTab('calendario')} icon={Calendar}>
-              Calendario
-            </TabButton>
-          </div>
-  
-          {/* MIS ATENCIONES */}
-          {tab === 'mis-atenciones' && (
-            <div className="space-y-6">
-              {myAppointments.length === 0 ? (
-                <div className="bg-white rounded-3xl p-16 text-center text-slate-400">No tienes atenciones asignadas</div>
-              ) : (
-                myAppointments.map(app => (
-                  <div key={app.id} className="bg-white border border-slate-200 rounded-3xl p-6">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-semibold text-xl">{app.patientName}</div>
-                        <div className="text-sm text-slate-500">
-                          {new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}
-                        </div>
-                      </div>
-                      <button onClick={() => setEditingApp(app)} className="text-teal-600 hover:text-teal-700 font-medium">Editar →</button>
-                    </div>
-  
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-                      {/* Estado */}
-                      <div>
-                        <label className="text-xs text-slate-500">Estado</label>
-                        <select
-                          value={app.status || 'pendiente'}
-                          onChange={(e) => updateStatus(app.id, e.target.value)}
-                          className="w-full mt-2 px-4 py-3 rounded-2xl border border-slate-300"
-                        >
-                          <option value="pendiente">Pendiente</option>
-                          <option value="asignada">Asignada</option>
-                          <option value="en_tratamiento">En tratamiento</option>
-                          <option value="completada">Completada</option>
-                        </select>
-                      </div>
-  
-                      {/* Dosis */}
-                      <div>
-                        <label className="text-xs text-slate-500">Dosis completadas</label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={app.beneficiaries?.[0]?.services?.[0]?.completedDoses || 0}
-                          onChange={(e) => updateDoses(app.id, e.target.value)}
-                          className="w-full mt-2 px-4 py-3 rounded-2xl border border-slate-300"
-                        />
-                      </div>
-  
-                      {/* Tomar tarea */}
-                      {app.status === 'pendiente' && (
-                        <button
-                          onClick={() => takeTask(app)}
-                          className="mt-8 h-fit px-8 py-4 bg-teal-600 text-white rounded-2xl font-semibold hover:bg-teal-700"
-                        >
-                          Tomar esta tarea
-                        </button>
-                      )}
-                    </div>
-  
-                    <textarea
-                      value={app.notes || ''}
-                      onChange={(e) => {
-                        const updated = appointments.map(a => a.id === app.id ? { ...a, notes: e.target.value } : a);
-                        saveAppointments(updated);
-                      }}
-                      placeholder="Notas clínicas..."
-                      className="w-full mt-6 px-4 py-3 rounded-2xl border border-slate-300 text-sm"
-                      rows={2}
-                    />
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-  
-          {/* HOY */}
-          {tab === 'hoy' && (
-            <div>
-              <h2 className="text-2xl font-bold mb-6">Atenciones de Hoy</h2>
-              {myAppointments.filter(a => a.date === new Date().toISOString().split('T')[0]).length === 0 ? (
-                <div className="text-center py-20 text-slate-400">No tienes atenciones para hoy</div>
-              ) : (
-                myAppointments.filter(a => a.date === new Date().toISOString().split('T')[0]).map(app => (
-                  <AppointmentCard key={app.id} app={app} services={services} onEdit={setEditingApp} onCancel={() => {}} saveAppointments={saveAppointments} />
-                ))
-              )}
-            </div>
-          )}
-  
-          {/* CALENDARIO */}
-          {tab === 'calendario' && <CalendarView appointments={myAppointments} onEdit={setEditingApp} />}
-  
-          {/* MODAL DE EDICIÓN */}
-          {editingApp && (
-            <EditAppointmentModal 
-              app={editingApp} 
-              services={services} 
-              onSave={async (updates) => {
-                const newList = appointments.map(a => a.id === updates.id ? { ...a, ...updates } : a);
-                await saveAppointments(newList);
-                setEditingApp(null);
-              }} 
-              onClose={() => setEditingApp(null)} 
-            />
-          )}
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold">Panel Profesional</h1>
+          <button onClick={() => setView('landing')} className="text-gray-500 hover:text-gray-700">
+            ← Cerrar sesión
+          </button>
         </div>
+  
+        {/* TABS */}
+        <div className="flex border-b mb-8">
+          <button onClick={() => setTab('hoy')} className={`px-8 py-4 ${tab === 'hoy' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Hoy</button>
+          <button onClick={() => setTab('mis')} className={`px-8 py-4 ${tab === 'mis' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Mis Atenciones</button>
+          <button onClick={() => setTab('calendario')} className={`px-8 py-4 ${tab === 'calendario' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Calendario</button>
+        </div>
+  
+        {tab === 'hoy' && (
+          <div>
+            <h2 className="text-2xl font-semibold mb-6">Atenciones de Hoy</h2>
+            {todayApps.length === 0 ? <p className="text-gray-500">No hay atenciones para hoy.</p> : todayApps.map(app => <AppointmentCard key={app.id} app={app} onCancel={() => {}} />)}
+          </div>
+        )}
+  
+        {tab === 'mis' && (
+          <div>
+            <h2 className="text-2xl font-semibold mb-6">Mis Tareas Asignadas</h2>
+            {myTasks.length === 0 ? <p className="text-gray-500">No tienes tareas asignadas.</p> : myTasks.map(app => <AppointmentCard key={app.id} app={app} onCancel={() => {}} />)}
+          </div>
+        )}
+  
+        {tab === 'calendario' && <CalendarView appointments={allAppointments} onEdit={(app) => alert(`Editar: ${app.patientName}`)} />}
       </div>
     );
   }
