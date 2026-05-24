@@ -1779,7 +1779,7 @@ function AdminPanel({
   );
 }
 
-// ==================== MONITORING PANEL - VERSIÓN ESTABLE ====================
+// ==================== MONITORING PANEL ====================
 function MonitoringPanel({ 
   appointments, 
   services, 
@@ -1788,53 +1788,88 @@ function MonitoringPanel({
   onEdit 
 }) {
   const [filterStatus, setFilterStatus] = useState('all');
-  const isAdmin = currentUser.role === 'admin';
+  const [pendingChanges, setPendingChanges] = useState({}); // Para batch save
+
+  const isAdmin = currentUser?.role === 'admin';
+
+  const safeAppointments = Array.isArray(appointments) ? appointments : [];
 
   const myAppointments = isAdmin 
-    ? appointments 
-    : appointments.filter(a => a.assignedTo === currentUser.id);
+    ? safeAppointments 
+    : safeAppointments.filter(a => a.assignedTo === currentUser?.id);
 
   const filteredApps = filterStatus === 'all' 
     ? myAppointments 
     : myAppointments.filter(a => a.status === filterStatus);
 
+  // Actualizar campo individual
   const updateField = async (appId, field, value) => {
-    const updated = appointments.map(app => 
+    const updated = safeAppointments.map(app => 
       app.id === appId ? { ...app, [field]: value } : app
     );
     await saveAppointments(updated);
   };
 
-  const updateDoses = async (appId, completedDoses) => {
-    const updated = appointments.map(app => {
-      if (app.id !== appId) return app;
+  // Actualizar dosis (temporal)
+  const updateDoses = (appId, completedDoses) => {
+    setPendingChanges(prev => ({
+      ...prev,
+      [appId]: parseInt(completedDoses) || 0
+    }));
+  };
+
+  // Guardar todos los cambios pendientes
+  const saveAllChanges = async () => {
+    if (Object.keys(pendingChanges).length === 0) return;
+
+    const updatedAppointments = safeAppointments.map(app => {
+      if (pendingChanges[app.id] === undefined) return app;
       return {
         ...app,
-        beneficiaries: app.beneficiaries.map(ben => ({
+        beneficiaries: (app.beneficiaries || []).map(ben => ({
           ...ben,
-          services: ben.services.map(s => ({
+          services: (ben.services || []).map(s => ({
             ...s,
-            completedDoses: parseInt(completedDoses) || 0
+            completedDoses: pendingChanges[app.id]
           }))
         }))
       };
     });
-    await saveAppointments(updated);
+
+    await saveAppointments(updatedAppointments);
+    setPendingChanges({});
+    alert('✅ Todos los cambios de dosis han sido guardados');
   };
 
   return (
-    <div className="bg-white rounded-3xl p-6 border border-slate-200">
+    <div className="bg-white rounded-3xl shadow p-6 border border-gray-100">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">Monitoreo de Atenciones</h2>
+        <h2 className="text-2xl font-bold text-gray-900">Monitoreo de Atenciones</h2>
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-gray-500">
+            {filteredApps.length} atenciones
+          </div>
+          {Object.keys(pendingChanges).length > 0 && (
+            <button
+              onClick={saveAllChanges}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-3xl text-sm font-medium flex items-center gap-2 transition-all"
+            >
+              💾 Guardar todos los cambios
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="flex gap-2 mb-6 flex-wrap">
+      {/* Filtros */}
+      <div className="flex gap-2 mb-8 flex-wrap">
         {['all', 'pendiente', 'asignada', 'en_tratamiento', 'completada'].map(s => (
           <button
             key={s}
             onClick={() => setFilterStatus(s)}
-            className={`px-5 py-2 rounded-2xl text-sm font-medium transition-all ${
-              filterStatus === s ? 'bg-teal-600 text-white' : 'bg-slate-100 hover:bg-slate-200'
+            className={`px-5 py-2 rounded-3xl text-sm font-medium transition-all ${
+              filterStatus === s 
+                ? 'bg-indigo-600 text-white shadow-md' 
+                : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
             }`}
           >
             {s === 'all' ? 'Todas' : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -1844,33 +1879,60 @@ function MonitoringPanel({
 
       <div className="space-y-6">
         {filteredApps.length === 0 ? (
-          <div className="text-center py-16 text-slate-400">No hay atenciones para mostrar</div>
+          <div className="text-center py-16 text-gray-400 bg-gray-50 rounded-3xl">
+            No hay atenciones para mostrar con los filtros actuales
+          </div>
         ) : (
           filteredApps.map(app => {
-            const net = app.beneficiaries ? appNetPrice(app, services) : 0;
-            const isMine = app.assignedTo === currentUser.id;
+            const totalDoses = (app.beneficiaries || []).reduce((acc, ben) => {
+              return acc + (ben.services || []).reduce((sum, srv) => sum + (srv.doses || 0), 0);
+            }, 0);
+
+            const completedDoses = (app.beneficiaries || []).reduce((acc, ben) => {
+              return acc + (ben.services || []).reduce((sum, srv) => sum + (srv.completedDoses || 0), 0);
+            }, 0);
+
+            const progress = totalDoses > 0 ? Math.round((completedDoses / totalDoses) * 100) : 0;
 
             return (
-              <div key={app.id} className="border border-slate-200 rounded-3xl p-6">
+              <div key={app.id} className="border border-gray-200 rounded-3xl p-6 hover:shadow-md transition-all">
                 <div className="flex justify-between items-start mb-5">
                   <div>
-                    <div className="font-semibold text-lg">{app.patientName}</div>
-                    <div className="text-sm text-slate-500">
-                      {new Date(app.date).toLocaleDateString('es-CL')} • {fmtTime(app.time)}
+                    <div className="font-semibold text-lg">{app.patientName || app.beneficiaries?.[0]?.name}</div>
+                    <div className="text-sm text-gray-500">
+                      {new Date(app.date).toLocaleDateString('es-CL')} • {app.time}
                     </div>
                   </div>
-                  <button onClick={() => onEdit(app)} className="text-teal-600 hover:text-teal-700">
+                  <button 
+                    onClick={() => onEdit && onEdit(app)}
+                    className="text-indigo-600 hover:text-indigo-700 font-medium text-sm"
+                  >
                     Ver detalle →
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {/* Barra de progreso visual */}
+                <div className="mb-6">
+                  <div className="flex justify-between text-xs text-gray-500 mb-2">
+                    <span>Progreso de dosis</span>
+                    <span>{completedDoses} / {totalDoses}</span>
+                  </div>
+                  <div className="h-3 bg-gray-100 rounded-3xl overflow-hidden">
+                    <div 
+                      className="h-3 bg-indigo-600 transition-all duration-300" 
+                      style={{ width: `${progress}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Estado */}
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-2">Estado</label>
+                    <label className="block text-xs font-medium text-gray-500 mb-2">Estado</label>
                     <select
                       value={app.status || 'pendiente'}
                       onChange={(e) => updateField(app.id, 'status', e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                      className="w-full px-4 py-3 rounded-3xl border border-gray-300 focus:border-indigo-500 focus:ring-indigo-200"
                     >
                       <option value="pendiente">Pendiente</option>
                       <option value="asignada">Asignada</option>
@@ -1879,24 +1941,26 @@ function MonitoringPanel({
                     </select>
                   </div>
 
+                  {/* Dosis */}
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-2">Dosis completadas</label>
+                    <label className="block text-xs font-medium text-gray-500 mb-2">Dosis completadas</label>
                     <input
                       type="number"
                       min="0"
-                      value={app.beneficiaries?.[0]?.services?.[0]?.completedDoses || 0}
+                      value={completedDoses}
                       onChange={(e) => updateDoses(app.id, e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                      className="w-full px-4 py-3 rounded-3xl border border-gray-300 focus:border-indigo-500 focus:ring-indigo-200"
                     />
                   </div>
 
+                  {/* Notas */}
                   <div className="md:col-span-3">
-                    <label className="block text-xs font-medium text-slate-500 mb-2">Notas / Observaciones</label>
+                    <label className="block text-xs font-medium text-gray-500 mb-2">Notas / Observaciones</label>
                     <textarea
                       value={app.notes || ''}
                       onChange={(e) => updateField(app.id, 'notes', e.target.value)}
                       rows={3}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:border-teal-500"
+                      className="w-full px-4 py-3 rounded-3xl border border-gray-300 focus:border-indigo-500 focus:ring-indigo-200 resize-y"
                       placeholder="Observaciones clínicas..."
                     />
                   </div>
@@ -2133,17 +2197,14 @@ function ServicesManager({ services, saveServices }) {
     const safeAppointments = Array.isArray(appointments) ? appointments : [];
     const safeServices = Array.isArray(services) ? services : [];
   
-    // Todas las citas ordenadas por fecha
     const allAppointments = [...safeAppointments].sort((a, b) => 
       new Date(b.date) - new Date(a.date)
     );
   
-    // Citas de hoy
     const todayApps = allAppointments.filter(app => 
       new Date(app.date).toDateString() === new Date().toDateString()
     );
   
-    // Mis tareas asignadas
     const myTasks = allAppointments.filter(app => 
       app.assignedTo === user?.id || app.status === 'asignada'
     );
@@ -2151,11 +2212,9 @@ function ServicesManager({ services, saveServices }) {
     // ==================== ACCIONES ====================
     const takeTask = async (app) => {
       if (!app || app.status !== 'pendiente') return;
-      
       const updated = safeAppointments.map(a => 
         a.id === app.id ? { ...a, status: 'asignada', assignedTo: user.id } : a
       );
-      
       await saveAppointments(updated);
       await sendTelegramToAdmin(app, 'task_taken', safeServices, `Tomada por: ${user?.name}`);
       alert(`✅ Tarea tomada y notificado por Telegram`);
@@ -2166,12 +2225,11 @@ function ServicesManager({ services, saveServices }) {
         a.id === appId ? { ...a, status: newStatus } : a
       );
       await saveAppointments(updated);
-      
       const app = updated.find(a => a.id === appId) || {};
       await sendTelegramToAdmin(app, 'status_change', safeServices);
     };
   
-    const updateDoses = async (appId, newCompleted) => {
+    const updateDoses = async (appId, completedDoses) => {
       const updated = safeAppointments.map(app => {
         if (app.id !== appId) return app;
         return {
@@ -2180,13 +2238,12 @@ function ServicesManager({ services, saveServices }) {
             ...ben,
             services: (ben.services || []).map(s => ({
               ...s,
-              completedDoses: parseInt(newCompleted) || 0
+              completedDoses: parseInt(completedDoses) || 0
             }))
           }))
         };
       });
       await saveAppointments(updated);
-      
       const app = updated.find(a => a.id === appId) || {};
       await sendTelegramToAdmin(app, 'dose_update', safeServices, `Dosis actualizadas`);
     };
@@ -2226,9 +2283,15 @@ function ServicesManager({ services, saveServices }) {
           >
             Calendario
           </button>
+          <button 
+            onClick={() => setTab('monitoreo')}
+            className={`px-8 py-4 font-medium whitespace-nowrap ${tab === 'monitoreo' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
+          >
+            Monitoreo
+          </button>
         </div>
   
-        {/* CONTENIDO - Solo una pestaña activa */}
+        {/* CONTENIDO SEGÚN PESTAÑA */}
         {tab === 'hoy' && (
           <div>
             <h2 className="text-2xl font-semibold mb-6">Atenciones de Hoy ({todayApps.length})</h2>
@@ -2238,13 +2301,7 @@ function ServicesManager({ services, saveServices }) {
               </div>
             ) : (
               <div className="grid gap-4">
-                {todayApps.map(app => (
-                  <AppointmentCard 
-                    key={app.id} 
-                    app={app} 
-                    onCancel={() => {}} 
-                  />
-                ))}
+                {todayApps.map(app => <AppointmentCard key={app.id} app={app} />)}
               </div>
             )}
           </div>
@@ -2261,8 +2318,7 @@ function ServicesManager({ services, saveServices }) {
               <div className="grid gap-4">
                 {myTasks.map(app => (
                   <div key={app.id} className="bg-white rounded-3xl p-6 shadow hover:shadow-xl transition-all">
-                    <AppointmentCard app={app} onCancel={() => {}} />
-                    
+                    <AppointmentCard app={app} />
                     <div className="flex gap-3 mt-6">
                       {app.status === 'pendiente' && (
                         <button 
@@ -2300,6 +2356,17 @@ function ServicesManager({ services, saveServices }) {
           <CalendarView 
             appointments={allAppointments} 
             onEdit={(app) => alert(`Editar cita: ${app.patientName}`)} 
+          />
+        )}
+  
+        {/* NUEVA PESTAÑA: MONITOREO */}
+        {tab === 'monitoreo' && (
+          <MonitoringPanel 
+            appointments={safeAppointments}
+            services={safeServices}
+            currentUser={user}
+            saveAppointments={saveAppointments}
+            onEdit={(app) => alert(`Editar detalle: ${app.patientName}`)}
           />
         )}
   
