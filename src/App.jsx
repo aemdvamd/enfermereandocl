@@ -86,74 +86,80 @@ const sendTelegramToAdmin = async (app, action = 'new', services = [], extraInfo
 function Landing({ setView, services = [] }) {
   return (
     <div className="min-h-screen bg-white overflow-hidden">
-      {/* NAVBAR */}
+      {/* NAVBAR - mobile-first */}
       <nav className="bg-white border-b sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 md:px-10 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-3xl shadow-inner">🩺</div>
-            <span className="text-3xl font-bold tracking-tighter text-gray-900">Enfermereando</span>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-3 sm:py-4 lg:py-5 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl shadow-inner shrink-0">🩺</div>
+            <span className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tighter text-gray-900 truncate">Enfermereando</span>
           </div>
 
-          <div className="hidden md:flex items-center gap-9 text-sm font-medium text-gray-700">
+          {/* Links solo en desktop */}
+          <div className="hidden lg:flex items-center gap-9 text-sm font-medium text-gray-700">
             <a href="#servicios" className="hover:text-indigo-600 transition-colors">Servicios</a>
             <a href="#valores" className="hover:text-indigo-600 transition-colors">Valores</a>
-            <a href="#testimonios" className="hover:text-indigo-600 transition-colors">Testimonios</a>
           </div>
 
-          <a
-            href="https://wa.me/56912345678"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2.5 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold px-7 py-3 rounded-3xl transition-all shadow-md"
-          >
-            <span className="text-xl">💬</span>
-            <span>WhatsApp</span>
-          </a>
+          {/* CTAs: en móvil solo "Iniciar sesión" compacto; WhatsApp queda como FAB flotante */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <a
+              href="https://wa.me/56912345678"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Contactar por WhatsApp"
+              className="hidden sm:flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold px-4 sm:px-5 lg:px-7 py-2.5 sm:py-3 rounded-3xl transition-all shadow-md min-h-[44px]"
+            >
+              <span className="text-lg">💬</span>
+              <span className="hidden md:inline">WhatsApp</span>
+            </a>
 
-          <button
-            onClick={() => setView('login')}
-            className="px-7 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-3xl transition-all text-sm"
-          >
-            Iniciar Sesión
-          </button>
+            <button
+              onClick={() => setView('login')}
+              className="px-4 sm:px-5 lg:px-7 py-2.5 sm:py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-3xl transition-all text-sm min-h-[44px]"
+            >
+              <span className="sm:hidden">Entrar</span>
+              <span className="hidden sm:inline">Iniciar Sesión</span>
+            </button>
+          </div>
         </div>
       </nav>
 
-      {/* HERO */}
-      <section className="max-w-7xl mx-auto px-6 md:px-10 pt-16 pb-20 grid md:grid-cols-12 gap-12 items-center">
-        <div className="md:col-span-7">
-          <div className="inline-flex items-center gap-2 bg-emerald-100 text-emerald-700 text-sm font-medium px-6 py-2 rounded-3xl mb-6">
-            <span className="relative flex h-3 w-3">
+      {/* HERO - mobile-first */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 pt-8 sm:pt-12 lg:pt-16 pb-12 sm:pb-16 lg:pb-20 grid lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+        <div className="lg:col-span-7 order-2 lg:order-1">
+          <div className="inline-flex items-center gap-2 bg-emerald-100 text-emerald-700 text-xs sm:text-sm font-medium px-4 sm:px-6 py-2 rounded-3xl mb-4 sm:mb-6">
+            <span className="relative flex h-2.5 w-2.5 sm:h-3 sm:w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 sm:h-3 sm:w-3 bg-emerald-500"></span>
             </span>
             Atención disponible hoy en Santiago
           </div>
 
-          <h1 className="text-6xl md:text-7xl font-bold leading-none tracking-tighter text-gray-900">
-            Cuidados de enfermería<br />en la comodidad de tu hogar
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold leading-tight lg:leading-none tracking-tighter text-gray-900">
+            Cuidados de enfermería<br className="hidden sm:block" /> en la comodidad de tu hogar
           </h1>
 
-          <p className="mt-8 text-2xl text-gray-600 max-w-xl">
-            Profesionales certificadas.Servicio rápido, seguro y con seguimiento en tiempo real.
+          <p className="mt-4 sm:mt-6 lg:mt-8 text-base sm:text-lg lg:text-2xl text-gray-600 max-w-xl">
+            Profesionales certificadas. Servicio rápido, seguro y con seguimiento en tiempo real.
           </p>
 
-          <div className="mt-10 flex flex-wrap gap-4">
+          <div className="mt-6 sm:mt-8 lg:mt-10 flex flex-wrap gap-3 sm:gap-4">
             <button
               onClick={() => setView('login')}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xl font-semibold px-12 py-6 rounded-3xl transition-all active:scale-[0.97] shadow-xl flex items-center gap-3"
+              className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white text-base sm:text-lg lg:text-xl font-semibold px-6 sm:px-10 lg:px-12 py-4 sm:py-5 lg:py-6 rounded-3xl transition-all active:scale-[0.97] shadow-xl flex items-center justify-center gap-3 min-h-[52px]"
             >
               Solicitar Atención Ahora
-              <span className="text-3xl leading-none">→</span>
+              <span className="text-2xl sm:text-3xl leading-none">→</span>
             </button>
           </div>
         </div>
 
-        <div className="md:col-span-5 relative">
+        <div className="lg:col-span-5 order-1 lg:order-2 relative">
           <div className="aspect-video bg-gradient-to-br from-indigo-100 to-blue-100 rounded-3xl overflow-hidden shadow-2xl">
             <img
               src="https://picsum.photos/id/1005/1200/800"
               alt="Enfermera atendiendo paciente en su hogar"
+              loading="lazy"
               className="w-full h-full object-cover"
             />
           </div>
@@ -161,14 +167,14 @@ function Landing({ setView, services = [] }) {
       </section>
 
       {/* ==================== SERVICIOS DINÁMICOS ==================== */}
-      <section id="servicios" className="bg-gray-50 py-20">
-        <div className="max-w-7xl mx-auto px-6 md:px-10">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-gray-900">Nuestros Servicios</h2>
-            <p className="text-gray-600 mt-3">Atención profesional de enfermería a domicilio</p>
+      <section id="servicios" className="bg-gray-50 py-12 sm:py-16 lg:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
+          <div className="text-center mb-8 sm:mb-12">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900">Nuestros Servicios</h2>
+            <p className="text-sm sm:text-base text-gray-600 mt-2 sm:mt-3">Atención profesional de enfermería a domicilio</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
             {services
               .filter(service => service?.active === true)
               .map(service => {
@@ -176,9 +182,9 @@ function Landing({ setView, services = [] }) {
                 return (
                   <div
                     key={service.id}
-                    className="bg-white rounded-3xl shadow hover:shadow-2xl transition-all p-8 flex flex-col"
+                    className="bg-white rounded-3xl shadow hover:shadow-2xl transition-all p-5 sm:p-6 lg:p-8 flex flex-col"
                   >
-                    <div className="text-5xl mb-6">
+                    <div className="text-4xl sm:text-5xl mb-4 sm:mb-6">
                       {nameLower.includes('inyecci') && '💉'}
                       {nameLower.includes('curacion') && '🩸'}
                       {nameLower.includes('muestra') && '🧪'}
@@ -186,18 +192,17 @@ function Landing({ setView, services = [] }) {
                       {!nameLower.match(/inyecci|curacion|muestra|geri/) && '🩺'}
                     </div>
 
-                    <h3 className="font-bold text-2xl text-gray-900 mb-3">{service.name}</h3>
-                    
+                    <h3 className="font-bold text-lg sm:text-xl lg:text-2xl text-gray-900 mb-2 sm:mb-3">{service.name}</h3>
+
                     <p className="text-gray-600 text-sm leading-relaxed flex-1">
                       {service.description || 'Servicio profesional de enfermería a domicilio'}
                     </p>
 
-                    <div className="mt-8 pt-6 border-t flex items-baseline justify-between">
-                      <div>
-                        <span className="text-4xl font-semibold text-indigo-600">${service.price}</span>
-                        <span className="text-gray-400 text-sm ml-1">CLP</span>
+                    <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t flex items-baseline justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-indigo-600">{fmtCLP(service.price)}</span>
                       </div>
-                      <span className="text-xs font-medium bg-emerald-100 text-emerald-700 px-4 py-2 rounded-3xl">Disponible</span>
+                      <span className="text-xs font-medium bg-emerald-100 text-emerald-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-3xl shrink-0">Disponible</span>
                     </div>
                   </div>
                 );
@@ -213,39 +218,39 @@ function Landing({ setView, services = [] }) {
       </section>
 
       {/* VALORES */}
-      <section id="valores" className="py-20">
-        <div className="max-w-7xl mx-auto px-6 md:px-10">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-gray-900">Nuestros Valores</h2>
+      <section id="valores" className="py-12 sm:py-16 lg:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
+          <div className="text-center mb-8 sm:mb-12">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900">Nuestros Valores</h2>
           </div>
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="text-center p-8">
-              <div className="mx-auto w-20 h-20 bg-indigo-100 rounded-3xl flex items-center justify-center text-5xl mb-6">❤️</div>
-              <h3 className="text-2xl font-semibold">Empatía</h3>
-              <p className="text-gray-600 mt-4">Tratamos a cada paciente como parte de nuestra familia</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+            <div className="text-center p-5 sm:p-6 lg:p-8">
+              <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 bg-indigo-100 rounded-3xl flex items-center justify-center text-4xl sm:text-5xl mb-4 sm:mb-6">❤️</div>
+              <h3 className="text-lg sm:text-xl lg:text-2xl font-semibold">Empatía</h3>
+              <p className="text-sm sm:text-base text-gray-600 mt-2 sm:mt-4">Tratamos a cada paciente como parte de nuestra familia</p>
             </div>
-            <div className="text-center p-8">
-              <div className="mx-auto w-20 h-20 bg-indigo-100 rounded-3xl flex items-center justify-center text-5xl mb-6">🔒</div>
-              <h3 className="text-2xl font-semibold">Confianza</h3>
-              <p className="text-gray-600 mt-4">Profesionales certificadas con años de experiencia</p>
+            <div className="text-center p-5 sm:p-6 lg:p-8">
+              <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 bg-indigo-100 rounded-3xl flex items-center justify-center text-4xl sm:text-5xl mb-4 sm:mb-6">🔒</div>
+              <h3 className="text-lg sm:text-xl lg:text-2xl font-semibold">Confianza</h3>
+              <p className="text-sm sm:text-base text-gray-600 mt-2 sm:mt-4">Profesionales certificadas con años de experiencia</p>
             </div>
-            <div className="text-center p-8">
-              <div className="mx-auto w-20 h-20 bg-indigo-100 rounded-3xl flex items-center justify-center text-5xl mb-6">⏱️</div>
-              <h3 className="text-2xl font-semibold">Rapidez</h3>
-              <p className="text-gray-600 mt-4">Respuesta en menos de 90 minutos en Santiago</p>
+            <div className="text-center p-5 sm:p-6 lg:p-8">
+              <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 bg-indigo-100 rounded-3xl flex items-center justify-center text-4xl sm:text-5xl mb-4 sm:mb-6">⏱️</div>
+              <h3 className="text-lg sm:text-xl lg:text-2xl font-semibold">Rapidez</h3>
+              <p className="text-sm sm:text-base text-gray-600 mt-2 sm:mt-4">Respuesta en menos de 90 minutos en Santiago</p>
             </div>
           </div>
         </div>
       </section>
 
       {/* CTA FINAL */}
-      <section className="bg-gradient-to-r from-indigo-600 to-blue-700 py-20 text-white">
-        <div className="max-w-4xl mx-auto text-center px-6">
-          <h2 className="text-5xl font-bold">¿Necesitas atención hoy?</h2>
-          <p className="text-2xl mt-4 opacity-90">Solicita tu cita en menos de 60 segundos</p>
+      <section className="bg-gradient-to-r from-indigo-600 to-blue-700 py-12 sm:py-16 lg:py-20 text-white">
+        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">¿Necesitas atención hoy?</h2>
+          <p className="text-base sm:text-xl lg:text-2xl mt-3 sm:mt-4 opacity-90">Solicita tu cita en menos de 60 segundos</p>
           <button
             onClick={() => setView('login')}
-            className="mt-12 bg-white text-indigo-700 hover:bg-amber-100 text-2xl font-semibold px-16 py-7 rounded-3xl transition-all active:scale-95 shadow-2xl"
+            className="mt-8 sm:mt-10 lg:mt-12 w-full sm:w-auto bg-white text-indigo-700 hover:bg-amber-100 text-lg sm:text-xl lg:text-2xl font-semibold px-8 sm:px-12 lg:px-16 py-4 sm:py-5 lg:py-7 rounded-3xl transition-all active:scale-95 shadow-2xl min-h-[52px]"
           >
             Solicitar Atención Ahora
           </button>
@@ -253,19 +258,21 @@ function Landing({ setView, services = [] }) {
       </section>
 
       {/* FOOTER */}
-      <footer className="bg-gray-900 text-white py-12">
-        <div className="max-w-7xl mx-auto px-6 md:px-10 text-center">
-          <p className="text-sm opacity-60">Enfermereando © 2026 • Mariela Droguett • Enfermera Universitaria</p>
-          <p className="text-xs opacity-40 mt-4">Atención profesional a domicilio en Santiago y Región Metropolitana</p>
+      <footer className="bg-gray-900 text-white py-8 sm:py-10 lg:py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 text-center">
+          <p className="text-xs sm:text-sm opacity-60">Enfermereando © 2026 • Mariela Droguett • Enfermera Universitaria</p>
+          <p className="text-xs opacity-40 mt-2 sm:mt-4">Atención profesional a domicilio en Santiago y Región Metropolitana</p>
         </div>
       </footer>
 
-      {/* BOTÓN FLOTANTE WHATSAPP */}
+      {/* BOTÓN FLOTANTE WHATSAPP - con safe area iOS */}
       <a
         href="https://wa.me/56912345678"
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-8 right-8 bg-green-500 hover:bg-green-600 text-white w-16 h-16 rounded-3xl flex items-center justify-center text-4xl shadow-2xl z-50 transition-transform hover:scale-110"
+        aria-label="Contactar por WhatsApp"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 lg:bottom-8 lg:right-8 bg-green-500 hover:bg-green-600 text-white w-14 h-14 sm:w-16 sm:h-16 rounded-3xl flex items-center justify-center text-3xl sm:text-4xl shadow-2xl z-50 transition-transform hover:scale-110 active:scale-95"
+        style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
       >
         💬
       </a>
@@ -427,10 +434,10 @@ function CalendarView({ appointments = [], onEdit }) {
 }
 
 // ==================== REQUEST FORM COMPLETO ====================
-function RequestForm({ services = [], onSubmit, onCancel }) {
+function RequestForm({ user, services = [], onSubmit, onCancel }) {
   const [beneficiaries, setBeneficiaries] = useState([{
     id: uid(),
-    name: '',
+    name: user?.name || '',  // Ciclo 1: pre-rellenar con el usuario logueado
     direccion: '',
     services: [{ serviceId: '', doses: 1, frequency: 'once' }]
   }]);
@@ -438,14 +445,20 @@ function RequestForm({ services = [], onSubmit, onCancel }) {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [comuna, setComuna] = useState('');
+  const [phone, setPhone] = useState('');  // Ciclo 1: contacto obligatorio
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState({});
 
   const validateForm = () => {
     const newErrors = {};
+    const todayStr = new Date().toISOString().split('T')[0];
     if (!date) newErrors.date = 'La fecha es obligatoria';
+    else if (date < todayStr) newErrors.date = 'La fecha no puede ser anterior a hoy';
     if (!time) newErrors.time = 'La hora es obligatoria';
     if (!comuna) newErrors.comuna = 'Selecciona una comuna';
+    if (!phone || !/^[+]?[\d\s()-]{8,}$/.test(phone.trim())) {
+      newErrors.phone = 'Ingresa un teléfono de contacto válido';
+    }
 
     beneficiaries.forEach((ben, bIndex) => {
       if (!ben.name?.trim()) newErrors[`beneficiary-${bIndex}-name`] = 'El nombre es obligatorio';
@@ -508,10 +521,12 @@ function RequestForm({ services = [], onSubmit, onCancel }) {
 
     const baseAppointment = {
       id: uid(),
+      userId: user?.id || null,  // Ciclo 1: identidad del solicitante
       patientName: beneficiaries[0].name,
       date,
       time,
       comuna,
+      phone: phone.trim(),
       notes: notes || '',
       status: 'pendiente',
       assignedTo: null,
@@ -535,27 +550,28 @@ function RequestForm({ services = [], onSubmit, onCancel }) {
   };
 
   return (
-    <div className="bg-white rounded-3xl shadow p-8 max-w-4xl mx-auto">
-      <h2 className="text-3xl font-bold mb-8 text-gray-900">Nueva Solicitud de Atención</h2>
+    <div className="bg-white rounded-3xl shadow p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
+      <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-6 sm:mb-8 text-gray-900">Nueva Solicitud de Atención</h2>
 
-      <form onSubmit={handleSubmit} className="space-y-10">
+      <form onSubmit={handleSubmit} className="space-y-8 sm:space-y-10">
         {beneficiaries.map((ben, bIndex) => (
-          <div key={ben.id} className="border border-gray-200 rounded-3xl p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-semibold text-lg">Beneficiario {bIndex + 1}</h3>
+          <div key={ben.id} className="border border-gray-200 rounded-3xl p-4 sm:p-6">
+            <div className="flex justify-between items-center mb-4 sm:mb-6">
+              <h3 className="font-semibold text-base sm:text-lg">Beneficiario {bIndex + 1}</h3>
               {beneficiaries.length > 1 && (
-                <button type="button" onClick={() => removeBeneficiary(bIndex)} className="text-red-500 hover:text-red-700 text-sm">Eliminar</button>
+                <button type="button" onClick={() => removeBeneficiary(bIndex)} className="text-red-500 hover:text-red-700 text-sm min-h-[44px] px-2">Eliminar</button>
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <label className="block text-sm font-medium mb-2">Nombre completo</label>
                 <input
                   type="text"
+                  autoComplete="name"
                   value={ben.name}
                   onChange={(e) => updateBeneficiary(bIndex, 'name', e.target.value)}
-                  className={`w-full px-5 py-4 rounded-3xl border ${errors[`beneficiary-${bIndex}-name`] ? 'border-red-500' : 'border-gray-300'}`}
+                  className={`w-full px-4 sm:px-5 py-3 sm:py-4 text-base rounded-3xl border min-h-[48px] ${errors[`beneficiary-${bIndex}-name`] ? 'border-red-500' : 'border-gray-300'}`}
                   placeholder="Nombre del beneficiario"
                 />
                 {errors[`beneficiary-${bIndex}-name`] && <p className="text-red-500 text-sm mt-1">{errors[`beneficiary-${bIndex}-name`]}</p>}
@@ -564,83 +580,98 @@ function RequestForm({ services = [], onSubmit, onCancel }) {
                 <label className="block text-sm font-medium mb-2">Dirección</label>
                 <input
                   type="text"
+                  autoComplete="street-address"
                   value={ben.direccion}
                   onChange={(e) => updateBeneficiary(bIndex, 'direccion', e.target.value)}
-                  className="w-full px-5 py-4 rounded-3xl border border-gray-300"
+                  className="w-full px-4 sm:px-5 py-3 sm:py-4 text-base rounded-3xl border border-gray-300 min-h-[48px]"
                   placeholder="Dirección completa"
                 />
               </div>
             </div>
 
-            {/* Servicios */}
-            <div className="mt-8">
+            {/* Servicios — fila apilada en móvil */}
+            <div className="mt-6 sm:mt-8">
               <p className="text-sm font-medium text-gray-600 mb-3">Servicios solicitados</p>
               {ben.services.map((srv, sIndex) => (
-                <div key={sIndex} className="flex gap-4 items-end mb-4">
-                  <select
-                    value={srv.serviceId}
-                    onChange={(e) => updateService(bIndex, sIndex, 'serviceId', e.target.value)}
-                    className={`flex-1 px-5 py-4 rounded-3xl border ${errors[`beneficiary-${bIndex}-service`] ? 'border-red-500' : 'border-gray-300'}`}
-                  >
-                    <option value="">Seleccionar servicio</option>
-                    {services.filter(s => s.active).map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} - ${s.price}
-                      </option>
-                    ))}
-                  </select>
+                <div key={sIndex} className="bg-gray-50 rounded-3xl p-3 sm:p-0 sm:bg-transparent mb-3 sm:mb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4">
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-gray-500 mb-1 sm:hidden">Servicio</label>
+                      <select
+                        value={srv.serviceId}
+                        onChange={(e) => updateService(bIndex, sIndex, 'serviceId', e.target.value)}
+                        className={`w-full px-4 sm:px-5 py-3 sm:py-4 text-base rounded-3xl border min-h-[48px] ${errors[`beneficiary-${bIndex}-service`] ? 'border-red-500' : 'border-gray-300'}`}
+                      >
+                        <option value="">Seleccionar servicio</option>
+                        {services.filter(s => s.active).map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} - {fmtCLP(s.price)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  <input
-                    type="number"
-                    min="1"
-                    value={srv.doses}
-                    onChange={(e) => updateService(bIndex, sIndex, 'doses', e.target.value)}
-                    className="w-24 px-5 py-4 rounded-3xl border border-gray-300 text-center"
-                  />
+                    <div className="flex gap-3 sm:gap-4 items-end">
+                      <div className="flex-1 sm:flex-none">
+                        <label className="block text-xs font-medium text-gray-500 mb-1 sm:hidden">Dosis</label>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min="1"
+                          value={srv.doses}
+                          onChange={(e) => updateService(bIndex, sIndex, 'doses', e.target.value)}
+                          className="w-full sm:w-24 px-4 sm:px-5 py-3 sm:py-4 text-base rounded-3xl border border-gray-300 text-center min-h-[48px]"
+                        />
+                      </div>
 
-                  <select
-                    value={srv.frequency}
-                    onChange={(e) => updateService(bIndex, sIndex, 'frequency', e.target.value)}
-                    className="w-40 px-5 py-4 rounded-3xl border border-gray-300"
-                  >
-                    <option value="once">Única</option>
-                    <option value="daily">Diaria</option>
-                    <option value="weekly">Semanal</option>
-                    <option value="monthly">Mensual</option>
-                  </select>
+                      <div className="flex-1 sm:flex-none">
+                        <label className="block text-xs font-medium text-gray-500 mb-1 sm:hidden">Frecuencia</label>
+                        <select
+                          value={srv.frequency}
+                          onChange={(e) => updateService(bIndex, sIndex, 'frequency', e.target.value)}
+                          className="w-full sm:w-40 px-4 sm:px-5 py-3 sm:py-4 text-base rounded-3xl border border-gray-300 min-h-[48px]"
+                        >
+                          <option value="once">Única</option>
+                          <option value="daily">Diaria</option>
+                          <option value="weekly">Semanal</option>
+                          <option value="monthly">Mensual</option>
+                        </select>
+                      </div>
 
-                  {ben.services.length > 1 && (
-                    <button type="button" onClick={() => removeServiceFromBeneficiary(bIndex, sIndex)} className="text-red-500 hover:text-red-700 px-4">✕</button>
-                  )}
+                      {ben.services.length > 1 && (
+                        <button type="button" onClick={() => removeServiceFromBeneficiary(bIndex, sIndex)} aria-label="Eliminar servicio" className="text-red-500 hover:text-red-700 px-3 min-h-[48px] min-w-[44px] flex items-center justify-center">✕</button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ))}
 
-              <button type="button" onClick={() => addServiceToBeneficiary(bIndex)} className="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center gap-1 mt-2">
+              <button type="button" onClick={() => addServiceToBeneficiary(bIndex)} className="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center gap-1 mt-2 min-h-[44px]">
                 + Agregar otro servicio
               </button>
             </div>
           </div>
         ))}
 
-        <button type="button" onClick={addBeneficiary} className="w-full py-4 border border-dashed border-gray-300 rounded-3xl text-gray-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors">
+        <button type="button" onClick={addBeneficiary} className="w-full py-4 border border-dashed border-gray-300 rounded-3xl text-gray-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors min-h-[52px] text-sm sm:text-base">
           + Agregar otro beneficiario
         </button>
 
         {/* Campos comunes */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <div>
             <label className="block text-sm font-medium mb-2">Fecha</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} className={`w-full px-5 py-4 rounded-3xl border ${errors.date ? 'border-red-500' : 'border-gray-300'}`} />
+            <input type="date" value={date} min={new Date().toISOString().split('T')[0]} onChange={e => setDate(e.target.value)} className={`w-full px-4 sm:px-5 py-3 sm:py-4 text-base rounded-3xl border min-h-[48px] ${errors.date ? 'border-red-500' : 'border-gray-300'}`} />
             {errors.date && <p className="text-red-500 text-sm mt-1">{errors.date}</p>}
           </div>
           <div>
             <label className="block text-sm font-medium mb-2">Hora</label>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)} className={`w-full px-5 py-4 rounded-3xl border ${errors.time ? 'border-red-500' : 'border-gray-300'}`} />
+            <input type="time" value={time} onChange={e => setTime(e.target.value)} className={`w-full px-4 sm:px-5 py-3 sm:py-4 text-base rounded-3xl border min-h-[48px] ${errors.time ? 'border-red-500' : 'border-gray-300'}`} />
             {errors.time && <p className="text-red-500 text-sm mt-1">{errors.time}</p>}
           </div>
-          <div>
+          <div className="sm:col-span-2 lg:col-span-1">
             <label className="block text-sm font-medium mb-2">Comuna</label>
-            <select value={comuna} onChange={e => setComuna(e.target.value)} className={`w-full px-5 py-4 rounded-3xl border ${errors.comuna ? 'border-red-500' : 'border-gray-300'}`}>
+            <select value={comuna} onChange={e => setComuna(e.target.value)} className={`w-full px-4 sm:px-5 py-3 sm:py-4 text-base rounded-3xl border min-h-[48px] ${errors.comuna ? 'border-red-500' : 'border-gray-300'}`}>
               <option value="">Seleccionar comuna</option>
               {COMUNAS_RM.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -648,12 +679,27 @@ function RequestForm({ services = [], onSubmit, onCancel }) {
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-2">Notas / Observaciones</label>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} className="w-full px-5 py-4 rounded-3xl border border-gray-300" placeholder="Información adicional..." />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+          <div>
+            <label className="block text-sm font-medium mb-2">Teléfono de contacto</label>
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="+56 9 1234 5678"
+              className={`w-full px-4 sm:px-5 py-3 sm:py-4 text-base rounded-3xl border min-h-[48px] ${errors.phone ? 'border-red-500' : 'border-gray-300'}`}
+            />
+            {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Notas / Observaciones</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full px-4 sm:px-5 py-3 sm:py-4 text-base rounded-3xl border border-gray-300 min-h-[48px]" placeholder="Información adicional..." />
+          </div>
         </div>
 
-        <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-5 rounded-3xl text-xl font-semibold transition-all">
+        <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white py-4 sm:py-5 rounded-3xl text-base sm:text-lg lg:text-xl font-semibold transition-all min-h-[52px]">
           Enviar Solicitud
         </button>
       </form>
@@ -667,10 +713,13 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
 
   const safeAppointments = Array.isArray(appointments) ? appointments : [];
 
-  const myAppointments = safeFilter(safeAppointments, app => 
-    app?.patientName === user?.name || 
-    (app?.beneficiaries && app.beneficiaries.some(b => b?.name === user?.name))
-  );
+  const myAppointments = safeFilter(safeAppointments, app => {
+    // Ciclo 1: filtro por userId (identidad única).
+    // Fallback retro-compatible para citas creadas antes de este fix (sin userId).
+    if (app?.userId) return app.userId === user?.id;
+    return app?.patientName === user?.name ||
+      (app?.beneficiaries && app.beneficiaries.some(b => b?.name === user?.name));
+  });
 
   const lastRequests = [...myAppointments]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -707,29 +756,44 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Mi Panel de Paciente</h1>
-          <p className="text-gray-600">Bienvenido, {user?.name || 'Paciente'}</p>
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 pb-24 lg:pb-6">
+      <div className="flex justify-between items-start gap-3 mb-6 sm:mb-8">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 truncate">Mi Panel</h1>
+          <p className="text-sm sm:text-base text-gray-600 truncate">Hola, {user?.name || 'Paciente'}</p>
         </div>
-        <button onClick={() => setView('landing')} className="text-gray-500 hover:text-gray-700">← Cerrar sesión</button>
+        <button
+          onClick={() => setView('landing')}
+          aria-label="Cerrar sesión"
+          className="text-gray-500 hover:text-gray-700 text-sm shrink-0 min-h-[44px] flex items-center"
+        >
+          <span className="hidden sm:inline">← Cerrar sesión</span>
+          <span className="sm:hidden text-2xl">↩</span>
+        </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200 mb-8">
-        <button onClick={() => setTab('inicio')} className={`px-8 py-4 font-medium ${tab === 'inicio' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Inicio</button>
-        <button onClick={() => setTab('solicitar')} className={`px-8 py-4 font-medium ${tab === 'solicitar' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Solicitar Atención</button>
-        <button onClick={() => setTab('historial')} className={`px-8 py-4 font-medium ${tab === 'historial' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Historial</button>
+      {/* Top tabs - solo desktop */}
+      <div className="hidden lg:flex border-b border-gray-200 mb-8">
+        <button onClick={() => setTab('inicio')} className={`px-8 py-4 font-medium min-h-[48px] ${tab === 'inicio' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Inicio</button>
+        <button onClick={() => setTab('solicitar')} className={`px-8 py-4 font-medium min-h-[48px] ${tab === 'solicitar' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Solicitar Atención</button>
+        <button onClick={() => setTab('historial')} className={`px-8 py-4 font-medium min-h-[48px] ${tab === 'historial' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Historial</button>
       </div>
 
       {tab === 'inicio' && (
         <div>
-          <h2 className="text-2xl font-semibold mb-6">Últimas solicitudes</h2>
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
+            <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold">Últimas solicitudes</h2>
+            <button
+              onClick={() => setTab('solicitar')}
+              className="lg:hidden bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-3xl min-h-[40px]"
+            >
+              + Nueva
+            </button>
+          </div>
           {lastRequests.length === 0 ? (
-            <div className="bg-white rounded-3xl p-12 text-center text-gray-500">Aún no tienes solicitudes de atención.</div>
+            <div className="bg-white rounded-3xl p-8 sm:p-12 text-center text-gray-500 text-sm sm:text-base">Aún no tienes solicitudes de atención.</div>
           ) : (
-            <div className="grid gap-4">
+            <div className="grid gap-3 sm:gap-4">
               {lastRequests.map(app => <AppointmentCard key={app.id} app={app} onCancel={cancelAppointment} />)}
             </div>
           )}
@@ -737,28 +801,62 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
       )}
 
       {tab === 'solicitar' && (
-        <RequestForm 
-          services={services} 
+        <RequestForm
+          user={user}
+          services={services}
           onSubmit={async (newApps) => {
             await saveAppointments([...safeAppointments, ...newApps]);
             setTab('inicio');
-          }} 
+          }}
           onCancel={() => setTab('inicio')}
         />
       )}
 
       {tab === 'historial' && (
         <div>
-          <h2 className="text-2xl font-semibold mb-6">Historial completo</h2>
+          <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold mb-4 sm:mb-6">Historial completo</h2>
           {myAppointments.length === 0 ? (
-            <div className="bg-white rounded-3xl p-12 text-center text-gray-500">No tienes historial de solicitudes.</div>
+            <div className="bg-white rounded-3xl p-8 sm:p-12 text-center text-gray-500 text-sm sm:text-base">No tienes historial de solicitudes.</div>
           ) : (
-            <div className="grid gap-4">
+            <div className="grid gap-3 sm:gap-4">
               {myAppointments.map(app => <AppointmentCard key={app.id} app={app} onCancel={cancelAppointment} />)}
             </div>
           )}
         </div>
       )}
+
+      {/* Bottom Nav - solo móvil/tablet, oculto en desktop */}
+      <nav
+        className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-2xl z-40"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <div className="flex">
+          <button
+            onClick={() => setTab('inicio')}
+            className={`flex-1 py-3 flex flex-col items-center gap-1 min-h-[60px] ${tab === 'inicio' ? 'text-indigo-600' : 'text-gray-500'}`}
+            aria-current={tab === 'inicio' ? 'page' : undefined}
+          >
+            <span className="text-2xl leading-none">🏠</span>
+            <span className="text-xs font-medium">Inicio</span>
+          </button>
+          <button
+            onClick={() => setTab('solicitar')}
+            className={`flex-1 py-3 flex flex-col items-center gap-1 min-h-[60px] ${tab === 'solicitar' ? 'text-indigo-600' : 'text-gray-500'}`}
+            aria-current={tab === 'solicitar' ? 'page' : undefined}
+          >
+            <span className="text-2xl leading-none">➕</span>
+            <span className="text-xs font-medium">Solicitar</span>
+          </button>
+          <button
+            onClick={() => setTab('historial')}
+            className={`flex-1 py-3 flex flex-col items-center gap-1 min-h-[60px] ${tab === 'historial' ? 'text-indigo-600' : 'text-gray-500'}`}
+            aria-current={tab === 'historial' ? 'page' : undefined}
+          >
+            <span className="text-2xl leading-none">📋</span>
+            <span className="text-xs font-medium">Historial</span>
+          </button>
+        </div>
+      </nav>
     </div>
   );
 }
@@ -782,8 +880,14 @@ function ProfessionalDashboard({
     new Date(app.date).toDateString() === new Date().toDateString()
   );
 
+  // Ciclo 1: separar "mis tareas" de "disponibles".
+  // Antes: filtro con OR exponía tareas asignadas a otras enfermeras.
   const myTasks = allAppointments.filter(app => 
-    app.assignedTo === user?.id || app.status === 'asignada'
+    app.assignedTo === user?.id && app.status !== 'completada' && app.status !== 'cancelada'
+  );
+
+  const availableTasks = allAppointments.filter(app => 
+    app.status === 'pendiente' && !app.assignedTo
   );
 
   // Acciones
@@ -805,36 +909,50 @@ function ProfessionalDashboard({
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Panel Profesional</h1>
-          <p className="text-gray-600">Bienvenido, {user?.name || 'Profesional'}</p>
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-24 lg:pb-6">
+      <div className="flex justify-between items-start gap-3 mb-6 sm:mb-8">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 truncate">Panel Profesional</h1>
+          <p className="text-sm sm:text-base text-gray-600 truncate">Hola, {user?.name || 'Profesional'}</p>
         </div>
-        <button 
+        <button
           onClick={() => setView('landing')}
-          className="flex items-center gap-2 text-gray-500 hover:text-gray-700 font-medium"
+          aria-label="Cerrar sesión"
+          className="text-gray-500 hover:text-gray-700 text-sm font-medium shrink-0 min-h-[44px] flex items-center"
         >
-          ← Cerrar sesión
+          <span className="hidden sm:inline">← Cerrar sesión</span>
+          <span className="sm:hidden text-2xl">↩</span>
         </button>
       </div>
 
-      {/* TABS */}
-      <div className="flex border-b border-gray-200 mb-8 overflow-x-auto">
-        <button onClick={() => setTab('hoy')} className={`px-8 py-4 font-medium ${tab === 'hoy' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Hoy</button>
-        <button onClick={() => setTab('mis')} className={`px-8 py-4 font-medium ${tab === 'mis' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Mis Atenciones</button>
-        <button onClick={() => setTab('calendario')} className={`px-8 py-4 font-medium ${tab === 'calendario' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Calendario</button>
-        <button onClick={() => setTab('monitoreo')} className={`px-8 py-4 font-medium ${tab === 'monitoreo' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Monitoreo</button>
+      {/* Top tabs — solo desktop (≥lg) */}
+      <div className="hidden lg:flex border-b border-gray-200 mb-8 overflow-x-auto">
+        <button onClick={() => setTab('hoy')} className={`px-8 py-4 font-medium min-h-[48px] whitespace-nowrap ${tab === 'hoy' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Hoy ({todayApps.length})</button>
+        <button onClick={() => setTab('mis')} className={`px-8 py-4 font-medium min-h-[48px] whitespace-nowrap ${tab === 'mis' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Mis Atenciones ({myTasks.length})</button>
+        <button onClick={() => setTab('disponibles')} className={`px-8 py-4 font-medium min-h-[48px] whitespace-nowrap ${tab === 'disponibles' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Disponibles ({availableTasks.length})</button>
+        <button onClick={() => setTab('calendario')} className={`px-8 py-4 font-medium min-h-[48px] whitespace-nowrap ${tab === 'calendario' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Calendario</button>
+        <button onClick={() => setTab('monitoreo')} className={`px-8 py-4 font-medium min-h-[48px] whitespace-nowrap ${tab === 'monitoreo' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Monitoreo</button>
+      </div>
+
+      {/* Pill tabs móvil — scroll horizontal en la parte superior */}
+      <div className="lg:hidden mb-6 -mx-4 px-4 overflow-x-auto scrollbar-hide">
+        <div className="flex gap-2 min-w-max">
+          <button onClick={() => setTab('hoy')} className={`px-4 py-2 rounded-3xl text-sm font-medium whitespace-nowrap min-h-[40px] ${tab === 'hoy' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Hoy · {todayApps.length}</button>
+          <button onClick={() => setTab('mis')} className={`px-4 py-2 rounded-3xl text-sm font-medium whitespace-nowrap min-h-[40px] ${tab === 'mis' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Mis · {myTasks.length}</button>
+          <button onClick={() => setTab('disponibles')} className={`px-4 py-2 rounded-3xl text-sm font-medium whitespace-nowrap min-h-[40px] ${tab === 'disponibles' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Libres · {availableTasks.length}</button>
+          <button onClick={() => setTab('calendario')} className={`px-4 py-2 rounded-3xl text-sm font-medium whitespace-nowrap min-h-[40px] ${tab === 'calendario' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Calendario</button>
+          <button onClick={() => setTab('monitoreo')} className={`px-4 py-2 rounded-3xl text-sm font-medium whitespace-nowrap min-h-[40px] ${tab === 'monitoreo' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Monitoreo</button>
+        </div>
       </div>
 
       {/* CONTENIDO */}
       {tab === 'hoy' && (
         <div>
-          <h2 className="text-2xl font-semibold mb-6">Atenciones de Hoy ({todayApps.length})</h2>
+          <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold mb-4 sm:mb-6">Atenciones de Hoy ({todayApps.length})</h2>
           {todayApps.length === 0 ? (
-            <div className="bg-white rounded-3xl p-12 text-center text-gray-500">No hay atenciones para hoy.</div>
+            <div className="bg-white rounded-3xl p-8 sm:p-12 text-center text-gray-500 text-sm sm:text-base">No hay atenciones para hoy.</div>
           ) : (
-            <div className="grid gap-4">
+            <div className="grid gap-3 sm:gap-4">
               {todayApps.map(app => <AppointmentCard key={app.id} app={app} />)}
             </div>
           )}
@@ -843,25 +961,47 @@ function ProfessionalDashboard({
 
       {tab === 'mis' && (
         <div>
-          <h2 className="text-2xl font-semibold mb-6">Mis Tareas Asignadas ({myTasks.length})</h2>
+          <h2 className="text-2xl font-semibold mb-6">Mis Atenciones Activas ({myTasks.length})</h2>
           {myTasks.length === 0 ? (
-            <div className="bg-white rounded-3xl p-12 text-center text-gray-500">No tienes tareas asignadas.</div>
+            <div className="bg-white rounded-3xl p-12 text-center text-gray-500">
+              No tienes tareas asignadas. Revisa la pestaña "Disponibles" para tomar nuevas.
+            </div>
           ) : (
             <div className="grid gap-4">
               {myTasks.map(app => (
                 <div key={app.id} className="bg-white rounded-3xl p-6 shadow hover:shadow-xl transition-all">
                   <AppointmentCard app={app} />
                   <div className="flex gap-3 mt-6">
-                    {app.status === 'pendiente' && (
-                      <button onClick={() => takeTask(app)} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-3xl font-medium">Tomar esta tarea</button>
-                    )}
                     {app.status === 'asignada' && (
                       <>
                         <button onClick={() => updateStatus(app.id, 'en_tratamiento')} className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-3xl font-medium">Iniciar tratamiento</button>
                         <button onClick={() => updateStatus(app.id, 'completada')} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-4 rounded-3xl font-medium">Marcar como completada</button>
                       </>
                     )}
+                    {app.status === 'en_tratamiento' && (
+                      <button onClick={() => updateStatus(app.id, 'completada')} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-4 rounded-3xl font-medium">Marcar como completada</button>
+                    )}
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'disponibles' && (
+        <div>
+          <h2 className="text-2xl font-semibold mb-6">Disponibles para tomar ({availableTasks.length})</h2>
+          {availableTasks.length === 0 ? (
+            <div className="bg-white rounded-3xl p-12 text-center text-gray-500">No hay tareas disponibles en este momento.</div>
+          ) : (
+            <div className="grid gap-4">
+              {availableTasks.map(app => (
+                <div key={app.id} className="bg-white rounded-3xl p-6 shadow hover:shadow-xl transition-all">
+                  <AppointmentCard app={app} />
+                  <button onClick={() => takeTask(app)} className="mt-6 w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-3xl font-medium">
+                    Tomar esta tarea
+                  </button>
                 </div>
               ))}
             </div>
@@ -884,7 +1024,7 @@ function ProfessionalDashboard({
   );
 }
 
-// ==================== ADMIN PANEL ====================
+// ==================== ADMIN PANEL - COMPLETO Y MODERNO ====================
 function AdminPanel({ 
   appointments = [], 
   saveAppointments, 
@@ -911,6 +1051,7 @@ function AdminPanel({
   const completed = safeAppointments.filter(a => a.status === 'completada').length;
 
   // ==================== SERVICIOS STATES ====================
+  const [showNewServiceForm, setShowNewServiceForm] = useState(false);
   const [newServiceName, setNewServiceName] = useState('');
   const [newServicePrice, setNewServicePrice] = useState('');
   const [newServiceDescription, setNewServiceDescription] = useState('');
@@ -947,6 +1088,7 @@ function AdminPanel({
     setNewServicePrice('');
     setNewServiceDescription('');
     setPriceError('');
+    setShowNewServiceForm(false);  // Ciclo 1: cerrar tras crear
     alert('✅ Servicio agregado correctamente');
   };
 
@@ -1020,44 +1162,46 @@ function AdminPanel({
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-6 min-h-screen bg-gray-50">
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 min-h-screen bg-gray-50">
       {/* HEADER */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-4xl font-bold text-gray-900">Panel de Administración</h1>
-          <p className="text-gray-600 mt-1">Gestión completa • Enfermereando</p>
+      <div className="flex justify-between items-start gap-3 mb-6 sm:mb-8">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 truncate">Panel de Administración</h1>
+          <p className="text-xs sm:text-sm lg:text-base text-gray-600 mt-1 truncate">Gestión completa • Enfermereando</p>
         </div>
-        <button 
+        <button
           onClick={() => setView('landing')}
-          className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 hover:bg-gray-100 rounded-3xl text-sm font-medium transition-all"
+          aria-label="Volver al landing"
+          className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-white border border-gray-300 hover:bg-gray-100 rounded-3xl text-xs sm:text-sm font-medium transition-all shrink-0 min-h-[44px]"
         >
-          ← Volver al Landing
+          <span className="hidden sm:inline">← Volver al Landing</span>
+          <span className="sm:hidden">← Salir</span>
         </button>
       </div>
 
-      {/* TABS */}
-      <div className="flex border-b border-gray-200 mb-8 overflow-x-auto bg-white rounded-3xl p-1 shadow-sm">
-        <button 
-          onClick={() => setTab('dashboard')} 
-          className={`flex-1 md:flex-none px-8 py-4 font-semibold rounded-3xl transition-all ${tab === 'dashboard' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+      {/* TABS - scroll horizontal en móvil, fit en desktop */}
+      <div className="flex mb-6 sm:mb-8 overflow-x-auto bg-white rounded-3xl p-1 shadow-sm scrollbar-hide gap-1">
+        <button
+          onClick={() => setTab('dashboard')}
+          className={`shrink-0 sm:flex-1 md:flex-none px-4 sm:px-6 lg:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold rounded-3xl transition-all min-h-[44px] whitespace-nowrap ${tab === 'dashboard' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
         >
-          📊 Dashboard
+          📊 <span className="hidden xs:inline sm:inline">Dashboard</span>
         </button>
-        <button 
-          onClick={() => setTab('solicitudes')} 
-          className={`flex-1 md:flex-none px-8 py-4 font-semibold rounded-3xl transition-all ${tab === 'solicitudes' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+        <button
+          onClick={() => setTab('solicitudes')}
+          className={`shrink-0 sm:flex-1 md:flex-none px-4 sm:px-6 lg:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold rounded-3xl transition-all min-h-[44px] whitespace-nowrap ${tab === 'solicitudes' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
         >
           📋 Solicitudes
         </button>
-        <button 
-          onClick={() => setTab('seguimiento')} 
-          className={`flex-1 md:flex-none px-8 py-4 font-semibold rounded-3xl transition-all ${tab === 'seguimiento' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+        <button
+          onClick={() => setTab('seguimiento')}
+          className={`shrink-0 sm:flex-1 md:flex-none px-4 sm:px-6 lg:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold rounded-3xl transition-all min-h-[44px] whitespace-nowrap ${tab === 'seguimiento' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
         >
-          📈 Seguimiento de Dosis
+          📈 <span className="hidden sm:inline">Seguimiento</span><span className="sm:hidden">Dosis</span>
         </button>
-        <button 
-          onClick={() => setTab('servicios')} 
-          className={`flex-1 md:flex-none px-8 py-4 font-semibold rounded-3xl transition-all ${tab === 'servicios' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+        <button
+          onClick={() => setTab('servicios')}
+          className={`shrink-0 sm:flex-1 md:flex-none px-4 sm:px-6 lg:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold rounded-3xl transition-all min-h-[44px] whitespace-nowrap ${tab === 'servicios' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
         >
           🛠️ Servicios
         </button>
@@ -1065,40 +1209,40 @@ function AdminPanel({
 
       {/* ==================== DASHBOARD ==================== */}
       {tab === 'dashboard' && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center text-3xl">📋</div>
-              <div>
-                <p className="text-sm text-gray-500">Total Solicitudes</p>
-                <p className="text-5xl font-bold text-gray-900 mt-1">{totalApps}</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+          <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl hover:shadow-2xl transition-all">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">📋</div>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-gray-500 truncate">Total Solicitudes</p>
+                <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mt-1">{totalApps}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center text-3xl">⏳</div>
-              <div>
-                <p className="text-sm text-gray-500">Pendientes</p>
-                <p className="text-5xl font-bold text-amber-600 mt-1">{pending}</p>
+          <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl hover:shadow-2xl transition-all">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">⏳</div>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-gray-500">Pendientes</p>
+                <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-amber-600 mt-1">{pending}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-3xl">📅</div>
-              <div>
-                <p className="text-sm text-gray-500">Hoy</p>
-                <p className="text-5xl font-bold text-emerald-600 mt-1">{today}</p>
+          <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl hover:shadow-2xl transition-all">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">📅</div>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-gray-500">Hoy</p>
+                <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-emerald-600 mt-1">{today}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center text-3xl">🔄</div>
-              <div>
-                <p className="text-sm text-gray-500">En Tratamiento</p>
-                <p className="text-5xl font-bold text-purple-600 mt-1">{inTreatment}</p>
+          <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl hover:shadow-2xl transition-all">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">🔄</div>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-gray-500 truncate">En Tratamiento</p>
+                <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-purple-600 mt-1">{inTreatment}</p>
               </div>
             </div>
           </div>
@@ -1107,14 +1251,14 @@ function AdminPanel({
 
       {/* ==================== SOLICITUDES ==================== */}
       {tab === 'solicitudes' && (
-        <div className="bg-white rounded-3xl shadow-xl p-8">
-          <h2 className="text-2xl font-semibold mb-6 flex items-center gap-3">
+        <div className="bg-white rounded-3xl shadow-xl p-4 sm:p-6 lg:p-8">
+          <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3 flex-wrap">
             📋 Todas las Solicitudes
-            <span className="text-sm font-normal text-gray-500">({safeAppointments.length})</span>
+            <span className="text-xs sm:text-sm font-normal text-gray-500">({safeAppointments.length})</span>
           </h2>
-          <div className="space-y-4 max-h-[680px] overflow-auto pr-2">
+          <div className="space-y-3 sm:space-y-4 max-h-[680px] overflow-auto pr-1 sm:pr-2 -mr-1 sm:-mr-2">
             {safeAppointments.length === 0 ? (
-              <div className="text-center py-20 text-gray-400">No hay solicitudes registradas aún</div>
+              <div className="text-center py-12 sm:py-20 text-gray-400 text-sm sm:text-base">No hay solicitudes registradas aún</div>
             ) : (
               safeAppointments.map(app => (
                 <AppointmentCard key={app.id} app={app} />
@@ -1213,37 +1357,42 @@ function AdminPanel({
         </div>
       )}
 
-      {/* ==================== SERVICIOS ==================== */}
+      {/* ==================== SERVICIOS (Rediseñado) ==================== */}
       {tab === 'servicios' && (
         <div className="bg-white rounded-3xl shadow-xl p-8">
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-2xl font-semibold">🛠️ Gestión de Servicios</h2>
             <button 
-              onClick={() => document.getElementById('newServiceForm').classList.toggle('hidden')}
+              onClick={() => setShowNewServiceForm(prev => !prev)}
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-3xl font-medium flex items-center gap-2 text-sm"
             >
-              + Agregar Nuevo Servicio
+              {showNewServiceForm ? '× Cerrar' : '+ Agregar Nuevo Servicio'}
             </button>
           </div>
 
           {/* Formulario Nuevo Servicio */}
-          <div id="newServiceForm" className="hidden bg-gray-50 border border-gray-200 rounded-3xl p-8 mb-10">
-            <div className="grid grid-cols-12 gap-4">
-              <div className="col-span-5">
-                <input type="text" placeholder="Nombre del servicio" value={newServiceName} onChange={e => setNewServiceName(e.target.value)} className="w-full border border-gray-300 rounded-3xl px-6 py-4 text-lg" />
-              </div>
-              <div className="col-span-2">
-                <input type="number" placeholder="Precio CLP" value={newServicePrice} onChange={e => { setNewServicePrice(e.target.value); setPriceError(''); }} className="w-full border border-gray-300 rounded-3xl px-6 py-4 text-lg" />
-                {priceError && <p className="text-red-500 text-sm mt-2">{priceError}</p>}
-              </div>
-              <div className="col-span-4">
-                <textarea placeholder="Descripción (opcional)" value={newServiceDescription} onChange={e => setNewServiceDescription(e.target.value)} className="w-full border border-gray-300 rounded-3xl px-6 py-4 h-24 resize-y" />
-              </div>
-              <div className="col-span-1 flex items-end">
-                <button onClick={addNewService} className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-3xl font-semibold">Agregar</button>
+          {showNewServiceForm && (
+            <div className="bg-gray-50 border border-gray-200 rounded-3xl p-8 mb-10">
+              <div className="grid grid-cols-12 gap-4">
+                <div className="col-span-5">
+                  <label className="block text-sm font-medium mb-2 text-gray-700">Nombre del servicio</label>
+                  <input type="text" placeholder="Ej: Curación avanzada" value={newServiceName} onChange={e => setNewServiceName(e.target.value)} className="w-full border border-gray-300 rounded-3xl px-6 py-4 text-lg" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium mb-2 text-gray-700">Precio CLP</label>
+                  <input type="number" placeholder="15000" value={newServicePrice} onChange={e => { setNewServicePrice(e.target.value); setPriceError(''); }} className="w-full border border-gray-300 rounded-3xl px-6 py-4 text-lg" />
+                  {priceError && <p className="text-red-500 text-sm mt-2">{priceError}</p>}
+                </div>
+                <div className="col-span-4">
+                  <label className="block text-sm font-medium mb-2 text-gray-700">Descripción (opcional)</label>
+                  <textarea placeholder="Detalle del servicio..." value={newServiceDescription} onChange={e => setNewServiceDescription(e.target.value)} className="w-full border border-gray-300 rounded-3xl px-6 py-4 h-24 resize-y" />
+                </div>
+                <div className="col-span-1 flex items-end">
+                  <button onClick={addNewService} className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-3xl font-semibold">Agregar</button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Tarjetas de Servicios */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1394,54 +1543,59 @@ function LoginView({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-      <div className="bg-white rounded-3xl shadow-xl max-w-md w-full p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Enfermereando</h1>
-          <p className="text-gray-600 mt-1">Inicia sesión o regístrate</p>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 sm:p-6">
+      <div className="bg-white rounded-3xl shadow-xl max-w-md w-full p-6 sm:p-8">
+        <div className="text-center mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Enfermereando</h1>
+          <p className="text-sm sm:text-base text-gray-600 mt-1">Inicia sesión o regístrate</p>
         </div>
 
+        {/* Tabs: en móvil "Recuperar" pasa a ser link, así caben los principales sin truncar */}
         <div className="flex border-b mb-6">
-          <button 
+          <button
             onClick={() => { setTab('login'); setError(''); }}
-            className={`flex-1 py-3 font-medium ${tab === 'login' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
+            className={`flex-1 py-3 text-sm sm:text-base font-medium min-h-[44px] ${tab === 'login' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
           >
             Iniciar Sesión
           </button>
-          <button 
+          <button
             onClick={() => { setTab('register'); setError(''); }}
-            className={`flex-1 py-3 font-medium ${tab === 'register' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
+            className={`flex-1 py-3 text-sm sm:text-base font-medium min-h-[44px] ${tab === 'register' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
           >
             Registrarse
-          </button>
-          <button 
-            onClick={() => { setTab('recovery'); setError(''); }}
-            className={`flex-1 py-3 font-medium ${tab === 'recovery' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
-          >
-            Recuperar
           </button>
         </div>
 
         {tab === 'login' && (
           <form onSubmit={handleLogin}>
-            <input 
-              type="text" 
-              placeholder="Email o usuario" 
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email o usuario</label>
+            <input
+              type="text"
+              inputMode="email"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-gray-300 rounded-2xl px-5 py-4 mb-4 focus:outline-none focus:border-indigo-500"
+              className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-4 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
             />
-            <input 
-              type="password" 
-              placeholder="Contraseña" 
+            <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+            <input
+              type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-2xl px-5 py-4 mb-6 focus:outline-none focus:border-indigo-500"
+              className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-3 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
             />
-            <button 
+            <button
+              type="button"
+              onClick={() => { setTab('recovery'); setError(''); }}
+              className="text-sm text-indigo-600 hover:text-indigo-800 mb-6 inline-block"
+            >
+              ¿Olvidaste tu contraseña?
+            </button>
+            <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold py-4 rounded-3xl transition-all"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold py-4 rounded-3xl transition-all min-h-[52px] text-base"
             >
               {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
             </button>
@@ -1450,31 +1604,35 @@ function LoginView({
 
         {tab === 'register' && (
           <form onSubmit={handleRegister}>
-            <input 
-              type="text" 
-              placeholder="Nombre completo" 
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo</label>
+            <input
+              type="text"
+              autoComplete="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full border border-gray-300 rounded-2xl px-5 py-4 mb-4 focus:outline-none focus:border-indigo-500"
+              className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-4 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
             />
-            <input 
-              type="email" 
-              placeholder="Email" 
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-gray-300 rounded-2xl px-5 py-4 mb-4 focus:outline-none focus:border-indigo-500"
+              className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-4 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
             />
-            <input 
-              type="password" 
-              placeholder="Contraseña" 
+            <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+            <input
+              type="password"
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-2xl px-5 py-4 mb-6 focus:outline-none focus:border-indigo-500"
+              className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-6 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
             />
-            <button 
+            <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold py-4 rounded-3xl transition-all"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold py-4 rounded-3xl transition-all min-h-[52px] text-base"
             >
               {loading ? 'Registrando...' : 'Crear cuenta'}
             </button>
@@ -1483,12 +1641,14 @@ function LoginView({
 
         {tab === 'recovery' && (
           <form onSubmit={handleRecovery}>
-            <input 
-              type="email" 
-              placeholder="Email registrado" 
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email registrado</label>
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-gray-300 rounded-2xl px-5 py-4 mb-6 focus:outline-none focus:border-indigo-500"
+              className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-6 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
             />
             <button 
               type="submit"
@@ -1514,7 +1674,7 @@ function LoginView({
   );
 }
 
-// ==================== MONITORING PANEL  ====================
+// ==================== MONITORING PANEL (versión final) ====================
 function MonitoringPanel({ 
   appointments, 
   services, 
@@ -1523,7 +1683,10 @@ function MonitoringPanel({
   onEdit 
 }) {
   const [filterStatus, setFilterStatus] = useState('all');
-  const [pendingChanges, setPendingChanges] = useState({});
+  // Nota Ciclo 1: estado `pendingChanges` y handler `saveAllChanges` removidos.
+  // La edición granular de dosis vive en AdminPanel > "Seguimiento de Dosis",
+  // donde cada (beneficiario, servicio) tiene su propio input. Aquí solo se
+  // cambian Estado y Notas para evitar sobrescritura accidental de datos.
 
   const isAdmin = currentUser?.role === 'admin';
 
@@ -1544,51 +1707,12 @@ function MonitoringPanel({
     await saveAppointments(updated);
   };
 
-  const updateDoses = (appId, completedDoses) => {
-    setPendingChanges(prev => ({
-      ...prev,
-      [appId]: parseInt(completedDoses) || 0
-    }));
-  };
-
-  const saveAllChanges = async () => {
-    if (Object.keys(pendingChanges).length === 0) return;
-
-    const updatedAppointments = safeAppointments.map(app => {
-      if (pendingChanges[app.id] === undefined) return app;
-      return {
-        ...app,
-        beneficiaries: (app.beneficiaries || []).map(ben => ({
-          ...ben,
-          services: (ben.services || []).map(s => ({
-            ...s,
-            completedDoses: pendingChanges[app.id]
-          }))
-        }))
-      };
-    });
-
-    await saveAppointments(updatedAppointments);
-    setPendingChanges({});
-    alert('✅ Todos los cambios de dosis han sido guardados');
-  };
-
   return (
     <div className="bg-white rounded-3xl shadow p-6 border border-gray-100">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Monitoreo de Atenciones</h2>
-        <div className="flex items-center gap-4">
-          <div className="text-sm text-gray-500">
-            {filteredApps.length} atenciones
-          </div>
-          {Object.keys(pendingChanges).length > 0 && (
-            <button
-              onClick={saveAllChanges}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-3xl text-sm font-medium flex items-center gap-2 transition-all"
-            >
-              💾 Guardar todos los cambios
-            </button>
-          )}
+        <div className="text-sm text-gray-500">
+          {filteredApps.length} atenciones
         </div>
       </div>
 
@@ -1655,7 +1779,7 @@ function MonitoringPanel({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-2">Estado</label>
                     <select
@@ -1671,17 +1795,13 @@ function MonitoringPanel({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-2">Dosis completadas</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={completedDoses}
-                      onChange={(e) => updateDoses(app.id, e.target.value)}
-                      className="w-full px-4 py-3 rounded-3xl border border-gray-300 focus:border-indigo-500 focus:ring-indigo-200"
-                    />
+                    <label className="block text-xs font-medium text-gray-500 mb-2">Dosis (lectura)</label>
+                    <div className="px-4 py-3 rounded-3xl border border-gray-200 bg-gray-50 text-gray-600 text-sm">
+                      {completedDoses} / {totalDoses} completadas — edita desde "Seguimiento de Dosis"
+                    </div>
                   </div>
 
-                  <div className="md:col-span-3">
+                  <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-gray-500 mb-2">Notas / Observaciones</label>
                     <textarea
                       value={app.notes || ''}
@@ -1701,7 +1821,7 @@ function MonitoringPanel({
   );
 }
 
-// ==================== APP PRINCIPAL ====================
+// ==================== APP PRINCIPAL - VERSIÓN FINAL CONSOLIDADA ====================
 export default function App() {
   const [view, setView] = useState('landing');
   const [user, setUser] = useState(null);
@@ -1917,7 +2037,7 @@ const validateAllAppointments = (apps, patients, professionals, services) => {
 
 // ==================== FIN DEL ARCHIVO ====================
 
-// ==================== FUNCIONES RESTANTES ====================
+// ==================== FUNCIONES RESTANTES (de la versión original) ====================
 const setupRealtimeNotifications = (userId, addNotification) => {
   if (!userId) return;
   // (Opcional: si usas notificaciones realtime con Supabase)

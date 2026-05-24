@@ -1,0 +1,48 @@
+{
+    "name": "Enfermereando - Cuidados a Domicilio",
+    "short_name": "Enfermereando",
+    "description": "Servicios profesionales de enfermería a domicilio en Santiago",
+    "lang": "es-CL",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "background_color": "#ffffff",
+    "theme_color": "#4f46e5",
+    "categories": ["health", "medical", "lifestyle"],
+    "icons": [
+      {
+        "src": "/icons/icon-192.png",
+        "sizes": "192x192",
+        "type": "image/png",
+        "purpose": "any"
+      },
+      {
+        "src": "/icons/icon-512.png",
+        "sizes": "512x512",
+        "type": "image/png",
+        "purpose": "any"
+      },
+      {
+        "src": "/icons/icon-maskable-512.png",
+        "sizes": "512x512",
+        "type": "image/png",
+        "purpose": "maskable"
+      }
+    ],
+    "shortcuts": [
+      {
+        "name": "Solicitar atención",
+        "short_name": "Solicitar",
+        "description": "Nueva solicitud de atención",
+        "url": "/?action=new-request"
+      },
+      {
+        "name": "Mis atenciones",
+        "short_name": "Mis citas",
+        "description": "Ver mis atenciones agendadas",
+        "url": "/?view=patient"
+      }
+    ]
+  }
+  
