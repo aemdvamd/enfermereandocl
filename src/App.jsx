@@ -1582,11 +1582,7 @@ function AdminPanel({
 
           {/* Filtros */}
           <div className="flex flex-wrap gap-4 mb-8">
-            <select 
-              value={statusFilter} 
-              onChange={e => setStatusFilter(e.target.value)}
-              className="border border-gray-300 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
-            >
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-gray-300 rounded-2xl px-4 py-3 text-sm">
               <option value="all">Todos los estados</option>
               <option value="pendiente">Pendiente</option>
               <option value="asignada">Asignada</option>
@@ -1594,27 +1590,9 @@ function AdminPanel({
               <option value="completada">Completada</option>
               <option value="cancelada">Cancelada</option>
             </select>
-
-            <input 
-              type="date" 
-              value={dateFrom} 
-              onChange={e => setDateFrom(e.target.value)}
-              className="border border-gray-300 rounded-2xl px-4 py-3 text-sm"
-            />
-            <input 
-              type="date" 
-              value={dateTo} 
-              onChange={e => setDateTo(e.target.value)}
-              className="border border-gray-300 rounded-2xl px-4 py-3 text-sm"
-            />
-
-            <input
-              type="text"
-              placeholder="Buscar paciente..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="flex-1 min-w-[220px] border border-gray-300 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
-            />
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="border border-gray-300 rounded-2xl px-4 py-3 text-sm" />
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="border border-gray-300 rounded-2xl px-4 py-3 text-sm" />
+            <input type="text" placeholder="Buscar paciente..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-1 min-w-[220px] border border-gray-300 rounded-2xl px-4 py-3 text-sm" />
           </div>
 
           <div className="space-y-6 max-h-[620px] overflow-auto">
@@ -1694,7 +1672,7 @@ function AdminPanel({
         </div>
       )}
 
-      {/* ==================== SECCIÓN SERVICIOS (CON VALIDACIÓN) ==================== */}
+      {/* ==================== SECCIÓN SERVICIOS (Nombre destacado) ==================== */}
       {tab === 'servicios' && (
         <div className="bg-white rounded-3xl shadow p-8">
           <div className="flex justify-between items-center mb-8">
@@ -1730,47 +1708,42 @@ function AdminPanel({
                 />
                 {priceError && <p className="text-red-500 text-xs mt-1">{priceError}</p>}
               </div>
-              <button 
-                onClick={addNewService}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-3xl font-medium"
-              >
-                Agregar
-              </button>
+              <button onClick={addNewService} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-3xl font-medium">Agregar</button>
             </div>
           </div>
 
-          {/* Lista de Servicios */}
+          {/* Lista de Servicios con nombre destacado */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {safeServices.map(service => (
               <div key={service.id} className="bg-white border border-gray-200 rounded-3xl p-6 hover:shadow-xl transition-all">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <p className="font-semibold text-lg">{service.name}</p>
-                    
-                    {editingPriceId === service.id ? (
-                      <div className="flex items-center gap-2 mt-3">
-                        <span className="text-sm text-gray-500">$</span>
-                        <input 
-                          type="number" 
-                          value={tempPrice}
-                          onChange={e => setTempPrice(e.target.value)}
-                          className="w-28 border border-gray-300 rounded-xl px-3 py-2 text-lg font-medium focus:outline-none focus:border-indigo-500"
-                          autoFocus
-                        />
-                        <button onClick={() => savePrice(service.id)} className="text-emerald-600 text-sm font-medium">Guardar</button>
-                        <button onClick={() => { setEditingPriceId(null); setPriceError(''); }} className="text-gray-500 text-sm">Cancelar</button>
-                      </div>
-                    ) : (
-                      <button 
-                        onClick={() => startEditingPrice(service)}
-                        className="text-3xl font-bold text-gray-900 hover:text-indigo-600 mt-1 block"
-                      >
-                        ${service.price}
-                      </button>
-                    )}
-                  </div>
+                {/* Nombre del servicio - destacado */}
+                <h3 className="font-bold text-xl text-gray-900 mb-4">{service.name}</h3>
 
-                  {/* Toggle */}
+                <div className="flex items-center justify-between mb-6">
+                  {/* Precio editable */}
+                  {editingPriceId === service.id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg text-gray-500">$</span>
+                      <input 
+                        type="number" 
+                        value={tempPrice}
+                        onChange={e => setTempPrice(e.target.value)}
+                        className="w-28 border border-gray-300 rounded-xl px-4 py-2 text-2xl font-semibold focus:outline-none focus:border-indigo-500"
+                        autoFocus
+                      />
+                      <button onClick={() => savePrice(service.id)} className="text-emerald-600 font-medium">Guardar</button>
+                      <button onClick={() => { setEditingPriceId(null); setPriceError(''); }} className="text-gray-500">Cancelar</button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => startEditingPrice(service)}
+                      className="text-3xl font-bold text-gray-900 hover:text-indigo-600"
+                    >
+                      ${service.price}
+                    </button>
+                  )}
+
+                  {/* Toggle Activo/Inactivo */}
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input 
                       type="checkbox" 
@@ -1784,7 +1757,7 @@ function AdminPanel({
 
                 <button 
                   onClick={() => deleteService(service.id)}
-                  className="mt-8 text-red-500 hover:text-red-700 text-sm font-medium flex items-center gap-1"
+                  className="w-full text-red-500 hover:text-red-700 text-sm font-medium py-3 border border-red-200 rounded-3xl hover:bg-red-50 transition-colors"
                 >
                   🗑 Eliminar servicio
                 </button>
