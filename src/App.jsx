@@ -1410,13 +1410,20 @@ function AdminPanel({
   const [dateTo, setDateTo] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Estado temporal para editar dosis
+  // Estado para edición temporal de dosis
   const [editedDoses, setEditedDoses] = useState({});
+
+  // Estados para sección Servicios
+  const [newServiceName, setNewServiceName] = useState('');
+  const [newServicePrice, setNewServicePrice] = useState('');
+  const [editingPriceId, setEditingPriceId] = useState(null);
+  const [tempPrice, setTempPrice] = useState('');
+  const [priceError, setPriceError] = useState('');
 
   const safeAppointments = Array.isArray(appointments) ? appointments : [];
   const safeServices = Array.isArray(services) ? services : [];
 
-  // Filtros para Seguimiento de Dosis
+  // ==================== FILTROS PARA SEGUIMIENTO ====================
   const filteredAppointments = safeAppointments.filter(app => {
     const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
     const matchesSearch = !searchTerm || 
@@ -1430,7 +1437,7 @@ function AdminPanel({
     return matchesStatus && matchesSearch && matchesDate;
   });
 
-  // Actualizar dosis temporalmente
+  // ==================== FUNCIONES DE DOSIS ====================
   const updateTempDoses = (appId, beneficiaryIndex, serviceIndex, newValue) => {
     const key = `${appId}-${beneficiaryIndex}-${serviceIndex}`;
     setEditedDoses(prev => ({
@@ -1439,11 +1446,9 @@ function AdminPanel({
     }));
   };
 
-  // Guardar cambios de dosis de una solicitud
   const saveDoseChanges = async (app) => {
     const updatedAppointments = safeAppointments.map(a => {
       if (a.id !== app.id) return a;
-
       const newBeneficiaries = (a.beneficiaries || []).map((ben, bIndex) => {
         const newServices = (ben.services || []).map((srv, sIndex) => {
           const key = `${app.id}-${bIndex}-${sIndex}`;
@@ -1452,13 +1457,67 @@ function AdminPanel({
         });
         return { ...ben, services: newServices };
       });
-
       return { ...a, beneficiaries: newBeneficiaries };
     });
 
     await saveAppointments(updatedAppointments);
-    setEditedDoses({}); // Limpiar edición
-    alert('✅ Dosis guardadas correctamente y notificación enviada');
+    setEditedDoses({});
+    alert('✅ Dosis guardadas correctamente');
+  };
+
+  // ==================== FUNCIONES DE SERVICIOS ====================
+  const addNewService = () => {
+    if (!newServiceName.trim()) return alert('Debes ingresar un nombre de servicio');
+    if (!newServicePrice || parseInt(newServicePrice) <= 0) {
+      setPriceError('El precio debe ser mayor a 0');
+      return;
+    }
+
+    const newService = {
+      id: uid(),
+      name: newServiceName.trim(),
+      price: parseInt(newServicePrice),
+      active: true
+    };
+
+    setServices([...safeServices, newService]);
+    setNewServiceName('');
+    setNewServicePrice('');
+    setPriceError('');
+    alert('✅ Nuevo servicio agregado correctamente');
+  };
+
+  const toggleService = (id) => {
+    const updated = safeServices.map(s => 
+      s.id === id ? { ...s, active: !s.active } : s
+    );
+    setServices(updated);
+  };
+
+  const startEditingPrice = (service) => {
+    setEditingPriceId(service.id);
+    setTempPrice(service.price.toString());
+    setPriceError('');
+  };
+
+  const savePrice = (id) => {
+    if (parseInt(tempPrice) <= 0) {
+      setPriceError('El precio debe ser mayor a 0');
+      return;
+    }
+    const updated = safeServices.map(s => 
+      s.id === id ? { ...s, price: parseInt(tempPrice) } : s
+    );
+    setServices(updated);
+    setEditingPriceId(null);
+    setTempPrice('');
+    setPriceError('');
+  };
+
+  const deleteService = (id) => {
+    if (!confirm('¿Estás seguro de eliminar este servicio permanentemente?')) return;
+    const updated = safeServices.filter(s => s.id !== id);
+    setServices(updated);
   };
 
   return (
@@ -1466,7 +1525,7 @@ function AdminPanel({
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Panel de Administración</h1>
-          <p className="text-gray-600">Gestión completa y seguimiento de dosis</p>
+          <p className="text-gray-600">Gestión completa del sistema</p>
         </div>
         <button 
           onClick={() => setView('landing')}
@@ -1478,30 +1537,10 @@ function AdminPanel({
 
       {/* TABS */}
       <div className="flex border-b border-gray-200 mb-8 overflow-x-auto">
-        <button 
-          onClick={() => setTab('dashboard')}
-          className={`px-8 py-4 font-medium ${tab === 'dashboard' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
-        >
-          Dashboard
-        </button>
-        <button 
-          onClick={() => setTab('solicitudes')}
-          className={`px-8 py-4 font-medium ${tab === 'solicitudes' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
-        >
-          Solicitudes
-        </button>
-        <button 
-          onClick={() => setTab('seguimiento')}
-          className={`px-8 py-4 font-medium ${tab === 'seguimiento' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
-        >
-          Seguimiento de Dosis
-        </button>
-        <button 
-          onClick={() => setTab('servicios')}
-          className={`px-8 py-4 font-medium ${tab === 'servicios' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
-        >
-          Servicios
-        </button>
+        <button onClick={() => setTab('dashboard')} className={`px-8 py-4 font-medium ${tab === 'dashboard' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Dashboard</button>
+        <button onClick={() => setTab('solicitudes')} className={`px-8 py-4 font-medium ${tab === 'solicitudes' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Solicitudes</button>
+        <button onClick={() => setTab('seguimiento')} className={`px-8 py-4 font-medium ${tab === 'seguimiento' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Seguimiento de Dosis</button>
+        <button onClick={() => setTab('servicios')} className={`px-8 py-4 font-medium ${tab === 'servicios' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}>Servicios</button>
       </div>
 
       {/* DASHBOARD */}
@@ -1655,22 +1694,99 @@ function AdminPanel({
         </div>
       )}
 
-      {/* SERVICIOS */}
+      {/* ==================== SECCIÓN SERVICIOS (CON VALIDACIÓN) ==================== */}
       {tab === 'servicios' && (
         <div className="bg-white rounded-3xl shadow p-8">
-          <h2 className="text-2xl font-semibold mb-6">Gestión de Servicios</h2>
-          <div className="space-y-4">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-2xl font-semibold">Gestión de Servicios</h2>
+            <button 
+              onClick={() => document.getElementById('newServiceForm').classList.toggle('hidden')}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-3xl text-sm font-medium flex items-center gap-2"
+            >
+              + Nuevo Servicio
+            </button>
+          </div>
+
+          {/* Formulario Nuevo Servicio */}
+          <div id="newServiceForm" className="hidden bg-gray-50 border border-gray-200 rounded-3xl p-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <input 
+                type="text" 
+                placeholder="Nombre del servicio" 
+                value={newServiceName}
+                onChange={e => setNewServiceName(e.target.value)}
+                className="border border-gray-300 rounded-2xl px-5 py-4"
+              />
+              <div>
+                <input 
+                  type="number" 
+                  placeholder="Precio CLP" 
+                  value={newServicePrice}
+                  onChange={e => {
+                    setNewServicePrice(e.target.value);
+                    setPriceError('');
+                  }}
+                  className="border border-gray-300 rounded-2xl px-5 py-4 w-full"
+                />
+                {priceError && <p className="text-red-500 text-xs mt-1">{priceError}</p>}
+              </div>
+              <button 
+                onClick={addNewService}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-3xl font-medium"
+              >
+                Agregar
+              </button>
+            </div>
+          </div>
+
+          {/* Lista de Servicios */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {safeServices.map(service => (
-              <div key={service.id} className="flex items-center justify-between border-b pb-4">
-                <div>
-                  <p className="font-medium">{service.name}</p>
-                  <p className="text-sm text-gray-500">${service.price} CLP</p>
+              <div key={service.id} className="bg-white border border-gray-200 rounded-3xl p-6 hover:shadow-xl transition-all">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <p className="font-semibold text-lg">{service.name}</p>
+                    
+                    {editingPriceId === service.id ? (
+                      <div className="flex items-center gap-2 mt-3">
+                        <span className="text-sm text-gray-500">$</span>
+                        <input 
+                          type="number" 
+                          value={tempPrice}
+                          onChange={e => setTempPrice(e.target.value)}
+                          className="w-28 border border-gray-300 rounded-xl px-3 py-2 text-lg font-medium focus:outline-none focus:border-indigo-500"
+                          autoFocus
+                        />
+                        <button onClick={() => savePrice(service.id)} className="text-emerald-600 text-sm font-medium">Guardar</button>
+                        <button onClick={() => { setEditingPriceId(null); setPriceError(''); }} className="text-gray-500 text-sm">Cancelar</button>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={() => startEditingPrice(service)}
+                        className="text-3xl font-bold text-gray-900 hover:text-indigo-600 mt-1 block"
+                      >
+                        ${service.price}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Toggle */}
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={service.active} 
+                      onChange={() => toggleService(service.id)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
                 </div>
+
                 <button 
-                  onClick={() => alert(`Servicio ${service.name} - Editar (próximamente)`)}
-                  className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded-2xl text-sm"
+                  onClick={() => deleteService(service.id)}
+                  className="mt-8 text-red-500 hover:text-red-700 text-sm font-medium flex items-center gap-1"
                 >
-                  Editar
+                  🗑 Eliminar servicio
                 </button>
               </div>
             ))}
