@@ -160,7 +160,7 @@ function Landing({ setView, services = [] }) {
         </div>
       </section>
 
-      {/* ==================== SERVICIOS DINÁMICOS ==================== */}
+      {/* ==================== SERVICIOS DINÁMICOS (CORREGIDO) ==================== */}
       <section id="servicios" className="bg-gray-50 py-20">
         <div className="max-w-7xl mx-auto px-6 md:px-10">
           <div className="text-center mb-12">
@@ -170,38 +170,41 @@ function Landing({ setView, services = [] }) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {services
-              .filter(service => service.active === true)
-              .map(service => (
-                <div
-                  key={service.id}
-                  className="bg-white rounded-3xl shadow hover:shadow-2xl transition-all p-8 flex flex-col"
-                >
-                  <div className="text-5xl mb-6">
-                    {service.name.toLowerCase().includes('inyecci') && '💉'}
-                    {service.name.toLowerCase().includes('curacion') && '🩸'}
-                    {service.name.toLowerCase().includes('muestra') && '🧪'}
-                    {service.name.toLowerCase().includes('geri') && '🧓'}
-                    {!service.name.toLowerCase().match(/inyecci|curacion|muestra|geri/) && '🩺'}
-                  </div>
-
-                  <h3 className="font-bold text-2xl text-gray-900 mb-3">{service.name}</h3>
-                  
-                  <p className="text-gray-600 text-sm leading-relaxed flex-1">
-                    {service.description || 'Servicio profesional de enfermería a domicilio'}
-                  </p>
-
-                  <div className="mt-8 pt-6 border-t flex items-baseline justify-between">
-                    <div>
-                      <span className="text-4xl font-semibold text-indigo-600">${service.price}</span>
-                      <span className="text-gray-400 text-sm ml-1">CLP</span>
+              .filter(service => service?.active === true)
+              .map(service => {
+                const nameLower = (service?.name || '').toLowerCase();
+                return (
+                  <div
+                    key={service.id}
+                    className="bg-white rounded-3xl shadow hover:shadow-2xl transition-all p-8 flex flex-col"
+                  >
+                    <div className="text-5xl mb-6">
+                      {nameLower.includes('inyecci') && '💉'}
+                      {nameLower.includes('curacion') && '🩸'}
+                      {nameLower.includes('muestra') && '🧪'}
+                      {nameLower.includes('geri') && '🧓'}
+                      {!nameLower.match(/inyecci|curacion|muestra|geri/) && '🩺'}
                     </div>
-                    <span className="text-xs font-medium bg-emerald-100 text-emerald-700 px-4 py-2 rounded-3xl">Disponible</span>
+
+                    <h3 className="font-bold text-2xl text-gray-900 mb-3">{service.name}</h3>
+                    
+                    <p className="text-gray-600 text-sm leading-relaxed flex-1">
+                      {service.description || 'Servicio profesional de enfermería a domicilio'}
+                    </p>
+
+                    <div className="mt-8 pt-6 border-t flex items-baseline justify-between">
+                      <div>
+                        <span className="text-4xl font-semibold text-indigo-600">${service.price}</span>
+                        <span className="text-gray-400 text-sm ml-1">CLP</span>
+                      </div>
+                      <span className="text-xs font-medium bg-emerald-100 text-emerald-700 px-4 py-2 rounded-3xl">Disponible</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
           </div>
 
-          {services.filter(s => s.active).length === 0 && (
+          {services.filter(s => s?.active).length === 0 && (
             <div className="text-center py-12 text-gray-400">
               No hay servicios activos en este momento
             </div>
