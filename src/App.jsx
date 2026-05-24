@@ -135,7 +135,7 @@ function Landing({ setView, services = [] }) {
           </h1>
 
           <p className="mt-8 text-2xl text-gray-600 max-w-xl">
-            Profesionales certificadas con más de 15 años de experiencia. Rápido, seguro y con seguimiento en tiempo real.
+            Profesionales certificadas.Servicio rápido, seguro y con seguimiento en tiempo real.
           </p>
 
           <div className="mt-10 flex flex-wrap gap-4">
@@ -160,7 +160,7 @@ function Landing({ setView, services = [] }) {
         </div>
       </section>
 
-      {/* ==================== SERVICIOS DINÁMICOS (CORREGIDO) ==================== */}
+      {/* ==================== SERVICIOS DINÁMICOS ==================== */}
       <section id="servicios" className="bg-gray-50 py-20">
         <div className="max-w-7xl mx-auto px-6 md:px-10">
           <div className="text-center mb-12">
@@ -884,7 +884,7 @@ function ProfessionalDashboard({
   );
 }
 
-// ==================== ADMIN PANEL - COMPLETO Y MODERNO ====================
+// ==================== ADMIN PANEL ====================
 function AdminPanel({ 
   appointments = [], 
   saveAppointments, 
@@ -1213,7 +1213,7 @@ function AdminPanel({
         </div>
       )}
 
-      {/* ==================== SERVICIOS (Rediseñado) ==================== */}
+      {/* ==================== SERVICIOS ==================== */}
       {tab === 'servicios' && (
         <div className="bg-white rounded-3xl shadow-xl p-8">
           <div className="flex justify-between items-center mb-8">
@@ -1514,7 +1514,7 @@ function LoginView({
   );
 }
 
-// ==================== MONITORING PANEL (versión final) ====================
+// ==================== MONITORING PANEL  ====================
 function MonitoringPanel({ 
   appointments, 
   services, 
@@ -1701,7 +1701,7 @@ function MonitoringPanel({
   );
 }
 
-// ==================== APP PRINCIPAL - VERSIÓN FINAL CONSOLIDADA ====================
+// ==================== APP PRINCIPAL ====================
 export default function App() {
   const [view, setView] = useState('landing');
   const [user, setUser] = useState(null);
@@ -1917,7 +1917,7 @@ const validateAllAppointments = (apps, patients, professionals, services) => {
 
 // ==================== FIN DEL ARCHIVO ====================
 
-// ==================== FUNCIONES RESTANTES (de la versión original) ====================
+// ==================== FUNCIONES RESTANTES ====================
 const setupRealtimeNotifications = (userId, addNotification) => {
   if (!userId) return;
   // (Opcional: si usas notificaciones realtime con Supabase)
