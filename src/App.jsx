@@ -502,176 +502,222 @@ function CalendarView({ appointments = [], onEdit }) {
 
 /* ============================== LOGIN VIEW  ============================================= */
 function LoginView({ 
-  onLogin, 
-  onBack, 
+  setView, 
+  setUser, 
   patients = [], 
-  professionals = [],
-  setPatients,
+  professionals = [], 
+  setPatients, 
   setProfessionals 
 }) {
-  const [tab, setTab] = useState('login'); // login | register | recovery
-  const [role, setRole] = useState('patient');
+  const [tab, setTab] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [comuna, setComuna] = useState('');
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const isValidEmail = (em) => em && em.includes('@') && em.includes('.');
-
-  // ==================== LOGIN ====================
-  const handleLogin = async () => {
+  // LOGIN
+  const handleLogin = async (e) => {
+    if (e) e.preventDefault();
+    setError('');
     setLoading(true);
-    let foundUser = null;
 
-    if (role === 'patient') {
-      foundUser = patients.find(p => p.email?.toLowerCase() === email.toLowerCase() && p.password === password);
-    } else {
-      foundUser = professionals.find(p => 
-        (p.email?.toLowerCase() === email.toLowerCase() || p.role === 'admin') && p.password === password
+    try {
+      // Buscar en profesionales
+      const foundProfessional = professionals.find(p => 
+        (p.email === email || p.username === email) && p.password === password
       );
-    }
 
-    if (foundUser) {
-      onLogin({ ...foundUser, role });
-    } else {
-      alert('❌ Credenciales incorrectas. Verifica tu correo y contraseña.');
+      if (foundProfessional) {
+        setUser(foundProfessional);
+        setView(foundProfessional.role === 'admin' ? 'admin' : 'professional');
+        return;
+      }
+
+      // Buscar en pacientes
+      const foundPatient = patients.find(p => 
+        (p.email === email || p.username === email) && p.password === password
+      );
+
+      if (foundPatient) {
+        setUser(foundPatient);
+        setView('patient');
+        return;
+      }
+
+      setError('Credenciales incorrectas. Verifica email/usuario y contraseña.');
+    } catch (err) {
+      console.error(err);
+      setError('Error al iniciar sesión');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  // ==================== CREACIÓN DE USUARIO CON VALIDACIÓN DE DUPLICADOS ====================
-  const handleRegister = async () => {
-    if (!name || !email || !password || !phone) {
-      return alert('❌ Todos los campos son obligatorios');
-    }
-
-    if (!isValidEmail(email)) {
-      return alert('❌ Ingresa un correo electrónico válido');
-    }
-
-    const emailLower = email.trim().toLowerCase();
-
-    // Validación de integridad (no duplicados)
-    const existsInPatients = patients.some(p => p.email?.toLowerCase() === emailLower);
-    const existsInProfessionals = professionals.some(p => p.email?.toLowerCase() === emailLower);
-
-    if (existsInPatients || existsInProfessionals) {
-      return alert('❌ Ya existe un usuario con ese correo electrónico.\n\nIntenta iniciar sesión o usa otro correo.');
-    }
-
+  // REGISTRO
+  const handleRegister = async (e) => {
+    if (e) e.preventDefault();
+    setError('');
     setLoading(true);
+
+    if (!name || !email || !password) {
+      setError('Todos los campos son obligatorios');
+      setLoading(false);
+      return;
+    }
+
+    // Validación de duplicados
+    const exists = [...patients, ...professionals].some(u => 
+      u.email === email || u.username === email
+    );
+
+    if (exists) {
+      setError('Ya existe un usuario con ese email o nombre de usuario');
+      setLoading(false);
+      return;
+    }
 
     const newUser = {
       id: uid(),
-      name: name.trim(),
-      email: emailLower,
-      password: password,
-      phone: phone.trim(),
-      comuna: comuna || 'No especificada',
-      role: role,
-      status: role === 'professional' ? 'pending' : 'active',
-      createdAt: new Date().toISOString()
+      name,
+      email,
+      username: email,
+      password,
+      role: 'patient',
+      active: true
     };
 
-    if (role === 'patient') {
-      const updatedPatients = [...patients, newUser];
-      await sset('enf:patients', updatedPatients);
-      setPatients(updatedPatients);           // ← Actualiza el estado en App()
-    } else {
-      const updatedProfessionals = [...professionals, newUser];
-      await sset('enf:professionals', updatedProfessionals);
-      setProfessionals(updatedProfessionals); // ← Actualiza el estado en App()
-    }
+    const updatedPatients = [...patients, newUser];
+    await setPatients(updatedPatients);   // actualiza estado
+    setUser(newUser);
+    setView('patient');
 
-    alert(`✅ ¡Usuario creado correctamente!\n\nNombre: ${newUser.name}\nCorreo: ${newUser.email}\nRol: ${role === 'patient' ? 'Paciente' : 'Profesional'}`);
-
-    // Limpiar y volver a login
-    setName('');
-    setEmail('');
-    setPassword('');
-    setPhone('');
-    setComuna('');
-    setTab('login');
     setLoading(false);
   };
 
-  const handleRecovery = async () => {
-    if (!email || !isValidEmail(email)) return alert('❌ Ingresa un correo válido');
-    setLoading(true);
-    alert(`✅ Enlace de recuperación enviado a ${email} (simulado en esta versión)`);
-    setLoading(false);
-    setTab('login');
+  // RECUPERACIÓN (simulada)
+  const handleRecovery = (e) => {
+    if (e) e.preventDefault();
+    alert('✅ Instrucciones de recuperación enviadas a tu correo (simulado)');
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 to-white flex items-center justify-center p-6">
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
-        <div className="px-8 pt-8 pb-6 border-b flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Stethoscope className="w-9 h-9 text-teal-600" />
-            <div className="font-bold text-3xl">Enfermereando</div>
-          </div>
-          <button onClick={onBack} className="text-slate-400 hover:text-slate-600">← Volver</button>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+      <div className="bg-white rounded-3xl shadow-xl max-w-md w-full p-8">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Enfermereando</h1>
+          <p className="text-gray-600 mt-1">Inicia sesión o regístrate</p>
         </div>
 
-        <div className="flex border-b text-sm">
-          <button onClick={() => setTab('login')} className={`flex-1 py-5 ${tab === 'login' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Iniciar Sesión</button>
-          <button onClick={() => setTab('register')} className={`flex-1 py-5 ${tab === 'register' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Registrarse</button>
-          <button onClick={() => setTab('recovery')} className={`flex-1 py-5 ${tab === 'recovery' ? 'border-b-4 border-teal-600 text-teal-600' : 'text-slate-500'}`}>Recuperar</button>
+        {/* Tabs */}
+        <div className="flex border-b mb-6">
+          <button 
+            onClick={() => { setTab('login'); setError(''); }}
+            className={`flex-1 py-3 font-medium ${tab === 'login' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
+          >
+            Iniciar Sesión
+          </button>
+          <button 
+            onClick={() => { setTab('register'); setError(''); }}
+            className={`flex-1 py-3 font-medium ${tab === 'register' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
+          >
+            Registrarse
+          </button>
+          <button 
+            onClick={() => { setTab('recovery'); setError(''); }}
+            className={`flex-1 py-3 font-medium ${tab === 'recovery' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
+          >
+            Recuperar
+          </button>
         </div>
 
-        <div className="p-8 space-y-6">
-          {/* LOGIN */}
-          {tab === 'login' && (
-            <>
-              <div className="flex bg-slate-100 rounded-2xl p-1">
-                <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}>Paciente</button>
-                <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}>Profesional</button>
-              </div>
-              <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-              <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-              <button onClick={handleLogin} disabled={loading} className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg disabled:opacity-70">
-                {loading ? 'Ingresando...' : 'Iniciar Sesión'}
-              </button>
-            </>
-          )}
+        {tab === 'login' && (
+          <form onSubmit={handleLogin}>
+            <input 
+              type="text" 
+              placeholder="Email o usuario" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border border-gray-300 rounded-2xl px-5 py-4 mb-4 focus:outline-none focus:border-indigo-500"
+            />
+            <input 
+              type="password" 
+              placeholder="Contraseña" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border border-gray-300 rounded-2xl px-5 py-4 mb-6 focus:outline-none focus:border-indigo-500"
+            />
+            <button 
+              type="submit"
+              disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold py-4 rounded-3xl transition-all"
+            >
+              {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+            </button>
+          </form>
+        )}
 
-          {/* REGISTRO */}
-          {tab === 'register' && (
-            <div className="space-y-5">
-              <div className="flex bg-slate-100 rounded-2xl p-1">
-                <button onClick={() => setRole('patient')} className={`flex-1 py-3 rounded-xl ${role === 'patient' ? 'bg-white shadow' : ''}`}>Paciente</button>
-                <button onClick={() => setRole('professional')} className={`flex-1 py-3 rounded-xl ${role === 'professional' ? 'bg-white shadow' : ''}`}>Profesional</button>
-              </div>
+        {tab === 'register' && (
+          <form onSubmit={handleRegister}>
+            <input 
+              type="text" 
+              placeholder="Nombre completo" 
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full border border-gray-300 rounded-2xl px-5 py-4 mb-4 focus:outline-none focus:border-indigo-500"
+            />
+            <input 
+              type="email" 
+              placeholder="Email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border border-gray-300 rounded-2xl px-5 py-4 mb-4 focus:outline-none focus:border-indigo-500"
+            />
+            <input 
+              type="password" 
+              placeholder="Contraseña" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border border-gray-300 rounded-2xl px-5 py-4 mb-6 focus:outline-none focus:border-indigo-500"
+            />
+            <button 
+              type="submit"
+              disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold py-4 rounded-3xl transition-all"
+            >
+              {loading ? 'Registrando...' : 'Crear cuenta'}
+            </button>
+          </form>
+        )}
 
-              <input type="text" placeholder="Nombre completo" value={name} onChange={e => setName(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-              <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-              <input type="tel" placeholder="Teléfono" value={phone} onChange={e => setPhone(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-              <select value={comuna} onChange={e => setComuna(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500">
-                <option value="">Seleccionar comuna</option>
-                {COMUNAS.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
+        {tab === 'recovery' && (
+          <form onSubmit={handleRecovery}>
+            <input 
+              type="email" 
+              placeholder="Email registrado" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border border-gray-300 rounded-2xl px-5 py-4 mb-6 focus:outline-none focus:border-indigo-500"
+            />
+            <button 
+              type="submit"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-4 rounded-3xl transition-all"
+            >
+              Enviar instrucciones de recuperación
+            </button>
+          </form>
+        )}
 
-              <button onClick={handleRegister} disabled={loading} className="w-full py-5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-3xl text-lg disabled:opacity-70">
-                {loading ? 'Creando cuenta...' : 'Crear Cuenta'}
-              </button>
-            </div>
-          )}
+        {error && (
+          <p className="mt-4 text-center text-red-600 text-sm font-medium">{error}</p>
+        )}
 
-          {/* RECUPERACIÓN */}
-          {tab === 'recovery' && (
-            <div className="space-y-6">
-              <p className="text-slate-600">Ingresa tu correo para recuperar la contraseña.</p>
-              <input type="email" placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-slate-300 focus:border-teal-500" />
-              <button onClick={handleRecovery} disabled={loading} className="w-full py-5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-3xl text-lg disabled:opacity-70">
-                {loading ? 'Enviando...' : 'Enviar enlace de recuperación'}
-              </button>
-            </div>
-          )}
-        </div>
+        <button 
+          onClick={() => setView('landing')}
+          className="mt-8 text-gray-500 hover:text-gray-700 text-sm w-full"
+        >
+          ← Volver al inicio
+        </button>
       </div>
     </div>
   );
