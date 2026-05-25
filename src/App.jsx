@@ -107,7 +107,7 @@ function Landing({ setView, services = [] }) {
           {/* CTAs: en móvil solo "Iniciar sesión" compacto; WhatsApp queda como FAB flotante */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <a
-              href="https://wa.me/56912345678"
+              href="https://wa.me/56920489639"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Contactar por WhatsApp"
@@ -271,7 +271,7 @@ function Landing({ setView, services = [] }) {
 
       {/* BOTÓN FLOTANTE WHATSAPP - con safe area iOS */}
       <a
-        href="https://wa.me/56912345678"
+        href="https://wa.me/56920489639"
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Contactar por WhatsApp"
