@@ -48,37 +48,95 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).substr(2,
 const safeFind = (array, predicate) => Array.isArray(array) ? array.find(predicate) : undefined;
 const safeFilter = (array, predicate) => Array.isArray(array) ? array.filter(predicate) : [];
 
+// ==================== AUTH (Ciclo 2.2 - Supabase Auth) ====================
+// Mapea el objeto de Supabase Auth al shape { id, name, email, role } que usa el resto del código.
+// Compatibilidad: el resto del App.jsx sigue trabajando con `user.id`, `user.name`, `user.role`, etc.
+const mapAuthUser = (supaUser) => {
+  if (!supaUser) return null;
+  const meta = supaUser.user_metadata || {};
+  return {
+    id: supaUser.id,
+    email: supaUser.email,
+    name: meta.name || supaUser.email?.split('@')[0] || 'Usuario',
+    role: meta.role || 'patient', // por defecto, paciente
+    phone: meta.phone || null,
+  };
+};
+
+const authSignIn = async (email, password) => {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return mapAuthUser(data.user);
+};
+
+const authSignUp = async ({ email, password, name, phone }) => {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { name, role: 'patient', phone: phone || null },
+      emailRedirectTo: `${window.location.origin}/`,
+    },
+  });
+  if (error) throw error;
+  // Si confirmación por email está activa, data.user existe pero data.session es null.
+  // El usuario tiene que confirmar antes de poder iniciar sesión.
+  return {
+    user: mapAuthUser(data.user),
+    needsConfirmation: !data.session,
+  };
+};
+
+const authSignOut = async () => {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+};
+
+const authResetPassword = async (email) => {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/`,
+  });
+  if (error) throw error;
+};
+
+const authGetCurrentUser = async () => {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return null;
+  return mapAuthUser(data.user);
+};
+
 // ==================== TELEGRAM ====================
 const sendTelegramToAdmin = async (app, action = 'new', services = [], extraInfo = '') => {
+  // Ciclo 2.1: el token de Telegram ya NO vive en el cliente.
+  // Llamamos a nuestro endpoint serverless /api/telegram que actúa de intermediario.
+  // Si la app se ejecuta en local sin el endpoint, falla silenciosamente (return false).
   try {
-    let text = `🔔 *Enfermereando - ${PROFESSIONAL_NAME}*\n\n`;
-    if (action === 'new') text += `📌 *NUEVA SOLICITUD DE ATENCIÓN*\n`;
-    else if (action === 'cancelled') text += `❌ *ATENCIÓN CANCELADA*\n`;
-    else if (action === 'status_change') text += `🔄 *CAMBIO DE ESTADO*\n`;
-    else if (action === 'task_taken') text += `✅ *TAREA TOMADA*\n`;
-    else if (action === 'dose_update') text += `📊 *DOSIS ACTUALIZADAS*\n`;
-
-    text += `Paciente: ${app.patientName || app.beneficiaries?.[0]?.name || 'Sin nombre'}\n`;
-    text += `Fecha: ${new Date(app.date).toLocaleDateString('es-CL')}\n`;
-    text += `Hora: ${fmtTime(app.time)}\n`;
-    text += `Comuna: ${app.comuna || 'No especificada'}\n`;
-    if (extraInfo) text += `${extraInfo}\n`;
-
-    const BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN;
-    const CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID;
-
-    if (!BOT_TOKEN || !CHAT_ID) return false;
-
-    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    const response = await fetch('/api/telegram', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: 'Markdown' })
+      body: JSON.stringify({
+        action,
+        app: {
+          patientName: app.patientName,
+          beneficiaries: app.beneficiaries,
+          date: app.date,
+          time: app.time,
+          comuna: app.comuna,
+        },
+        extraInfo,
+      }),
     });
 
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      console.error('[telegram] Endpoint respondió error:', response.status, errorBody);
+      return false;
+    }
+
     const result = await response.json();
-    return result.ok;
+    return result.ok === true;
   } catch (error) {
-    console.error('❌ Error Telegram:', error);
+    console.error('[telegram] Error de red llamando al endpoint:', error);
     return false;
   }
 };
@@ -107,7 +165,7 @@ function Landing({ setView, services = [] }) {
           {/* CTAs: en móvil solo "Iniciar sesión" compacto; WhatsApp queda como FAB flotante */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <a
-              href="https://wa.me/56920489639"
+              href="https://wa.me/56912345678"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Contactar por WhatsApp"
@@ -271,7 +329,7 @@ function Landing({ setView, services = [] }) {
 
       {/* BOTÓN FLOTANTE WHATSAPP - con safe area iOS */}
       <a
-        href="https://wa.me/56920489639"
+        href="https://wa.me/56912345678"
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Contactar por WhatsApp"
@@ -712,7 +770,7 @@ function RequestForm({ user, services = [], onSubmit, onCancel }) {
 }
 
 // ==================== PATIENT PORTAL ====================
-function PatientPortal({ user, appointments = [], saveAppointments, services, setView }) {
+function PatientPortal({ user, appointments = [], saveAppointments, services, setView, onLogout }) {
   const [tab, setTab] = useState('inicio');
 
   const safeAppointments = Array.isArray(appointments) ? appointments : [];
@@ -767,7 +825,7 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
           <p className="text-sm sm:text-base text-gray-600 truncate">Hola, {user?.name || 'Paciente'}</p>
         </div>
         <button
-          onClick={() => setView('landing')}
+          onClick={() => onLogout ? onLogout() : setView('landing')}
           aria-label="Cerrar sesión"
           className="text-gray-500 hover:text-gray-700 text-sm shrink-0 min-h-[44px] flex items-center"
         >
@@ -866,12 +924,13 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
 }
 
 // ==================== PROFESSIONAL DASHBOARD ====================
-function ProfessionalDashboard({ 
-  user, 
-  appointments = [], 
-  saveAppointments, 
-  services = [], 
-  setView 
+function ProfessionalDashboard({
+  user,
+  appointments = [],
+  saveAppointments,
+  services = [],
+  setView,
+  onLogout
 }) {
   const [tab, setTab] = useState('hoy');
 
@@ -920,7 +979,7 @@ function ProfessionalDashboard({
           <p className="text-sm sm:text-base text-gray-600 truncate">Hola, {user?.name || 'Profesional'}</p>
         </div>
         <button
-          onClick={() => setView('landing')}
+          onClick={() => onLogout ? onLogout() : setView('landing')}
           aria-label="Cerrar sesión"
           className="text-gray-500 hover:text-gray-700 text-sm font-medium shrink-0 min-h-[44px] flex items-center"
         >
@@ -1029,12 +1088,13 @@ function ProfessionalDashboard({
 }
 
 // ==================== ADMIN PANEL - COMPLETO Y MODERNO ====================
-function AdminPanel({ 
-  appointments = [], 
-  saveAppointments, 
-  services = [], 
-  setServices, 
-  setView 
+function AdminPanel({
+  appointments = [],
+  saveAppointments,
+  services = [],
+  setServices,
+  setView,
+  onLogout
 }) {
   const [tab, setTab] = useState('dashboard');
 
@@ -1174,11 +1234,11 @@ function AdminPanel({
           <p className="text-xs sm:text-sm lg:text-base text-gray-600 mt-1 truncate">Gestión completa • Enfermereando</p>
         </div>
         <button
-          onClick={() => setView('landing')}
-          aria-label="Volver al landing"
+          onClick={() => onLogout ? onLogout() : setView('landing')}
+          aria-label="Cerrar sesión"
           className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-white border border-gray-300 hover:bg-gray-100 rounded-3xl text-xs sm:text-sm font-medium transition-all shrink-0 min-h-[44px]"
         >
-          <span className="hidden sm:inline">← Volver al Landing</span>
+          <span className="hidden sm:inline">← Cerrar sesión</span>
           <span className="sm:hidden">← Salir</span>
         </button>
       </div>
@@ -1452,52 +1512,44 @@ function AdminPanel({
   );
 }
 
-// ==================== LOGIN VIEW ====================
-function LoginView({ 
-  setView, 
-  setUser, 
-  patients = [], 
-  professionals = [], 
-  setPatients, 
-  setProfessionals 
-}) {
+// ==================== LOGIN VIEW (Ciclo 2.2 - Supabase Auth) ====================
+function LoginView({ setView, setUser }) {
   const [tab, setTab] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const resetMessages = () => { setError(''); setInfo(''); };
+
+  // Traduce errores típicos de Supabase Auth a mensajes en español comprensibles.
+  const friendlyError = (err) => {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('invalid login')) return 'Email o contraseña incorrectos.';
+    if (msg.includes('email not confirmed')) return 'Aún no has confirmado tu email. Revisa tu bandeja de entrada (y la carpeta de spam).';
+    if (msg.includes('user already registered')) return 'Ya existe una cuenta con ese email. Intenta iniciar sesión.';
+    if (msg.includes('password should be at least')) return 'La contraseña debe tener al menos 6 caracteres.';
+    if (msg.includes('unable to validate email')) return 'El email no tiene un formato válido.';
+    if (msg.includes('rate limit')) return 'Demasiados intentos. Espera unos minutos.';
+    return err?.message || 'Ocurrió un error. Intenta nuevamente.';
+  };
 
   const handleLogin = async (e) => {
     if (e) e.preventDefault();
-    setError('');
+    resetMessages();
     setLoading(true);
-
     try {
-      const foundProfessional = professionals.find(p => 
-        (p.email === email || p.username === email) && p.password === password
-      );
-
-      if (foundProfessional) {
-        setUser(foundProfessional);
-        setView(foundProfessional.role === 'admin' ? 'admin' : 'professional');
-        return;
-      }
-
-      const foundPatient = patients.find(p => 
-        (p.email === email || p.username === email) && p.password === password
-      );
-
-      if (foundPatient) {
-        setUser(foundPatient);
-        setView('patient');
-        return;
-      }
-
-      setError('Credenciales incorrectas. Verifica email/usuario y contraseña.');
+      const user = await authSignIn(email, password);
+      setUser(user);
+      // Redirige según rol
+      if (user.role === 'admin') setView('admin');
+      else if (user.role === 'professional') setView('professional');
+      else setView('patient');
     } catch (err) {
-      console.error(err);
-      setError('Error al iniciar sesión');
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -1505,45 +1557,39 @@ function LoginView({
 
   const handleRegister = async (e) => {
     if (e) e.preventDefault();
-    setError('');
+    resetMessages();
+    if (!name.trim()) { setError('Ingresa tu nombre completo.'); return; }
+    if (password.length < 8) { setError('La contraseña debe tener al menos 8 caracteres.'); return; }
     setLoading(true);
-
-    if (!name || !email || !password) {
-      setError('Todos los campos son obligatorios');
+    try {
+      const { needsConfirmation } = await authSignUp({ email, password, name: name.trim(), phone: phone.trim() });
+      if (needsConfirmation) {
+        setInfo('✅ Cuenta creada. Te enviamos un email para confirmar tu cuenta. Revisa tu bandeja de entrada y haz clic en el enlace.');
+        setTab('login');
+      } else {
+        setInfo('✅ Cuenta creada. Ya puedes iniciar sesión.');
+        setTab('login');
+      }
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const exists = [...patients, ...professionals].some(u => 
-      u.email === email || u.username === email
-    );
-
-    if (exists) {
-      setError('Ya existe un usuario con ese email o nombre de usuario');
-      setLoading(false);
-      return;
-    }
-
-    const newUser = {
-      id: uid(),
-      name,
-      email,
-      username: email,
-      password,
-      role: 'patient',
-      active: true
-    };
-
-    const updatedPatients = [...patients, newUser];
-    await setPatients(updatedPatients);
-    setUser(newUser);
-    setView('patient');
-    setLoading(false);
   };
 
-  const handleRecovery = (e) => {
+  const handleRecovery = async (e) => {
     if (e) e.preventDefault();
-    alert('✅ Instrucciones de recuperación enviadas a tu correo (simulado)');
+    resetMessages();
+    if (!email) { setError('Ingresa tu email.'); return; }
+    setLoading(true);
+    try {
+      await authResetPassword(email);
+      setInfo('✅ Te enviamos un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada.');
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -1554,32 +1600,43 @@ function LoginView({
           <p className="text-sm sm:text-base text-gray-600 mt-1">Inicia sesión o regístrate</p>
         </div>
 
-        {/* Tabs: en móvil "Recuperar" pasa a ser link, así caben los principales sin truncar */}
         <div className="flex border-b mb-6">
           <button
-            onClick={() => { setTab('login'); setError(''); }}
+            onClick={() => { setTab('login'); resetMessages(); }}
             className={`flex-1 py-3 text-sm sm:text-base font-medium min-h-[44px] ${tab === 'login' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
           >
             Iniciar Sesión
           </button>
           <button
-            onClick={() => { setTab('register'); setError(''); }}
+            onClick={() => { setTab('register'); resetMessages(); }}
             className={`flex-1 py-3 text-sm sm:text-base font-medium min-h-[44px] ${tab === 'register' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500'}`}
           >
             Registrarse
           </button>
         </div>
 
+        {error && (
+          <div className="mb-4 px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-sm">
+            {error}
+          </div>
+        )}
+        {info && (
+          <div className="mb-4 px-4 py-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">
+            {info}
+          </div>
+        )}
+
         {tab === 'login' && (
           <form onSubmit={handleLogin}>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email o usuario</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
-              type="text"
+              type="email"
               inputMode="email"
-              autoComplete="username"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-4 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
+              required
             />
             <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
             <input
@@ -1588,10 +1645,11 @@ function LoginView({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-3 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
+              required
             />
             <button
               type="button"
-              onClick={() => { setTab('recovery'); setError(''); }}
+              onClick={() => { setTab('recovery'); resetMessages(); }}
               className="text-sm text-indigo-600 hover:text-indigo-800 mb-6 inline-block"
             >
               ¿Olvidaste tu contraseña?
@@ -1615,6 +1673,7 @@ function LoginView({
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-4 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
+              required
             />
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
@@ -1624,6 +1683,17 @@ function LoginView({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-4 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
+              required
+            />
+            <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono (opcional)</label>
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+56 9 1234 5678"
+              className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-4 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
             />
             <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
             <input
@@ -1631,8 +1701,11 @@ function LoginView({
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-6 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
+              className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-2 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
+              required
+              minLength={8}
             />
+            <p className="text-xs text-gray-500 mb-6">Mínimo 8 caracteres.</p>
             <button
               type="submit"
               disabled={loading}
@@ -1645,6 +1718,10 @@ function LoginView({
 
         {tab === 'recovery' && (
           <form onSubmit={handleRecovery}>
+            <h3 className="text-base font-semibold text-gray-900 mb-4">Restablecer contraseña</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Ingresa tu email y te enviaremos un enlace para crear una nueva contraseña.
+            </p>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email registrado</label>
             <input
               type="email"
@@ -1653,30 +1730,38 @@ function LoginView({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full border border-gray-300 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 mb-6 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
+              required
             />
-            <button 
+            <button
               type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-4 rounded-3xl transition-all"
+              disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold py-4 rounded-3xl transition-all min-h-[52px] text-base mb-3"
             >
-              Enviar instrucciones de recuperación
+              {loading ? 'Enviando...' : 'Enviar enlace'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTab('login'); resetMessages(); }}
+              className="w-full text-sm text-gray-600 hover:text-gray-900 min-h-[44px]"
+            >
+              ← Volver al inicio de sesión
             </button>
           </form>
         )}
 
-        {error && (
-          <p className="mt-4 text-center text-red-600 text-sm font-medium">{error}</p>
-        )}
-
-        <button 
-          onClick={() => setView('landing')}
-          className="mt-8 text-gray-500 hover:text-gray-700 text-sm w-full"
-        >
-          ← Volver al inicio
-        </button>
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => setView('landing')}
+            className="text-sm text-gray-500 hover:text-gray-700 min-h-[44px]"
+          >
+            ← Volver al inicio
+          </button>
+        </div>
       </div>
     </div>
   );
 }
+
 
 // ==================== MONITORING PANEL (versión final) ====================
 function MonitoringPanel({ 
@@ -1825,54 +1910,83 @@ function MonitoringPanel({
   );
 }
 
-// ==================== APP PRINCIPAL - VERSIÓN FINAL CONSOLIDADA ====================
+// ==================== APP PRINCIPAL (Ciclo 2.2 - Supabase Auth) ====================
 export default function App() {
   const [view, setView] = useState('landing');
   const [user, setUser] = useState(null);
   const [appointments, setAppointments] = useState([]);
-  const [patients, setPatients] = useState([]);
-  const [professionals, setProfessionals] = useState([]);
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Carga inicial de datos
+  // Ciclo 2.2: ya NO cargamos professionals ni patients desde app_storage.
+  // Esa información vive en auth.users de Supabase. El estado local se
+  // alimenta de eventos de Auth y de las citas (que llevan userId y assignedTo).
+
+  // Carga inicial: sesión + datos de aplicación
   useEffect(() => {
+    let mounted = true;
+    let subscription;
+
     (async () => {
       try {
-        const svcs = await sget('enf:services', DEFAULT_SERVICES);
-        let apps = (await sget('enf:appointments', [])).map(normalizeApp);
-        const pats = await sget('enf:patients', []);
-        let profs = await sget('enf:professionals', []);
-        const notifs = await sget('enf:notifications', []);
-
-        // Admin por defecto
-        if (!profs.some(p => p.role === 'admin')) {
-          profs = [{
-            id: 'admin-default',
-            username: 'admin',
-            password: 'enfermera2026',
-            name: PROFESSIONAL_NAME,
-            email: 'marielads.enfermera@gmail.com',
-            role: 'admin',
-            active: true
-          }].concat(profs);
+        // 1. Recupera sesión persistente si existe (refresh sin perder login)
+        const currentUser = await authGetCurrentUser();
+        if (mounted && currentUser) {
+          setUser(currentUser);
+          // Si el usuario ya estaba logueado y abrió la app, redirigir a su panel
+          if (currentUser.role === 'admin') setView('admin');
+          else if (currentUser.role === 'professional') setView('professional');
+          else setView('patient');
         }
 
-        setServices(svcs);
-        setAppointments(apps);
-        setPatients(pats);
-        setProfessionals(profs);
+        // 2. Carga catálogo de servicios y citas
+        const svcs = await sget('enf:services', DEFAULT_SERVICES);
+        const apps = (await sget('enf:appointments', [])).map(normalizeApp);
+
+        if (mounted) {
+          setServices(svcs);
+          setAppointments(apps);
+        }
+
+        // 3. Suscribirse a cambios de auth (logout en otra pestaña, sesión expirada, etc.)
+        const { data } = supabase.auth.onAuthStateChange((event, session) => {
+          if (!mounted) return;
+          if (event === 'SIGNED_OUT' || !session) {
+            setUser(null);
+            setView('landing');
+          } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+            setUser(mapAuthUser(session.user));
+          }
+        });
+        subscription = data.subscription;
       } catch (e) {
         console.error("Error cargando datos:", e);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     })();
+
+    return () => {
+      mounted = false;
+      if (subscription) subscription.unsubscribe();
+    };
   }, []);
 
   const saveAppointments = async (newList) => {
     setAppointments(newList);
     await sset('enf:appointments', newList);
+  };
+
+  // Logout centralizado: limpia sesión Auth y vuelve al landing
+  const handleLogout = async () => {
+    try {
+      await authSignOut();
+    } catch (e) {
+      console.error('Error cerrando sesión:', e);
+    } finally {
+      setUser(null);
+      setView('landing');
+    }
   };
 
   if (loading) {
@@ -1896,10 +2010,6 @@ export default function App() {
         <LoginView
           setView={setView}
           setUser={setUser}
-          patients={patients}
-          professionals={professionals}
-          setPatients={setPatients}
-          setProfessionals={setProfessionals}
         />
       )}
 
@@ -1911,17 +2021,19 @@ export default function App() {
           saveAppointments={saveAppointments}
           services={services}
           setView={setView}
+          onLogout={handleLogout}
         />
       )}
 
       {/* PANEL PROFESIONAL */}
       {user && (user.role === 'professional' || user.role === 'admin') && view === 'professional' && (
-        <ProfessionalDashboard 
-          user={user} 
-          appointments={appointments} 
-          saveAppointments={saveAppointments} 
-          services={services} 
-          setView={setView} 
+        <ProfessionalDashboard
+          user={user}
+          appointments={appointments}
+          saveAppointments={saveAppointments}
+          services={services}
+          setView={setView}
+          onLogout={handleLogout}
         />
       )}
 
@@ -1933,6 +2045,7 @@ export default function App() {
           services={services}
           setServices={setServices}
           setView={setView}
+          onLogout={handleLogout}
         />
       )}
     </div>
@@ -2008,28 +2121,14 @@ const normalizeApp = (a) => {
   return app;
 };
 
-const validateAndFixAppointment = (app, patients, professionals, services) => {
+// Ciclo 2.2: con Supabase Auth ya no tenemos arrays locales de patients/professionals.
+// La validación de integridad referencial de usuarios queda como TODO para cuando migremos
+// citas a tabla relacional con FK reales (Sprint 3). Por ahora solo validamos servicios.
+const validateAndFixAppointment = (app, services) => {
   let fixed = { ...app };
   let fixedIssues = [];
 
   fixed = normalizeApp(fixed);
-
-  // Validación de integridad referencial
-  if (!fixed.patientId || !patients.some(p => p.id === fixed.patientId)) {
-    const possiblePatient = patients.find(p => p.name === fixed.patientName);
-    if (possiblePatient) {
-      fixed.patientId = possiblePatient.id;
-      fixedIssues.push('Paciente reasignado automáticamente');
-    } else {
-      fixedIssues.push('Cita huérfana (paciente inexistente)');
-    }
-  }
-
-  if (fixed.assignedTo && !professionals.some(p => p.id === fixed.assignedTo)) {
-    fixed.assignedTo = null;
-    fixed.assignedToName = null;
-    fixedIssues.push('Profesional inexistente → asignación removida');
-  }
 
   // Servicios válidos
   fixed.beneficiaries = fixed.beneficiaries.map(b => ({
@@ -2045,8 +2144,8 @@ const validateAndFixAppointment = (app, patients, professionals, services) => {
   return fixed;
 };
 
-const validateAllAppointments = (apps, patients, professionals, services) => {
-  return apps.map(app => validateAndFixAppointment(app, patients, professionals, services));
+const validateAllAppointments = (apps, services) => {
+  return apps.map(app => validateAndFixAppointment(app, services));
 };
 
 // ==================== FIN DEL ARCHIVO ====================
