@@ -90,7 +90,11 @@ function Landing({ setView, services = [] }) {
       <nav className="bg-white border-b sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-3 sm:py-4 lg:py-5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl shadow-inner shrink-0">🩺</div>
+            <img
+              src="/icons/icon-192.png"
+              alt="Logo Enfermereando"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl shrink-0 object-cover"
+            />
             <span className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tighter text-gray-900 truncate">Enfermereando</span>
           </div>
 
@@ -103,7 +107,7 @@ function Landing({ setView, services = [] }) {
           {/* CTAs: en móvil solo "Iniciar sesión" compacto; WhatsApp queda como FAB flotante */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <a
-              href="https://wa.me/56920489639"
+              href="https://wa.me/56912345678"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Contactar por WhatsApp"
@@ -267,7 +271,7 @@ function Landing({ setView, services = [] }) {
 
       {/* BOTÓN FLOTANTE WHATSAPP - con safe area iOS */}
       <a
-        href="https://wa.me/56920489639"
+        href="https://wa.me/56912345678"
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Contactar por WhatsApp"
