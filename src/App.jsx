@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import dataLayer from './services/data';
 import { useState, useEffect } from 'react';
 import {
   Pill, Activity, Syringe, Home as HomeIcon, Cross, Heart, BookOpen,
@@ -581,34 +582,37 @@ function RequestForm({ user, services = [], onSubmit, onCancel }) {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const baseAppointment = {
-      id: uid(),
-      userId: user?.id || null,  // Ciclo 1: identidad del solicitante
-      patientName: beneficiaries[0].name,
-      date,
-      time,
-      comuna,
-      phone: phone.trim(),
-      notes: notes || '',
-      status: 'pendiente',
-      assignedTo: null,
-      beneficiaries: beneficiaries.map(b => ({
-        id: b.id,
-        name: b.name,
-        direccion: b.direccion || 'No especificada',
-        services: b.services.map(s => ({
-          serviceId: s.serviceId,
-          doses: parseInt(s.doses) || 1,
-          frequency: s.frequency,
-          completedDoses: 0
-        }))
-      }))
-    };
+    // Ciclo 3.2: crear cita vía capa de datos (insert atómico en 3 tablas)
+    try {
+      const created = await dataLayer.appointments.create({
+        userId: user?.id || null,
+        patientName: beneficiaries[0].name,
+        date,
+        time,
+        comuna,
+        phone: phone.trim(),
+        notes: notes || '',
+        beneficiaries: beneficiaries.map(b => ({
+          name: b.name,
+          direccion: b.direccion || 'No especificada',
+          services: b.services.map(s => ({
+            serviceId: s.serviceId,
+            doses: parseInt(s.doses) || 1,
+            frequency: s.frequency,
+          })),
+        })),
+      });
 
-    await sendTelegramToAdmin(baseAppointment, 'new', services);
-    onSubmit([baseAppointment]);
-    alert('✅ Solicitud enviada correctamente y notificada por Telegram');
-    onCancel();
+      // Notificación a Telegram (no bloqueante, falla silenciosa)
+      await sendTelegramToAdmin(created, 'new', services);
+
+      alert('✅ Solicitud enviada correctamente');
+      if (onSubmit) await onSubmit();
+      onCancel();
+    } catch (err) {
+      console.error('[RequestForm] error al crear cita:', err);
+      alert(`❌ Error al crear la solicitud: ${err.message || 'error desconocido'}`);
+    }
   };
 
   return (
@@ -770,18 +774,14 @@ function RequestForm({ user, services = [], onSubmit, onCancel }) {
 }
 
 // ==================== PATIENT PORTAL ====================
-function PatientPortal({ user, appointments = [], saveAppointments, services, setView, onLogout }) {
+function PatientPortal({ user, appointments = [], reloadData, services, setView, onLogout }) {
   const [tab, setTab] = useState('inicio');
 
   const safeAppointments = Array.isArray(appointments) ? appointments : [];
 
-  const myAppointments = safeFilter(safeAppointments, app => {
-    // Ciclo 1: filtro por userId (identidad única).
-    // Fallback retro-compatible para citas creadas antes de este fix (sin userId).
-    if (app?.userId) return app.userId === user?.id;
-    return app?.patientName === user?.name ||
-      (app?.beneficiaries && app.beneficiaries.some(b => b?.name === user?.name));
-  });
+  // Con RLS la lista que llega YA está filtrada por usuario (paciente solo ve sus citas).
+  // Filtro adicional en JS no es necesario, pero lo mantenemos por simetría visual.
+  const myAppointments = safeAppointments;
 
   const lastRequests = [...myAppointments]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -790,31 +790,22 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
   const cancelAppointment = async (app) => {
     if (!app || !confirm(`¿Cancelar la atención del ${new Date(app.date).toLocaleDateString('es-CL')}?`)) return;
 
-    const isSeries = !!app.seriesId;
-    let appointmentsToCancel = [app.id];
+    try {
+      // Ciclo 3.2: cancelar vía dataLayer (registra evento + timestamp automáticamente)
+      await dataLayer.appointments.updateStatus(app.id, 'cancelada', user?.id, {
+        cancelledBy: 'patient',
+      });
 
-    if (isSeries) {
-      const seriesApps = safeFilter(safeAppointments, a => a.seriesId === app.seriesId);
-      const cancelAll = confirm(`Esta cita pertenece a una SERIE de ${seriesApps.length} dosis.\n\n¿Cancelar SOLO esta cita o TODA LA SERIE?`);
-      if (cancelAll) appointmentsToCancel = seriesApps.map(a => a.id);
+      // Notificación a Telegram (opcional, no bloqueante)
+      await sendTelegramToAdmin(app, 'cancelled', services || []);
+
+      // Refrescar lista
+      if (reloadData) await reloadData();
+      alert('✅ Cita cancelada correctamente.');
+    } catch (err) {
+      console.error('[PatientPortal] error cancelando:', err);
+      alert(`❌ Error al cancelar: ${err.message || 'error desconocido'}`);
     }
-
-    const updated = safeAppointments.map(a => 
-      appointmentsToCancel.includes(a.id) ? { ...a, status: 'cancelada' } : a
-    );
-
-    await saveAppointments(updated);
-
-    const representative = safeFind(safeAppointments, a => a.id === appointmentsToCancel[0]) || {};
-
-    await sendTelegramToAdmin(representative, 'cancelled', services || [],
-      appointmentsToCancel.length > 1 ? 'Serie completa cancelada' : ''
-    );
-
-    alert(appointmentsToCancel.length > 1 
-      ? `✅ Toda la serie (${appointmentsToCancel.length} citas) ha sido cancelada.` 
-      : '✅ Cita cancelada correctamente.'
-    );
   };
 
   return (
@@ -866,8 +857,8 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
         <RequestForm
           user={user}
           services={services}
-          onSubmit={async (newApps) => {
-            await saveAppointments([...safeAppointments, ...newApps]);
+          onSubmit={async () => {
+            if (reloadData) await reloadData();
             setTab('inicio');
           }}
           onCancel={() => setTab('inicio')}
@@ -927,7 +918,7 @@ function PatientPortal({ user, appointments = [], saveAppointments, services, se
 function ProfessionalDashboard({
   user,
   appointments = [],
-  saveAppointments,
+  reloadData,
   services = [],
   setView,
   onLogout
@@ -953,22 +944,31 @@ function ProfessionalDashboard({
     app.status === 'pendiente' && !app.assignedTo
   );
 
-  // Acciones
+  // Acciones — Ciclo 3.2: vía dataLayer (registra timestamps + audit log automáticamente)
   const takeTask = async (app) => {
     if (!app || app.status !== 'pendiente') return;
-    const updated = safeAppointments.map(a => 
-      a.id === app.id ? { ...a, status: 'asignada', assignedTo: user.id } : a
-    );
-    await saveAppointments(updated);
-    await sendTelegramToAdmin(app, 'task_taken', safeServices, `Tomada por: ${user?.name}`);
-    alert(`✅ Tarea tomada y notificado por Telegram`);
+    try {
+      await dataLayer.appointments.updateStatus(app.id, 'asignada', user.id, {
+        takenBy: user.name,
+      });
+      await sendTelegramToAdmin(app, 'task_taken', safeServices, `Tomada por: ${user?.name}`);
+      if (reloadData) await reloadData();
+      alert(`✅ Tarea tomada y notificado por Telegram`);
+    } catch (e) {
+      console.error('Error tomando tarea:', e);
+      alert('❌ No se pudo tomar la tarea. Inténtalo de nuevo.');
+    }
   };
 
   const updateStatus = async (appId, newStatus) => {
-    const updated = safeAppointments.map(a => a.id === appId ? { ...a, status: newStatus } : a);
-    await saveAppointments(updated);
-    const app = updated.find(a => a.id === appId) || {};
-    await sendTelegramToAdmin(app, 'status_change', safeServices);
+    try {
+      const updated = await dataLayer.appointments.updateStatus(appId, newStatus, user?.id);
+      await sendTelegramToAdmin(updated, 'status_change', safeServices);
+      if (reloadData) await reloadData();
+    } catch (e) {
+      console.error('Error actualizando estado:', e);
+      alert('❌ No se pudo actualizar el estado.');
+    }
   };
 
   return (
@@ -1079,7 +1079,7 @@ function ProfessionalDashboard({
           appointments={safeAppointments}
           services={safeServices}
           currentUser={user}
-          saveAppointments={saveAppointments}
+          reloadData={reloadData}
           onEdit={(app) => alert(`Ver detalle: ${app.patientName}`)}
         />
       )}
@@ -1090,9 +1090,8 @@ function ProfessionalDashboard({
 // ==================== ADMIN PANEL - COMPLETO Y MODERNO ====================
 function AdminPanel({
   appointments = [],
-  saveAppointments,
+  reloadData,
   services = [],
-  setServices,
   setView,
   onLogout
 }) {
@@ -1133,7 +1132,7 @@ function AdminPanel({
   const [editedDoses, setEditedDoses] = useState({});
 
   // ==================== FUNCIONES SERVICIOS ====================
-  const addNewService = () => {
+  const addNewService = async () => {
     if (!newServiceName.trim()) return alert('❌ Ingresa el nombre del servicio');
     const priceNum = parseInt(newServicePrice);
     if (!priceNum || priceNum <= 0) {
@@ -1145,20 +1144,30 @@ function AdminPanel({
       name: newServiceName.trim(),
       price: priceNum,
       description: newServiceDescription.trim() || 'Sin descripción',
-      active: true
     };
-    setServices([...safeServices, newService]);
-    setNewServiceName('');
-    setNewServicePrice('');
-    setNewServiceDescription('');
-    setPriceError('');
-    setShowNewServiceForm(false);  // Ciclo 1: cerrar tras crear
-    alert('✅ Servicio agregado correctamente');
+    try {
+      await dataLayer.services.create(newService);
+      if (reloadData) await reloadData();
+      setNewServiceName('');
+      setNewServicePrice('');
+      setNewServiceDescription('');
+      setPriceError('');
+      setShowNewServiceForm(false);
+      alert('✅ Servicio agregado correctamente');
+    } catch (err) {
+      console.error('Error creando servicio:', err);
+      setPriceError(err.message || 'No se pudo crear el servicio');
+    }
   };
 
-  const toggleService = (id) => {
-    const updated = safeServices.map(s => s.id === id ? { ...s, active: !s.active } : s);
-    setServices(updated);
+  const toggleService = async (id) => {
+    try {
+      await dataLayer.services.toggleActive(id);
+      if (reloadData) await reloadData();
+    } catch (err) {
+      console.error('Error toggle servicio:', err);
+      alert('❌ No se pudo cambiar el estado del servicio.');
+    }
   };
 
   const startEditing = (service) => {
@@ -1168,24 +1177,36 @@ function AdminPanel({
     setTempDescription(service.description || '');
   };
 
-  const saveEditing = (id) => {
+  const saveEditing = async (id) => {
     const priceNum = parseInt(tempPrice);
     if (!priceNum || priceNum <= 0) {
       setPriceError('El precio debe ser mayor a 0');
       return;
     }
-    const updated = safeServices.map(s => 
-      s.id === id ? { ...s, name: tempName, price: priceNum, description: tempDescription } : s
-    );
-    setServices(updated);
-    setEditingId(null);
-    setPriceError('');
+    try {
+      await dataLayer.services.update(id, {
+        name: tempName,
+        price: priceNum,
+        description: tempDescription,
+      });
+      if (reloadData) await reloadData();
+      setEditingId(null);
+      setPriceError('');
+    } catch (err) {
+      console.error('Error guardando edición:', err);
+      setPriceError(err.message || 'No se pudo guardar el cambio');
+    }
   };
 
-  const deleteService = (id) => {
+  const deleteService = async (id) => {
     if (!confirm('¿Eliminar este servicio permanentemente?')) return;
-    const updated = safeServices.filter(s => s.id !== id);
-    setServices(updated);
+    try {
+      await dataLayer.services.remove(id);
+      if (reloadData) await reloadData();
+    } catch (err) {
+      console.error('Error eliminando servicio:', err);
+      alert('❌ No se pudo eliminar el servicio. Puede tener citas asociadas.');
+    }
   };
 
   // ==================== FUNCIONES SEGUIMIENTO ====================
@@ -1208,21 +1229,25 @@ function AdminPanel({
   };
 
   const saveDoseChanges = async (app) => {
-    const updated = safeAppointments.map(a => {
-      if (a.id !== app.id) return a;
-      const newBeneficiaries = (a.beneficiaries || []).map((ben, bIndex) => {
-        const newServices = (ben.services || []).map((srv, sIndex) => {
+    try {
+      const promises = [];
+      (app.beneficiaries || []).forEach((ben, bIndex) => {
+        (ben.services || []).forEach((srv, sIndex) => {
           const key = `${app.id}-${bIndex}-${sIndex}`;
-          const newCompleted = editedDoses[key] !== undefined ? editedDoses[key] : (srv.completedDoses || 0);
-          return { ...srv, completedDoses: newCompleted };
+          if (editedDoses[key] !== undefined && srv.id) {
+            const newCompleted = Math.min(editedDoses[key], srv.doses);
+            promises.push(dataLayer.appointments.updateDoses(srv.id, newCompleted));
+          }
         });
-        return { ...ben, services: newServices };
       });
-      return { ...a, beneficiaries: newBeneficiaries };
-    });
-    await saveAppointments(updated);
-    setEditedDoses({});
-    alert('✅ Dosis actualizadas y guardadas');
+      await Promise.all(promises);
+      if (reloadData) await reloadData();
+      setEditedDoses({});
+      alert('✅ Dosis actualizadas y guardadas');
+    } catch (err) {
+      console.error('Error guardando dosis:', err);
+      alert('❌ No se pudieron guardar las dosis.');
+    }
   };
 
   return (
@@ -1768,7 +1793,7 @@ function MonitoringPanel({
   appointments, 
   services, 
   currentUser, 
-  saveAppointments,
+  reloadData,
   onEdit 
 }) {
   const [filterStatus, setFilterStatus] = useState('all');
@@ -1790,10 +1815,17 @@ function MonitoringPanel({
     : myAppointments.filter(a => a.status === filterStatus);
 
   const updateField = async (appId, field, value) => {
-    const updated = safeAppointments.map(app => 
-      app.id === appId ? { ...app, [field]: value } : app
-    );
-    await saveAppointments(updated);
+    try {
+      if (field === 'status') {
+        await dataLayer.appointments.updateStatus(appId, value, currentUser?.id);
+      } else {
+        await dataLayer.appointments.update(appId, { [field]: value });
+      }
+      if (reloadData) await reloadData();
+    } catch (err) {
+      console.error(`Error actualizando ${field}:`, err);
+      alert(`❌ No se pudo actualizar ${field}.`);
+    }
   };
 
   return (
@@ -1923,39 +1955,53 @@ export default function App() {
   // alimenta de eventos de Auth y de las citas (que llevan userId y assignedTo).
 
   // Carga inicial: sesión + datos de aplicación
+  // Función reutilizable que recarga citas y servicios desde la BD.
+  // Se llama al inicio, y después de cada mutación (crear cita, cambiar estado, etc.)
+  const reloadData = async () => {
+    try {
+      const [svcs, apps] = await Promise.all([
+        dataLayer.services.list(),
+        dataLayer.appointments.list(),
+      ]);
+      setServices(svcs);
+      setAppointments(apps);
+    } catch (e) {
+      console.error("Error recargando datos:", e);
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
     let subscription;
 
     (async () => {
       try {
-        // 1. Recupera sesión persistente si existe (refresh sin perder login)
+        // 1. Recupera sesión persistente si existe
         const currentUser = await authGetCurrentUser();
         if (mounted && currentUser) {
           setUser(currentUser);
-          // Si el usuario ya estaba logueado y abrió la app, redirigir a su panel
           if (currentUser.role === 'admin') setView('admin');
           else if (currentUser.role === 'professional') setView('professional');
           else setView('patient');
         }
 
-        // 2. Carga catálogo de servicios y citas
-        const svcs = await sget('enf:services', DEFAULT_SERVICES);
-        const apps = (await sget('enf:appointments', [])).map(normalizeApp);
-
+        // 2. Carga catálogo de servicios y citas desde tablas reales (Ciclo 3.2)
+        // RLS filtra automáticamente: paciente ve solo lo suyo, profesional/admin ve todo.
         if (mounted) {
-          setServices(svcs);
-          setAppointments(apps);
+          await reloadData();
         }
 
-        // 3. Suscribirse a cambios de auth (logout en otra pestaña, sesión expirada, etc.)
-        const { data } = supabase.auth.onAuthStateChange((event, session) => {
+        // 3. Suscribirse a cambios de auth
+        const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
           if (!mounted) return;
           if (event === 'SIGNED_OUT' || !session) {
             setUser(null);
             setView('landing');
+            setAppointments([]); // limpia datos del usuario anterior
           } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
             setUser(mapAuthUser(session.user));
+            // Recarga datos con los permisos del nuevo usuario (RLS los filtra)
+            await reloadData();
           }
         });
         subscription = data.subscription;
@@ -1972,10 +2018,9 @@ export default function App() {
     };
   }, []);
 
-  const saveAppointments = async (newList) => {
-    setAppointments(newList);
-    await sset('enf:appointments', newList);
-  };
+  // Ciclo 3.2: ya no usamos sset('enf:appointments', array completo).
+  // Las mutaciones se hacen vía dataLayer.appointments.{create,update,updateStatus}
+  // y refrescamos el estado local con reloadData() después de cada cambio.
 
   // Logout centralizado: limpia sesión Auth y vuelve al landing
   const handleLogout = async () => {
@@ -2018,7 +2063,7 @@ export default function App() {
         <PatientPortal
           user={user}
           appointments={appointments}
-          saveAppointments={saveAppointments}
+          reloadData={reloadData}
           services={services}
           setView={setView}
           onLogout={handleLogout}
@@ -2030,7 +2075,7 @@ export default function App() {
         <ProfessionalDashboard
           user={user}
           appointments={appointments}
-          saveAppointments={saveAppointments}
+          reloadData={reloadData}
           services={services}
           setView={setView}
           onLogout={handleLogout}
@@ -2041,9 +2086,8 @@ export default function App() {
       {user && user.role === 'admin' && view === 'admin' && (
         <AdminPanel
           appointments={appointments}
-          saveAppointments={saveAppointments}
+          reloadData={reloadData}
           services={services}
-          setServices={setServices}
           setView={setView}
           onLogout={handleLogout}
         />
@@ -2052,108 +2096,4 @@ export default function App() {
   );
 }
 
-// ==================== PERSISTENCIA SUPABASE ====================
-const sget = async (key, defaultValue = null) => {
-  try {
-    const { data, error } = await supabase.from('app_storage').select('value').eq('key', key).single();
-    if (error) {
-      // PGRST116 = registro no existe (Supabase normal cuando aún no se ha guardado nada)
-      if (error.code !== 'PGRST116') {
-        console.error(`[sget] Error al obtener ${key}:`, error);
-      }
-      return defaultValue;
-    }
-    // Defensa contra valores corruptos: si lo guardado es null, undefined o array vacío
-    // y el default es un array no vacío, preferimos el default (evita renderizar tarjetas fantasma).
-    const stored = data?.value;
-    if (stored === null || stored === undefined) return defaultValue;
-    if (Array.isArray(defaultValue) && defaultValue.length > 0 && Array.isArray(stored) && stored.length === 0) {
-      return defaultValue;
-    }
-    return stored;
-  } catch (err) {
-    console.error(`[sget] Excepción al obtener ${key}:`, err);
-    return defaultValue;
-  }
-};
-
-const sset = async (key, value) => {
-  try {
-    const { error } = await supabase.from('app_storage').upsert({ key, value }, { onConflict: 'key' });
-    if (error) {
-      console.error(`[sset] Error al guardar ${key}:`, error);
-      return false;
-    }
-    console.log(`[sset] ✅ Guardado correctamente: ${key}`);
-    return true;
-  } catch (err) {
-    console.error(`[sset] Excepción al guardar ${key}:`, err);
-    return false;
-  }
-};
-
-// ==================== NORMALIZACIÓN Y VALIDACIÓN DE CITAS ====================
-const normalizeApp = (a) => {
-  let app = { ...a };
-  
-  if (!app.beneficiaries || !Array.isArray(app.beneficiaries) || app.beneficiaries.length === 0) {
-    app.beneficiaries = [{
-      id: 'b0',
-      name: app.patientName || 'Paciente',
-      relationship: 'Titular',
-      services: app.serviceId ? [{ serviceId: app.serviceId, doses: 1, frequency: 'once', completedDoses: 0 }] : []
-    }];
-  }
-
-  app.beneficiaries = app.beneficiaries.map(b => ({
-    ...b,
-    services: (b.services || []).map(item => 
-      typeof item === 'string' 
-        ? { serviceId: item, doses: 1, frequency: 'once', completedDoses: 0 }
-        : { serviceId: item.serviceId, doses: item.doses || 1, frequency: item.frequency || 'once', completedDoses: item.completedDoses || 0 }
-    )
-  }));
-
-  if (!app.seriesId) app.seriesId = app.id || app.parentId || uid();
-  if (typeof app.doseNumber === 'undefined') app.doseNumber = 1;
-  if (!app.createdAt) app.createdAt = Date.now();
-
-  return app;
-};
-
-// Ciclo 2.2: con Supabase Auth ya no tenemos arrays locales de patients/professionals.
-// La validación de integridad referencial de usuarios queda como TODO para cuando migremos
-// citas a tabla relacional con FK reales (Sprint 3). Por ahora solo validamos servicios.
-const validateAndFixAppointment = (app, services) => {
-  let fixed = { ...app };
-  let fixedIssues = [];
-
-  fixed = normalizeApp(fixed);
-
-  // Servicios válidos
-  fixed.beneficiaries = fixed.beneficiaries.map(b => ({
-    ...b,
-    services: b.services.filter(item => {
-      const exists = services.some(s => s.id === item.serviceId);
-      if (!exists) fixedIssues.push(`Servicio ${item.serviceId} inexistente → eliminado`);
-      return exists;
-    })
-  })).filter(b => b.services.length > 0);
-
-  fixed.validationIssues = fixedIssues;
-  return fixed;
-};
-
-const validateAllAppointments = (apps, services) => {
-  return apps.map(app => validateAndFixAppointment(app, services));
-};
-
 // ==================== FIN DEL ARCHIVO ====================
-
-// ==================== FUNCIONES RESTANTES (de la versión original) ====================
-const setupRealtimeNotifications = (userId, addNotification) => {
-  if (!userId) return;
-  // (Opcional: si usas notificaciones realtime con Supabase)
-  console.log(`[Realtime] Suscrito a notificaciones para usuario: ${userId}`);
-  // Aquí puedes implementar la suscripción realtime si lo necesitas en el futuro
-};
