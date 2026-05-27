@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import dataLayer from './services/data';
+import dataLayer from './services/data.js';
 import { useState, useEffect } from 'react';
 import {
   Pill, Activity, Syringe, Home as HomeIcon, Cross, Heart, BookOpen,
