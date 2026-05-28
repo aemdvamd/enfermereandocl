@@ -13,7 +13,7 @@
 
 // CACHE_VERSION cambia en cada deploy. Vite reemplaza __BUILD_HASH__ si configuras
 // el define en vite.config.js; si no, usa la fecha de build como fallback.
-const CACHE_VERSION = 'enfermereando-__BUILD_HASH__';
+const CACHE_VERSION = 'enfermereando-20260528160226';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
 const STATIC_ASSETS = ['/manifest.json'];
