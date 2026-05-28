@@ -1,6 +1,10 @@
 import { supabase } from './supabase';
 import dataLayer from './services/data';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+} from 'recharts';
 import {
   Pill, Activity, Syringe, Home as HomeIcon, Cross, Heart, BookOpen,
   Phone, MapPin, CheckCircle, Star, Shield, Calendar, User, UserPlus,
@@ -1473,6 +1477,109 @@ function AdminPanel({
   const inTreatment = safeAppointments.filter(a => a.status === 'en_tratamiento').length;
   const completed = safeAppointments.filter(a => a.status === 'completada').length;
 
+  // ==================== MÉTRICAS LEAN (Ciclo 3.3) ====================
+  const leanMetrics = useMemo(() => {
+    const cancelled = safeAppointments.filter(a => a.status === 'cancelada').length;
+
+    // Helper: diferencia en horas entre dos timestamps ISO
+    const hoursBetween = (start, end) => {
+      if (!start || !end) return null;
+      const ms = new Date(end).getTime() - new Date(start).getTime();
+      if (isNaN(ms) || ms < 0) return null;
+      return ms / (1000 * 60 * 60);
+    };
+
+    const avgOf = (arr) => {
+      const valid = arr.filter(v => v !== null && !isNaN(v));
+      if (valid.length === 0) return null;
+      return valid.reduce((s, v) => s + v, 0) / valid.length;
+    };
+
+    // Lead time: createdAt → completedAt (solo citas completadas)
+    const leadTimes = safeAppointments
+      .filter(a => a.status === 'completada')
+      .map(a => hoursBetween(a.createdAt, a.completedAt));
+
+    // Response time: createdAt → assignedAt (citas que fueron asignadas)
+    const responseTimes = safeAppointments
+      .filter(a => a.assignedAt)
+      .map(a => hoursBetween(a.createdAt, a.assignedAt));
+
+    // Cycle time: assignedAt → completedAt (citas completadas que fueron asignadas)
+    const cycleTimes = safeAppointments
+      .filter(a => a.status === 'completada' && a.assignedAt)
+      .map(a => hoursBetween(a.assignedAt, a.completedAt));
+
+    const finished = completed + cancelled;
+    const completionRate = finished > 0 ? Math.round((completed / finished) * 100) : null;
+    const cancellationRate = finished > 0 ? Math.round((cancelled / finished) * 100) : null;
+
+    // Tendencia: atenciones creadas por día en los últimos 14 días
+    const trend = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      const dayStr = d.toISOString().split('T')[0];
+      const label = d.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' });
+      const creadas = safeAppointments.filter(a => {
+        if (!a.createdAt) return false;
+        return new Date(a.createdAt).toISOString().split('T')[0] === dayStr;
+      }).length;
+      const completadas = safeAppointments.filter(a => {
+        if (!a.completedAt) return false;
+        return new Date(a.completedAt).toISOString().split('T')[0] === dayStr;
+      }).length;
+      trend.push({ dia: label, creadas, completadas });
+    }
+
+    // Distribución por estado (para gráfico de cumplimiento)
+    const statusDistribution = [
+      { name: 'Completadas', value: completed, color: '#059669' },
+      { name: 'En tratamiento', value: inTreatment, color: '#9333ea' },
+      { name: 'Asignadas', value: safeAppointments.filter(a => a.status === 'asignada').length, color: '#2563eb' },
+      { name: 'Pendientes', value: pending, color: '#d97706' },
+      { name: 'Canceladas', value: cancelled, color: '#9ca3af' },
+    ].filter(s => s.value > 0);
+
+    // Top servicios solicitados
+    const serviceCounts = {};
+    safeAppointments.forEach(a => {
+      (a.beneficiaries || []).forEach(b => {
+        (b.services || []).forEach(s => {
+          serviceCounts[s.serviceId] = (serviceCounts[s.serviceId] || 0) + 1;
+        });
+      });
+    });
+    const topServices = Object.entries(serviceCounts)
+      .map(([id, count]) => ({
+        name: (safeServices.find(s => s.id === id)?.name || id).slice(0, 20),
+        count,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    const fmtHours = (h) => {
+      if (h === null) return '—';
+      if (h < 1) return `${Math.round(h * 60)} min`;
+      if (h < 24) return `${h.toFixed(1)} h`;
+      return `${(h / 24).toFixed(1)} días`;
+    };
+
+    return {
+      cancelled,
+      avgLeadTime: avgOf(leadTimes),
+      avgResponseTime: avgOf(responseTimes),
+      avgCycleTime: avgOf(cycleTimes),
+      completionRate,
+      cancellationRate,
+      trend,
+      statusDistribution,
+      topServices,
+      fmtHours,
+    };
+  }, [safeAppointments, safeServices, completed, inTreatment, pending]);
+
   // ==================== SERVICIOS STATES ====================
   const [showNewServiceForm, setShowNewServiceForm] = useState(false);
   const [newServiceName, setNewServiceName] = useState('');
@@ -1663,41 +1770,148 @@ function AdminPanel({
 
       {/* ==================== DASHBOARD ==================== */}
       {tab === 'dashboard' && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-          <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl hover:shadow-2xl transition-all">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">📋</div>
-              <div className="min-w-0">
-                <p className="text-xs sm:text-sm text-gray-500 truncate">Total Solicitudes</p>
-                <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mt-1">{totalApps}</p>
+        <div className="space-y-4 sm:space-y-6">
+          {/* KPIs operacionales (estado actual) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+            <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl hover:shadow-2xl transition-all">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">📋</div>
+                <div className="min-w-0">
+                  <p className="text-xs sm:text-sm text-gray-500 truncate">Total Solicitudes</p>
+                  <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mt-1">{totalApps}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl hover:shadow-2xl transition-all">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">⏳</div>
+                <div className="min-w-0">
+                  <p className="text-xs sm:text-sm text-gray-500">Pendientes</p>
+                  <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-amber-600 mt-1">{pending}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl hover:shadow-2xl transition-all">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">📅</div>
+                <div className="min-w-0">
+                  <p className="text-xs sm:text-sm text-gray-500">Hoy</p>
+                  <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-emerald-600 mt-1">{today}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl hover:shadow-2xl transition-all">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">🔄</div>
+                <div className="min-w-0">
+                  <p className="text-xs sm:text-sm text-gray-500 truncate">En Tratamiento</p>
+                  <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-purple-600 mt-1">{inTreatment}</p>
+                </div>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl hover:shadow-2xl transition-all">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">⏳</div>
-              <div className="min-w-0">
-                <p className="text-xs sm:text-sm text-gray-500">Pendientes</p>
-                <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-amber-600 mt-1">{pending}</p>
+
+          {/* Métricas Lean de proceso (tiempos y tasas) */}
+          <div>
+            <h3 className="text-sm sm:text-base font-semibold text-gray-700 mb-3 px-1">Métricas de proceso (Lean)</h3>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-white rounded-2xl p-4 sm:p-5 shadow border border-gray-100">
+                <p className="text-xs text-gray-500 mb-1">⏱️ Lead time promedio</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">{leanMetrics.fmtHours(leanMetrics.avgLeadTime)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">solicitud → completada</p>
+              </div>
+              <div className="bg-white rounded-2xl p-4 sm:p-5 shadow border border-gray-100">
+                <p className="text-xs text-gray-500 mb-1">🚀 Tiempo de respuesta</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">{leanMetrics.fmtHours(leanMetrics.avgResponseTime)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">solicitud → asignada</p>
+              </div>
+              <div className="bg-white rounded-2xl p-4 sm:p-5 shadow border border-gray-100">
+                <p className="text-xs text-gray-500 mb-1">⚙️ Cycle time</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">{leanMetrics.fmtHours(leanMetrics.avgCycleTime)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">asignada → completada</p>
+              </div>
+              <div className="bg-white rounded-2xl p-4 sm:p-5 shadow border border-gray-100">
+                <p className="text-xs text-gray-500 mb-1">✅ Tasa de cumplimiento</p>
+                <p className={`text-xl sm:text-2xl font-bold ${
+                  leanMetrics.completionRate === null ? 'text-gray-400' :
+                  leanMetrics.completionRate >= 80 ? 'text-emerald-600' :
+                  leanMetrics.completionRate >= 50 ? 'text-amber-600' : 'text-red-600'
+                }`}>
+                  {leanMetrics.completionRate === null ? '—' : `${leanMetrics.completionRate}%`}
+                </p>
+                <p className="text-[10px] text-gray-400 mt-1">{leanMetrics.cancelled} canceladas</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl hover:shadow-2xl transition-all">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">📅</div>
-              <div className="min-w-0">
-                <p className="text-xs sm:text-sm text-gray-500">Hoy</p>
-                <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-emerald-600 mt-1">{today}</p>
-              </div>
-            </div>
+
+          {/* Gráfico de tendencia */}
+          <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-xl">
+            <h3 className="text-sm sm:text-base font-semibold text-gray-700 mb-4">Tendencia (últimos 14 días)</h3>
+            {leanMetrics.trend.every(d => d.creadas === 0 && d.completadas === 0) ? (
+              <div className="text-center py-12 text-gray-400 text-sm">Sin datos suficientes aún. Las atenciones aparecerán aquí.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={leanMetrics.trend} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="dia" tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '13px' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  <Line type="monotone" dataKey="creadas" name="Creadas" stroke="#4f46e5" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="completadas" name="Completadas" stroke="#059669" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
-          <div className="bg-white rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl hover:shadow-2xl transition-all">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl">🔄</div>
-              <div className="min-w-0">
-                <p className="text-xs sm:text-sm text-gray-500 truncate">En Tratamiento</p>
-                <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-purple-600 mt-1">{inTreatment}</p>
-              </div>
+
+          {/* Fila: distribución por estado + top servicios */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            {/* Distribución por estado (cumplimiento) */}
+            <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-xl">
+              <h3 className="text-sm sm:text-base font-semibold text-gray-700 mb-4">Distribución por estado</h3>
+              {leanMetrics.statusDistribution.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-sm">Sin datos aún.</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={leanMetrics.statusDistribution}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      label={({ name, value }) => `${value}`}
+                    >
+                      {leanMetrics.statusDistribution.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '13px' }} />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Top servicios */}
+            <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-xl">
+              <h3 className="text-sm sm:text-base font-semibold text-gray-700 mb-4">Servicios más solicitados</h3>
+              {leanMetrics.topServices.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-sm">Sin datos aún.</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={leanMetrics.topServices} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                    <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 10 }} stroke="#9ca3af" />
+                    <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb', fontSize: '13px' }} />
+                    <Bar dataKey="count" name="Solicitudes" fill="#4f46e5" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
         </div>

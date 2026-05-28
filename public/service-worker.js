@@ -6,7 +6,7 @@
 //
 // IMPORTANTE: incrementa CACHE_VERSION cada vez que hagas un deploy con cambios visibles
 // para forzar la invalidación del cache en todos los clientes.
-const CACHE_VERSION = 'enfermereando-v5';
+const CACHE_VERSION = 'enfermereando-v6';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
 const STATIC_ASSETS = [
