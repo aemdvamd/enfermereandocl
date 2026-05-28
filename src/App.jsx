@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import dataLayer from './services/data.js';
+import dataLayer from './services/data';
 import { useState, useEffect } from 'react';
 import {
   Pill, Activity, Syringe, Home as HomeIcon, Cross, Heart, BookOpen,
@@ -388,9 +388,267 @@ function AppointmentCard({ app, onCancel }) {
   );
 }
 
+// ==================== APPOINTMENT DETAIL MODAL ====================
+// Modal reutilizable: muestra detalle completo de una cita y permite editar
+// estado, servicios completados y dosis. Usado por: CalendarView, AdminPanel
+// (tab Seguimiento) y MonitoringPanel (tab del Profesional).
+function AppointmentDetailModal({ app, services = [], currentUser, onClose, onUpdated }) {
+  const [working, setWorking] = useState(false);
+  const [localStatus, setLocalStatus] = useState(app?.status || 'pendiente');
+  const [localNotes, setLocalNotes] = useState(app?.notes || '');
+  // editedDoses: { [appointmentServiceId]: number }
+  const [editedDoses, setEditedDoses] = useState({});
+
+  if (!app) return null;
+
+  const findService = (svcId) => services.find(s => s.id === svcId);
+
+  const totalDoses = (app.beneficiaries || []).reduce((sum, b) =>
+    sum + (b.services || []).reduce((s, srv) => s + (srv.doses || 0), 0), 0);
+
+  const completedTotal = (app.beneficiaries || []).reduce((sum, b) =>
+    sum + (b.services || []).reduce((s, srv) => {
+      const live = editedDoses[srv.id] !== undefined ? editedDoses[srv.id] : (srv.completedDoses || 0);
+      return s + live;
+    }, 0), 0);
+
+  const progressPct = totalDoses > 0 ? Math.round((completedTotal / totalDoses) * 100) : 0;
+
+  const handleSetDose = (srvRowId, value, maxDoses) => {
+    const v = Math.max(0, Math.min(parseInt(value) || 0, maxDoses));
+    setEditedDoses(prev => ({ ...prev, [srvRowId]: v }));
+  };
+
+  const handleToggleServiceComplete = (srv) => {
+    // Si está al máximo lo bajamos a 0; si no, lo subimos al máximo
+    const current = editedDoses[srv.id] !== undefined ? editedDoses[srv.id] : (srv.completedDoses || 0);
+    const newVal = current >= srv.doses ? 0 : srv.doses;
+    setEditedDoses(prev => ({ ...prev, [srv.id]: newVal }));
+  };
+
+  const handleSaveAll = async () => {
+    setWorking(true);
+    try {
+      // 1. Persistir dosis cambiadas
+      const dosePromises = Object.entries(editedDoses).map(([srvRowId, completed]) =>
+        dataLayer.appointments.updateDoses(srvRowId, completed)
+      );
+      await Promise.all(dosePromises);
+
+      // 2. Cambio de estado (si aplica)
+      if (localStatus !== app.status) {
+        await dataLayer.appointments.updateStatus(app.id, localStatus, currentUser?.id);
+      }
+
+      // 3. Cambio de notas (si aplica)
+      if (localNotes !== (app.notes || '')) {
+        await dataLayer.appointments.update(app.id, { notes: localNotes });
+      }
+
+      if (onUpdated) await onUpdated();
+      onClose();
+    } catch (e) {
+      console.error('Error guardando cambios:', e);
+      alert('❌ No se pudieron guardar todos los cambios. Revisa la consola.');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const hasChanges = localStatus !== app.status
+    || localNotes !== (app.notes || '')
+    || Object.keys(editedDoses).length > 0;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="bg-white w-full sm:max-w-2xl max-h-[92vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* HEADER */}
+        <div className="px-5 sm:px-7 py-4 sm:py-5 border-b flex items-start justify-between gap-3 shrink-0">
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
+              {app.patientName || app.beneficiaries?.[0]?.name || 'Cita'}
+            </h2>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">
+              {new Date(app.date).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })}
+              {' · '}{app.time}{' · '}{app.comuna}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="text-gray-400 hover:text-gray-600 text-3xl leading-none w-10 h-10 flex items-center justify-center shrink-0"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* CONTENIDO (scroll) */}
+        <div className="px-5 sm:px-7 py-4 sm:py-5 space-y-5 sm:space-y-6 overflow-y-auto flex-1">
+          {/* Progreso global */}
+          <div className="bg-gray-50 rounded-2xl p-4 sm:p-5">
+            <div className="flex justify-between items-baseline mb-2">
+              <span className="text-sm font-medium text-gray-700">Progreso global</span>
+              <span className="text-2xl sm:text-3xl font-bold text-indigo-600">
+                {completedTotal}<span className="text-gray-400 text-base">/{totalDoses}</span>
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div
+                className="h-3 bg-indigo-600 transition-all"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-2">{progressPct}% completado</p>
+          </div>
+
+          {/* Estado */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
+            <select
+              value={localStatus}
+              onChange={(e) => setLocalStatus(e.target.value)}
+              className="w-full px-4 py-3 rounded-2xl border border-gray-300 text-base focus:outline-none focus:border-indigo-500 min-h-[48px]"
+            >
+              <option value="pendiente">Pendiente</option>
+              <option value="asignada">Asignada</option>
+              <option value="en_tratamiento">En tratamiento</option>
+              <option value="completada">Completada</option>
+              <option value="cancelada">Cancelada</option>
+            </select>
+          </div>
+
+          {/* Contacto */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div>
+              <span className="text-gray-500 block text-xs mb-1">Teléfono</span>
+              <a href={`tel:${app.phone}`} className="text-indigo-600 font-medium hover:underline">
+                {app.phone || 'No disponible'}
+              </a>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-xs mb-1">Solicitada</span>
+              <span className="text-gray-700">
+                {app.createdAt ? new Date(app.createdAt).toLocaleDateString('es-CL') : '—'}
+              </span>
+            </div>
+          </div>
+
+          {/* Beneficiarios y servicios */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Beneficiarios y servicios</h3>
+            <div className="space-y-4">
+              {(app.beneficiaries || []).map((ben, bIdx) => (
+                <div key={ben.id || bIdx} className="border border-gray-200 rounded-2xl p-4">
+                  <div className="font-medium text-gray-900 mb-1">{ben.name}</div>
+                  {ben.direccion && (
+                    <p className="text-xs text-gray-500 mb-3">📍 {ben.direccion}</p>
+                  )}
+
+                  <div className="space-y-3 mt-3">
+                    {(ben.services || []).map((srv) => {
+                      const svcInfo = findService(srv.serviceId);
+                      const current = editedDoses[srv.id] !== undefined ? editedDoses[srv.id] : (srv.completedDoses || 0);
+                      const isComplete = current >= srv.doses;
+                      return (
+                        <div
+                          key={srv.id}
+                          className={`rounded-2xl p-3 sm:p-4 transition-colors ${
+                            isComplete ? 'bg-emerald-50 border border-emerald-200' : 'bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div className="min-w-0">
+                              <div className="font-medium text-sm text-gray-900">
+                                {svcInfo?.name || srv.serviceId}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                Frecuencia: {srv.frequency || 'única'}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleToggleServiceComplete(srv)}
+                              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium min-h-[36px] ${
+                                isComplete
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-white border border-gray-300 text-gray-700'
+                              }`}
+                            >
+                              {isComplete ? '✓ Completo' : 'Marcar completo'}
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <label className="text-xs text-gray-600 shrink-0">Dosis aplicadas:</label>
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min="0"
+                              max={srv.doses}
+                              value={current}
+                              onChange={(e) => handleSetDose(srv.id, e.target.value, srv.doses)}
+                              className="w-20 px-3 py-2 rounded-xl border border-gray-300 text-base text-center min-h-[44px]"
+                            />
+                            <span className="text-xs text-gray-500">de {srv.doses}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Notas */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Notas / Observaciones clínicas</label>
+            <textarea
+              value={localNotes}
+              onChange={(e) => setLocalNotes(e.target.value)}
+              rows={3}
+              className="w-full px-4 py-3 rounded-2xl border border-gray-300 text-base focus:outline-none focus:border-indigo-500"
+              placeholder="Observaciones..."
+            />
+          </div>
+        </div>
+
+        {/* FOOTER (acciones) */}
+        <div
+          className="px-5 sm:px-7 py-4 border-t bg-white flex flex-col-reverse sm:flex-row gap-3 shrink-0"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
+        >
+          <button
+            onClick={onClose}
+            disabled={working}
+            className="flex-1 px-5 py-3 rounded-3xl border border-gray-300 text-gray-700 font-medium min-h-[48px] hover:bg-gray-50"
+          >
+            Cerrar
+          </button>
+          <button
+            onClick={handleSaveAll}
+            disabled={!hasChanges || working}
+            className="flex-1 px-5 py-3 rounded-3xl bg-indigo-600 disabled:bg-gray-300 text-white font-semibold min-h-[48px] hover:bg-indigo-700"
+          >
+            {working ? 'Guardando...' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ==================== CALENDAR VIEW ====================
 function CalendarView({ appointments = [], onEdit }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDayKey, setSelectedDayKey] = useState(null); // 'YYYY-MM-DD'
 
   const safeAppointments = Array.isArray(appointments) ? appointments : [];
 
@@ -401,6 +659,11 @@ function CalendarView({ appointments = [], onEdit }) {
       if (!appointmentsByDate[key]) appointmentsByDate[key] = [];
       appointmentsByDate[key].push(app);
     }
+  });
+
+  // Ordenar citas del día por hora
+  Object.keys(appointmentsByDate).forEach(key => {
+    appointmentsByDate[key].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
   });
 
   const year = currentMonth.getFullYear();
@@ -425,21 +688,51 @@ function CalendarView({ appointments = [], onEdit }) {
            date.getFullYear() === today.getFullYear();
   };
 
+  // Mapeo de status a color para los chips del calendario
+  const statusColor = (status) => {
+    if (status === 'pendiente') return 'bg-amber-100 text-amber-700';
+    if (status === 'asignada') return 'bg-blue-100 text-blue-700';
+    if (status === 'en_tratamiento') return 'bg-purple-100 text-purple-700';
+    if (status === 'completada') return 'bg-emerald-100 text-emerald-700';
+    if (status === 'cancelada') return 'bg-gray-100 text-gray-400 line-through';
+    return 'bg-indigo-100 text-indigo-700';
+  };
+
+  const handleDayClick = (dayApps, dateKey) => {
+    if (!dayApps || dayApps.length === 0) return;
+    if (dayApps.length === 1) {
+      // Atajo: si solo hay una cita, abrir directamente
+      if (typeof onEdit === 'function') onEdit(dayApps[0]);
+    } else {
+      // Varias citas: abrir la vista del día con lista
+      setSelectedDayKey(dateKey);
+    }
+  };
+
+  const handleAppointmentClick = (app) => {
+    setSelectedDayKey(null);
+    if (typeof onEdit === 'function') onEdit(app);
+  };
+
+  const selectedDayApps = selectedDayKey ? (appointmentsByDate[selectedDayKey] || []) : [];
+
   return (
-    <div className="bg-white rounded-3xl shadow-xl p-6">
-      <div className="flex items-center justify-between mb-8">
+    <div className="bg-white rounded-3xl shadow-xl p-4 sm:p-6">
+      <div className="flex items-center justify-between mb-6 sm:mb-8">
         <button
           onClick={goToPrevMonth}
-          className="w-11 h-11 flex items-center justify-center text-3xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-2xl transition-all"
+          aria-label="Mes anterior"
+          className="w-11 h-11 flex items-center justify-center text-2xl sm:text-3xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-2xl transition-all"
         >
           ←
         </button>
-        <h2 className="text-2xl font-semibold text-gray-900 capitalize">
+        <h2 className="text-lg sm:text-2xl font-semibold text-gray-900 capitalize">
           {currentMonth.toLocaleString('es-CL', { month: 'long', year: 'numeric' })}
         </h2>
         <button
           onClick={goToNextMonth}
-          className="w-11 h-11 flex items-center justify-center text-3xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-2xl transition-all"
+          aria-label="Mes siguiente"
+          className="w-11 h-11 flex items-center justify-center text-2xl sm:text-3xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-2xl transition-all"
         >
           →
         </button>
@@ -447,51 +740,112 @@ function CalendarView({ appointments = [], onEdit }) {
 
       <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-2xl overflow-hidden mb-2">
         {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map(day => (
-          <div key={day} className="bg-white py-4 text-center text-sm font-medium text-gray-500">{day}</div>
+          <div key={day} className="bg-white py-2 sm:py-4 text-center text-[10px] sm:text-sm font-medium text-gray-500">
+            <span className="hidden sm:inline">{day}</span>
+            <span className="sm:hidden">{day.charAt(0)}</span>
+          </div>
         ))}
       </div>
 
       <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-2xl overflow-hidden">
         {days.map((day, index) => {
-          if (!day) return <div key={index} className="bg-white min-h-[130px]"></div>;
+          if (!day) return <div key={index} className="bg-white min-h-[80px] sm:min-h-[130px]"></div>;
           const dateKey = day.toISOString().split('T')[0];
           const dayApps = appointmentsByDate[dateKey] || [];
           const todayHighlight = isToday(day);
 
           return (
-            <div
+            <button
               key={index}
-              onClick={() => dayApps.length > 0 && typeof onEdit === 'function' && onEdit(dayApps[0])}
-              className={`bg-white p-3 min-h-[130px] hover:bg-indigo-50 transition-colors border-t cursor-pointer ${
-                todayHighlight ? 'ring-2 ring-indigo-500 bg-indigo-50' : ''
-              }`}
+              onClick={() => handleDayClick(dayApps, dateKey)}
+              disabled={dayApps.length === 0}
+              className={`bg-white p-1 sm:p-3 min-h-[80px] sm:min-h-[130px] text-left transition-colors border-t w-full ${
+                dayApps.length > 0 ? 'hover:bg-indigo-50 cursor-pointer' : 'cursor-default'
+              } ${todayHighlight ? 'ring-2 ring-indigo-500 bg-indigo-50' : ''}`}
             >
-              <div className={`text-right text-sm font-semibold ${todayHighlight ? 'text-indigo-600' : 'text-gray-700'}`}>
+              <div className={`text-right text-xs sm:text-sm font-semibold ${todayHighlight ? 'text-indigo-600' : 'text-gray-700'}`}>
                 {day.getDate()}
               </div>
 
-              <div className="mt-3 space-y-1.5">
-                {dayApps.slice(0, 3).map((app) => (
+              <div className="mt-1 sm:mt-3 space-y-1">
+                {dayApps.slice(0, 2).map((app) => (
                   <div
                     key={app.id}
-                    className="text-xs px-3 py-2 bg-indigo-100 text-indigo-700 rounded-2xl flex items-center gap-2 truncate"
+                    className={`text-[10px] sm:text-xs px-1.5 sm:px-3 py-1 sm:py-2 rounded-lg sm:rounded-2xl truncate ${statusColor(app.status)}`}
                   >
                     <span className="font-medium">{app.time}</span>
-                    <span className="opacity-70 truncate">
+                    <span className="opacity-70 ml-1 hidden sm:inline">
                       {app.patientName || app.beneficiaries?.[0]?.name || '—'}
                     </span>
                   </div>
                 ))}
-                {dayApps.length > 3 && (
-                  <div className="text-center text-xs text-gray-400 font-medium">
-                    +{dayApps.length - 3} más
+                {dayApps.length > 2 && (
+                  <div className="text-center text-[10px] sm:text-xs text-gray-400 font-medium">
+                    +{dayApps.length - 2}
                   </div>
                 )}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
+
+      {/* Modal de citas del día (cuando hay >1) */}
+      {selectedDayKey && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setSelectedDayKey(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="bg-white w-full sm:max-w-lg max-h-[80vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 sm:px-7 py-4 sm:py-5 border-b flex items-start justify-between gap-3 shrink-0">
+              <div>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 capitalize">
+                  {new Date(selectedDayKey).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </h3>
+                <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                  {selectedDayApps.length} atenciones programadas
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedDayKey(null)}
+                aria-label="Cerrar"
+                className="text-gray-400 hover:text-gray-600 text-3xl leading-none w-10 h-10 flex items-center justify-center shrink-0"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-5 sm:px-7 py-4 overflow-y-auto flex-1 space-y-2"
+                 style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
+              {selectedDayApps.map(app => (
+                <button
+                  key={app.id}
+                  onClick={() => handleAppointmentClick(app)}
+                  className="w-full text-left bg-gray-50 hover:bg-indigo-50 rounded-2xl p-4 transition-colors border border-transparent hover:border-indigo-200"
+                >
+                  <div className="flex items-center justify-between gap-3 mb-1">
+                    <span className="font-semibold text-gray-900">{app.time}</span>
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColor(app.status)}`}>
+                      {app.status}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-700">
+                    {app.patientName || app.beneficiaries?.[0]?.name || '—'}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    📍 {app.comuna}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -924,6 +1278,7 @@ function ProfessionalDashboard({
   onLogout
 }) {
   const [tab, setTab] = useState('hoy');
+  const [detailAppointment, setDetailAppointment] = useState(null); // modal de detalle
 
   const safeAppointments = Array.isArray(appointments) ? appointments : [];
   const safeServices = Array.isArray(services) ? services : [];
@@ -1072,7 +1427,7 @@ function ProfessionalDashboard({
         </div>
       )}
 
-      {tab === 'calendario' && <CalendarView appointments={allAppointments} onEdit={(app) => alert(`Editar: ${app.patientName}`)} />}
+      {tab === 'calendario' && <CalendarView appointments={allAppointments} onEdit={(app) => setDetailAppointment(app)} />}
 
       {tab === 'monitoreo' && (
         <MonitoringPanel 
@@ -1080,7 +1435,20 @@ function ProfessionalDashboard({
           services={safeServices}
           currentUser={user}
           reloadData={reloadData}
-          onEdit={(app) => alert(`Ver detalle: ${app.patientName}`)}
+          onEdit={(app) => setDetailAppointment(app)}
+        />
+      )}
+
+      {/* Modal de detalle reutilizable */}
+      {detailAppointment && (
+        <AppointmentDetailModal
+          app={detailAppointment}
+          services={safeServices}
+          currentUser={user}
+          onClose={() => setDetailAppointment(null)}
+          onUpdated={async () => {
+            if (reloadData) await reloadData();
+          }}
         />
       )}
     </div>
@@ -1089,6 +1457,7 @@ function ProfessionalDashboard({
 
 // ==================== ADMIN PANEL - COMPLETO Y MODERNO ====================
 function AdminPanel({
+  user,
   appointments = [],
   reloadData,
   services = [],
@@ -1096,6 +1465,7 @@ function AdminPanel({
   onLogout
 }) {
   const [tab, setTab] = useState('dashboard');
+  const [detailAppointment, setDetailAppointment] = useState(null);
 
   const safeAppointments = Array.isArray(appointments) ? appointments : [];
   const safeServices = Array.isArray(services) ? services : [];
@@ -1129,7 +1499,6 @@ function AdminPanel({
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [editedDoses, setEditedDoses] = useState({});
 
   // ==================== FUNCIONES SERVICIOS ====================
   const addNewService = async () => {
@@ -1289,6 +1658,12 @@ function AdminPanel({
           📈 <span className="hidden sm:inline">Seguimiento</span><span className="sm:hidden">Dosis</span>
         </button>
         <button
+          onClick={() => setTab('calendario')}
+          className={`shrink-0 sm:flex-1 md:flex-none px-4 sm:px-6 lg:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold rounded-3xl transition-all min-h-[44px] whitespace-nowrap ${tab === 'calendario' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
+        >
+          📅 Calendario
+        </button>
+        <button
           onClick={() => setTab('servicios')}
           className={`shrink-0 sm:flex-1 md:flex-none px-4 sm:px-6 lg:px-8 py-3 sm:py-4 text-sm sm:text-base font-semibold rounded-3xl transition-all min-h-[44px] whitespace-nowrap ${tab === 'servicios' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}
         >
@@ -1359,12 +1734,15 @@ function AdminPanel({
 
       {/* ==================== SEGUIMIENTO DE DOSIS ==================== */}
       {tab === 'seguimiento' && (
-        <div className="bg-white rounded-3xl shadow-xl p-8">
-          <h2 className="text-2xl font-semibold mb-6">📈 Seguimiento de Dosis</h2>
+        <div className="bg-white rounded-3xl shadow-xl p-4 sm:p-6 lg:p-8">
+          <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold mb-4 sm:mb-6">📈 Seguimiento de Atenciones</h2>
+          <p className="text-xs sm:text-sm text-gray-500 mb-4 sm:mb-6">
+            Click sobre una atención para registrar cambios de estado, servicios completados y dosis.
+          </p>
 
           {/* FILTROS */}
-          <div className="flex flex-wrap gap-4 mb-8 bg-gray-50 p-4 rounded-3xl">
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-gray-300 rounded-3xl px-5 py-3 text-sm focus:outline-none focus:border-indigo-500">
+          <div className="flex flex-wrap gap-3 mb-6 sm:mb-8 bg-gray-50 p-3 sm:p-4 rounded-3xl">
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-gray-300 rounded-3xl px-4 py-2 text-sm focus:outline-none focus:border-indigo-500 min-h-[44px]">
               <option value="all">Todos los estados</option>
               <option value="pendiente">Pendiente</option>
               <option value="asignada">Asignada</option>
@@ -1372,14 +1750,16 @@ function AdminPanel({
               <option value="completada">Completada</option>
               <option value="cancelada">Cancelada</option>
             </select>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="border border-gray-300 rounded-3xl px-5 py-3 text-sm focus:outline-none focus:border-indigo-500" />
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="border border-gray-300 rounded-3xl px-5 py-3 text-sm focus:outline-none focus:border-indigo-500" />
-            <input type="text" placeholder="Buscar por paciente..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-1 min-w-[240px] border border-gray-300 rounded-3xl px-5 py-3 text-sm focus:outline-none focus:border-indigo-500" />
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="border border-gray-300 rounded-3xl px-4 py-2 text-sm focus:outline-none focus:border-indigo-500 min-h-[44px]" />
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="border border-gray-300 rounded-3xl px-4 py-2 text-sm focus:outline-none focus:border-indigo-500 min-h-[44px]" />
+            <input type="text" placeholder="Buscar por paciente..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-1 min-w-[200px] border border-gray-300 rounded-3xl px-4 py-2 text-sm focus:outline-none focus:border-indigo-500 min-h-[44px]" />
           </div>
 
-          <div className="space-y-8 max-h-[680px] overflow-auto">
+          <div className="space-y-3 max-h-[680px] overflow-auto pr-1">
             {filteredAppointments.length === 0 ? (
-              <div className="text-center py-20 text-gray-400">No se encontraron solicitudes con los filtros aplicados</div>
+              <div className="text-center py-12 sm:py-20 text-gray-400 text-sm">
+                No se encontraron solicitudes con los filtros aplicados
+              </div>
             ) : (
               filteredAppointments.map(app => {
                 const totalDoses = (app.beneficiaries || []).reduce((acc, ben) => acc + (ben.services || []).reduce((s, srv) => s + (srv.doses || 0), 0), 0);
@@ -1387,62 +1767,63 @@ function AdminPanel({
                 const progress = totalDoses > 0 ? Math.round((completedDoses / totalDoses) * 100) : 0;
 
                 return (
-                  <div key={app.id} className="border border-gray-200 rounded-3xl p-7 hover:shadow-md transition-all">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-semibold text-lg">{app.patientName || app.beneficiaries?.[0]?.name || 'Sin nombre'}</p>
-                        <p className="text-sm text-gray-500">{new Date(app.date).toLocaleDateString('es-CL')} • {app.time} • {app.comuna}</p>
+                  <button
+                    key={app.id}
+                    onClick={() => setDetailAppointment(app)}
+                    className="w-full text-left border border-gray-200 hover:border-indigo-300 hover:shadow-md rounded-2xl p-4 sm:p-5 transition-all bg-white"
+                  >
+                    <div className="flex justify-between items-start gap-3 mb-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-base sm:text-lg text-gray-900 truncate">
+                          {app.patientName || app.beneficiaries?.[0]?.name || 'Sin nombre'}
+                        </p>
+                        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+                          {new Date(app.date).toLocaleDateString('es-CL')} · {app.time} · {app.comuna}
+                        </p>
                       </div>
-                      <span className={`px-6 py-2 text-xs font-semibold rounded-3xl ${app.status === 'completada' ? 'bg-green-100 text-green-700' : app.status === 'en_tratamiento' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>
-                        {app.status?.toUpperCase() || 'PENDIENTE'}
+                      <span className={`shrink-0 px-3 py-1 text-[10px] sm:text-xs font-semibold rounded-full ${
+                        app.status === 'completada' ? 'bg-emerald-100 text-emerald-700' :
+                        app.status === 'en_tratamiento' ? 'bg-purple-100 text-purple-700' :
+                        app.status === 'asignada' ? 'bg-blue-100 text-blue-700' :
+                        app.status === 'cancelada' ? 'bg-gray-100 text-gray-500' :
+                        'bg-amber-100 text-amber-700'
+                      }`}>
+                        {(app.status || 'pendiente').toUpperCase()}
                       </span>
                     </div>
 
-                    <div className="mt-6 mb-8">
-                      <div className="flex justify-between text-xs mb-3 text-gray-500">
-                        <span>Progreso general</span>
-                        <span>{completedDoses} / {totalDoses} dosis</span>
+                    <div>
+                      <div className="flex justify-between text-xs mb-1.5 text-gray-500">
+                        <span>Progreso de dosis</span>
+                        <span className="font-medium">{completedDoses} / {totalDoses} ({progress}%)</span>
                       </div>
-                      <div className="h-4 bg-gray-100 rounded-3xl overflow-hidden">
-                        <div className="h-4 bg-indigo-600 transition-all" style={{ width: `${progress}%` }}></div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-2 bg-indigo-600 transition-all" style={{ width: `${progress}%` }}></div>
                       </div>
                     </div>
-
-                    {(app.beneficiaries || []).map((ben, bIndex) => (
-                      <div key={bIndex} className="mb-8 last:mb-0">
-                        <p className="text-sm font-medium mb-4 text-gray-700">Beneficiario: {ben.name}</p>
-                        {(ben.services || []).map((srv, sIndex) => {
-                          const key = `${app.id}-${bIndex}-${sIndex}`;
-                          const current = editedDoses[key] !== undefined ? editedDoses[key] : (srv.completedDoses || 0);
-                          const serviceName = safeServices.find(s => s.id === srv.serviceId)?.name || 'Servicio';
-                          return (
-                            <div key={sIndex} className="flex items-center gap-6 mb-4 bg-gray-50 rounded-3xl p-4">
-                              <div className="flex-1">
-                                <p className="text-sm font-medium">{serviceName}</p>
-                                <div className="h-2 bg-gray-200 rounded-full mt-2 overflow-hidden">
-                                  <div className="h-2 bg-indigo-500" style={{ width: `${srv.doses > 0 ? (current / srv.doses) * 100 : 0}%` }}></div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-4">
-                                <button onClick={() => updateTempDoses(app.id, bIndex, sIndex, current - 1)} className="w-9 h-9 flex items-center justify-center border rounded-2xl hover:bg-white text-xl">-</button>
-                                <span className="font-mono text-2xl font-semibold w-12 text-center">{current}</span>
-                                <button onClick={() => updateTempDoses(app.id, bIndex, sIndex, current + 1)} className="w-9 h-9 flex items-center justify-center border rounded-2xl hover:bg-white text-xl">+</button>
-                                <span className="text-xs text-gray-400">/ {srv.doses}</span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-
-                    <button onClick={() => saveDoseChanges(app)} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-3xl text-lg transition-all">
-                      💾 Guardar cambios de dosis
-                    </button>
-                  </div>
+                  </button>
                 );
               })
             )}
           </div>
+        </div>
+      )}
+
+      {/* ==================== CALENDARIO ==================== */}
+      {tab === 'calendario' && (
+        <div>
+          <div className="mb-4 sm:mb-6 flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold text-gray-900">Calendario de Atenciones</h2>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                Click sobre un día para ver/editar las atenciones programadas
+              </p>
+            </div>
+          </div>
+          <CalendarView
+            appointments={safeAppointments}
+            onEdit={(app) => setDetailAppointment(app)}
+          />
         </div>
       )}
 
@@ -1533,6 +1914,20 @@ function AdminPanel({
       )}
 
       <div className="mt-12 text-center text-xs text-gray-400">Admin Panel v2.0 • Enfermereando © 2026</div>
+
+      {/* Modal de detalle/seguimiento — permite al admin registrar avance:
+          estado, servicios completados y dosis suministradas. */}
+      {detailAppointment && (
+        <AppointmentDetailModal
+          app={detailAppointment}
+          services={safeServices}
+          currentUser={user}
+          onClose={() => setDetailAppointment(null)}
+          onUpdated={async () => {
+            if (reloadData) await reloadData();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -2085,6 +2480,7 @@ export default function App() {
       {/* PANEL ADMIN */}
       {user && user.role === 'admin' && view === 'admin' && (
         <AdminPanel
+          user={user}
           appointments={appointments}
           reloadData={reloadData}
           services={services}
