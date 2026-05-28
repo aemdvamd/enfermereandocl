@@ -106,9 +106,14 @@ const sendTelegramToAdmin = async (app, action = 'new', extraInfo = '') => {
   // Llamamos a nuestro endpoint serverless /api/telegram que actúa de intermediario.
   // Si la app se ejecuta en local sin el endpoint, falla silenciosamente (return false).
   try {
+    // Timeout de 8s: si el endpoint cuelga, no esperamos indefinidamente.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     const response = await fetch('/api/telegram', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         action,
         app: {
@@ -121,6 +126,8 @@ const sendTelegramToAdmin = async (app, action = 'new', extraInfo = '') => {
         extraInfo,
       }),
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({}));
@@ -951,8 +958,11 @@ function RequestForm({ user, services = [], onSubmit, onCancel }) {
         })),
       });
 
-      // Notificación a Telegram (no bloqueante, falla silenciosa)
-      await sendTelegramToAdmin(created, 'new');
+      // Notificación a Telegram: fire-and-forget. NO bloquea la confirmación al usuario.
+      // Si el endpoint falla o cuelga, la cita ya está creada — el usuario no debe esperar.
+      sendTelegramToAdmin(created, 'new').catch(err =>
+        console.error('[RequestForm] Telegram falló (no crítico):', err)
+      );
 
       alert('✅ Solicitud enviada correctamente');
       if (onSubmit) await onSubmit();
