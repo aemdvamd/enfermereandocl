@@ -1,20 +1,25 @@
 // service-worker.js
-// Estrategia:
-// - HTML (incluido index.html): network-first → siempre busca la versión nueva, cae al cache solo si está offline
-// - Assets con hash (JS, CSS): cache-first → Vite los versiona por nombre, así que cachearlos es seguro
-// - APIs externas: passthrough → no las tocamos
+// Auto-actualización: el usuario NUNCA tiene que limpiar cache manualmente.
 //
-// IMPORTANTE: incrementa CACHE_VERSION cada vez que hagas un deploy con cambios visibles
-// para forzar la invalidación del cache en todos los clientes.
-const CACHE_VERSION = 'enfermereando-v6';
+// Estrategia de cache:
+// - HTML/navegación: network-first (siempre busca lo nuevo, cae a cache solo offline)
+// - Assets con hash de Vite (/assets/*.js, *.css): cache-first (el nombre cambia con cada build)
+// - APIs externas (Supabase, Telegram): passthrough (nunca se cachean)
+//
+// Estrategia de actualización:
+// - skipWaiting(): el SW nuevo se activa sin esperar a que cierren las pestañas
+// - clients.claim(): el SW nuevo toma control de todas las pestañas abiertas
+// - El cliente (main.jsx) detecta el SW nuevo y recarga automáticamente
+
+// CACHE_VERSION cambia en cada deploy. Vite reemplaza __BUILD_HASH__ si configuras
+// el define en vite.config.js; si no, usa la fecha de build como fallback.
+const CACHE_VERSION = 'enfermereando-__BUILD_HASH__';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
-const STATIC_ASSETS = [
-  '/manifest.json',
-];
+const STATIC_ASSETS = ['/manifest.json'];
 
-// Install: precachear lo mínimo. NO incluimos / ni /index.html porque queremos network-first para HTML.
 self.addEventListener('install', (event) => {
+  // Activar inmediatamente sin esperar a que cierren las pestañas viejas
   event.waitUntil(
     caches.open(STATIC_CACHE)
       .then((cache) => cache.addAll(STATIC_ASSETS))
@@ -22,17 +27,25 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate: limpiar caches viejos
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => !key.startsWith(CACHE_VERSION))
-          .map((key) => caches.delete(key))
+    caches.keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => !key.startsWith(CACHE_VERSION))
+            .map((key) => caches.delete(key))
+        )
       )
-    ).then(() => self.clients.claim())
+      .then(() => self.clients.claim())  // tomar control de todas las pestañas ya
   );
+});
+
+// Permitir que el cliente fuerce la activación (usado por el botón "actualizar")
+self.addEventListener('message', (event) => {
+  if (event.data === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -44,33 +57,33 @@ self.addEventListener('fetch', (event) => {
   if (
     url.hostname.includes('supabase.co') ||
     url.hostname.includes('telegram.org') ||
-    url.hostname.includes('picsum.photos')
+    url.hostname.includes('picsum.photos') ||
+    url.hostname.includes('api.telegram.org')
   ) {
     return;
   }
 
   if (url.origin !== self.location.origin) return;
 
-  // Estrategia 1: HTML (navegación) → network-first
-  // Esto garantiza que cualquier cambio en index.html o en las rutas se vea de inmediato.
-  const isHTML = request.mode === 'navigate' ||
-                 (request.headers.get('accept') || '').includes('text/html');
+  const isHTML =
+    request.mode === 'navigate' ||
+    (request.headers.get('accept') || '').includes('text/html');
 
   if (isHTML) {
+    // Network-first para HTML
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const responseClone = response.clone();
-          caches.open(STATIC_CACHE).then((cache) => cache.put(request, responseClone));
+          const clone = response.clone();
+          caches.open(STATIC_CACHE).then((cache) => cache.put(request, clone));
           return response;
         })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match('/')))
+        .catch(() => caches.match(request).then((c) => c || caches.match('/')))
     );
     return;
   }
 
-  // Estrategia 2: assets con hash (Vite genera /assets/index-XXXXX.js, así que el nombre cambia
-  // con cada build → cache-first es seguro porque un asset viejo siempre tiene un nombre viejo).
+  // Cache-first para assets versionados por Vite
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
@@ -78,8 +91,8 @@ self.addEventListener('fetch', (event) => {
         if (!response || response.status !== 200 || response.type !== 'basic') {
           return response;
         }
-        const responseClone = response.clone();
-        caches.open(STATIC_CACHE).then((cache) => cache.put(request, responseClone));
+        const clone = response.clone();
+        caches.open(STATIC_CACHE).then((cache) => cache.put(request, clone));
         return response;
       });
     })
