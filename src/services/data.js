@@ -174,78 +174,34 @@ export const appointments = {
     return fromDbAppointment(data, data.beneficiaries);
   },
 
-  // Crear cita completa (cita + beneficiarios + servicios) de forma atómica
+  // Crear cita completa (cita + beneficiarios + servicios) de forma ATÓMICA.
+  // Ciclo 3.2 refactor: usa la RPC `create_appointment` de Postgres, que corre
+  // todo dentro de UNA transacción. Si algo falla, Postgres revierte todo solo.
   // payload: { userId, patientName, date, time, comuna, phone, notes,
   //            beneficiaries: [{ name, direccion, services: [{ serviceId, doses, frequency }] }] }
   async create(payload) {
-    const { data: appRow, error: appErr } = await supabase
-      .from('appointments')
-      .insert({
-        user_id: payload.userId,
-        patient_name: payload.patientName,
+    const { data: newId, error } = await supabase.rpc('create_appointment', {
+      payload: {
+        userId: payload.userId,
+        patientName: payload.patientName,
         date: payload.date,
         time: payload.time,
         comuna: payload.comuna,
         phone: payload.phone,
-        notes: payload.notes || null,
-        status: 'pendiente',
-      })
-      .select()
-      .single();
-    if (appErr) throw appErr;
-
-    // Insertar beneficiarios
-    const benRows = (payload.beneficiaries || []).map((b, idx) => ({
-      appointment_id: appRow.id,
-      name: b.name,
-      direccion: b.direccion || null,
-      position: idx,
-    }));
-
-    if (benRows.length === 0) {
-      // Sin beneficiarios no hay cita válida — limpieza
-      await supabase.from('appointments').delete().eq('id', appRow.id);
-      throw new Error('La cita necesita al menos un beneficiario.');
-    }
-
-    const { data: insertedBens, error: benErr } = await supabase
-      .from('beneficiaries')
-      .insert(benRows)
-      .select();
-    if (benErr) {
-      await supabase.from('appointments').delete().eq('id', appRow.id);
-      throw benErr;
-    }
-
-    // Insertar servicios por beneficiario
-    const serviceRows = [];
-    insertedBens.forEach((benRow, bIdx) => {
-      const benPayload = payload.beneficiaries[bIdx];
-      (benPayload.services || []).forEach(s => {
-        serviceRows.push({
-          beneficiary_id: benRow.id,
-          service_id: s.serviceId,
-          doses: parseInt(s.doses, 10) || 1,
-          completed_doses: 0,
-          frequency: s.frequency || 'once',
-        });
-      });
+        notes: payload.notes || '',
+        beneficiaries: (payload.beneficiaries || []).map(b => ({
+          name: b.name,
+          direccion: b.direccion || '',
+          services: (b.services || []).map(s => ({
+            serviceId: s.serviceId,
+            doses: parseInt(s.doses, 10) || 1,
+            frequency: s.frequency || 'once',
+          })),
+        })),
+      },
     });
-
-    if (serviceRows.length > 0) {
-      const { error: svcErr } = await supabase
-        .from('appointment_services')
-        .insert(serviceRows);
-      if (svcErr) {
-        await supabase.from('appointments').delete().eq('id', appRow.id);
-        throw svcErr;
-      }
-    }
-
-    // Registrar evento de creación
-    await events.log(appRow.id, 'created', { source: 'patient_request' });
-
-    return this.get(appRow.id);
+    if (error) throw error;
+    return this.get(newId);
   },
 
   // Cambio de estado con registro automático en audit log

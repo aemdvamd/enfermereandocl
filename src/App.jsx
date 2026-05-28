@@ -23,16 +23,6 @@ const COMUNAS_RM = [
   "San Miguel","San Pedro","San Ramón","Santiago","Talagante","Tiltil","Vitacura"
 ].sort();
 
-const DEFAULT_SERVICES = [
-  { id: 'inj-anti', iconId: 'syringe', name: 'Inyección anticonceptiva', description: 'Aplicación de anticonceptivos hormonales con técnica estéril.', price: 15000, allowDoses: true, active: true },
-  { id: 'inj-im', iconId: 'syringe', name: 'Inyección intramuscular', description: 'Administración de medicamentos por vía intramuscular.', price: 18000, allowDoses: true, active: true },
-  { id: 'inj-ev', iconId: 'syringe', name: 'Inyección endovenosa', description: 'Administración de medicamentos por vía endovenosa.', price: 25000, allowDoses: true, active: true },
-  { id: 'cur-simple', iconId: 'cross', name: 'Curación simple', description: 'Curación de heridas leves.', price: 18000, allowDoses: true, active: true },
-  { id: 'cur-adv', iconId: 'activity', name: 'Curación avanzada', description: 'Pie diabético, úlceras y LPP.', price: 40000, allowDoses: true, active: true },
-  { id: 'exam', iconId: 'file', name: 'Revisión de exámenes', description: 'Explicación, comentarios y derivaciones según corresponda.', price: 20000, allowDoses: false, active: true },
-  { id: 'counsel', iconId: 'heart', name: 'Consejería presencial', description: 'Patologías crónicas, diabetes, hipertensión, salud mental.', price: 30000, allowDoses: false, active: true }
-];
-
 // ==================== UTILIDADES ====================
 const fmtCLP = (n) => '$' + Math.round(n).toLocaleString('es-CL');
 
@@ -107,7 +97,7 @@ const authGetCurrentUser = async () => {
 };
 
 // ==================== TELEGRAM ====================
-const sendTelegramToAdmin = async (app, action = 'new', services = [], extraInfo = '') => {
+const sendTelegramToAdmin = async (app, action = 'new', extraInfo = '') => {
   // Ciclo 2.1: el token de Telegram ya NO vive en el cliente.
   // Llamamos a nuestro endpoint serverless /api/telegram que actúa de intermediario.
   // Si la app se ejecuta en local sin el endpoint, falla silenciosamente (return false).
@@ -958,7 +948,7 @@ function RequestForm({ user, services = [], onSubmit, onCancel }) {
       });
 
       // Notificación a Telegram (no bloqueante, falla silenciosa)
-      await sendTelegramToAdmin(created, 'new', services);
+      await sendTelegramToAdmin(created, 'new');
 
       alert('✅ Solicitud enviada correctamente');
       if (onSubmit) await onSubmit();
@@ -1151,7 +1141,7 @@ function PatientPortal({ user, appointments = [], reloadData, services, setView,
       });
 
       // Notificación a Telegram (opcional, no bloqueante)
-      await sendTelegramToAdmin(app, 'cancelled', services || []);
+      await sendTelegramToAdmin(app, 'cancelled');
 
       // Refrescar lista
       if (reloadData) await reloadData();
@@ -1306,7 +1296,7 @@ function ProfessionalDashboard({
       await dataLayer.appointments.updateStatus(app.id, 'asignada', user.id, {
         takenBy: user.name,
       });
-      await sendTelegramToAdmin(app, 'task_taken', safeServices, `Tomada por: ${user?.name}`);
+      await sendTelegramToAdmin(app, 'task_taken', `Tomada por: ${user?.name}`);
       if (reloadData) await reloadData();
       alert(`✅ Tarea tomada y notificado por Telegram`);
     } catch (e) {
@@ -1318,7 +1308,7 @@ function ProfessionalDashboard({
   const updateStatus = async (appId, newStatus) => {
     try {
       const updated = await dataLayer.appointments.updateStatus(appId, newStatus, user?.id);
-      await sendTelegramToAdmin(updated, 'status_change', safeServices);
+      await sendTelegramToAdmin(updated, 'status_change');
       if (reloadData) await reloadData();
     } catch (e) {
       console.error('Error actualizando estado:', e);
