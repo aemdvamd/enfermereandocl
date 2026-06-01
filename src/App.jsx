@@ -2614,6 +2614,27 @@ export default function App() {
           }
         });
         subscription = data.subscription;
+
+        // 4. Manejo defensivo de sesiones rotas (refresh token vencido/corrupto)
+        // Si el cliente Supabase se queda en estado limbo, lo detectamos y forzamos
+        // un signOut limpio para que el usuario pueda volver a loguearse.
+        // Esto evita el síntoma "solo funciona con DevTools abierto".
+        const handleAuthFailure = async (err) => {
+          const msg = (err?.message || '').toLowerCase();
+          if (msg.includes('refresh token') || msg.includes('jwt expired') || msg.includes('invalid jwt')) {
+            console.warn('[auth] Sesión inválida detectada, cerrando sesión limpia');
+            try { await supabase.auth.signOut(); } catch (_) { /* noop */ }
+            if (mounted) {
+              setUser(null);
+              setView('login');
+            }
+          }
+        };
+
+        // Interceptar errores no manejados de Supabase
+        window.addEventListener('unhandledrejection', (e) => {
+          if (e.reason) handleAuthFailure(e.reason);
+        });
       } catch (e) {
         console.error("Error cargando datos:", e);
       } finally {
